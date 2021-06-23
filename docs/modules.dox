@@ -1,0 +1,19 @@
+/**
+ * @namespace educelab
+ * @brief EduceLab top-level namespace
+ */
+
+/**
+ * @namespace educelab::core
+ * @brief EduceLab Core library namespace
+ */
+
+/**
+ * @namespace educelab::traits
+ * @brief Class traits
+ */
+
+/**
+ * @namespace educelab::detail
+ * @brief Implementation details
+ */

@@ -1,0 +1,57 @@
+#include "educelab/core/Version.hpp"
+
+using namespace educelab::core;
+
+auto ProjectInfo::Name() -> std::string
+{
+    static std::string name{"EduceLab libcore"};
+    return name;
+}
+
+auto ProjectInfo::VersionMajor() -> uint32_t
+{
+    static int vMaj{@PROJECT_VERSION_MAJOR@};
+    return vMaj;
+}
+
+auto ProjectInfo::VersionMinor() -> uint32_t
+{
+    static int vMin{@PROJECT_VERSION_MINOR@};
+    return vMin;
+}
+
+auto ProjectInfo::VersionPatch() -> uint32_t
+{
+    static int vPatch{@PROJECT_VERSION_PATCH@};
+    return vPatch;
+}
+
+auto ProjectInfo::VersionString() -> std::string
+{
+    static std::string version("@PROJECT_VERSION@");
+    return version;
+}
+
+auto ProjectInfo::NameAndVersion() -> std::string
+{
+    static std::string nameAndVersion{"EduceLab libcore @PROJECT_VERSION@"};
+    return nameAndVersion;
+}
+
+auto ProjectInfo::RepositoryURL() -> std::string
+{
+    static std::string repo("https://gitlab.com/educelab/libcore");
+    return repo;
+}
+
+auto ProjectInfo::RepositoryHash() -> std::string
+{
+    static std::string hash("@GIT_SHA1@");
+    return hash;
+}
+
+auto ProjectInfo::RepositoryShortHash() -> std::string
+{
+    static std::string hashShort("@GIT_SHA1_SHORT@");
+    return hashShort;
+}
