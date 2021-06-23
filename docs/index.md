@@ -2,63 +2,17 @@
 
 A single C++ library for types and utilities shared across the various EduceLab projects.
 
-[[_TOC_]]
-
-## Requirements
-- Compiler supporting C++17
-- CMake 3.15+
-
-## Build from source
-
-```shell
-# Get the source
-git clone https://gitlab.com/educelab/libcore.git
-cd libcore/
-
-# Build the library
-mkdir build
-cmake -S . -B build/ -DCMAKE_BUILD_TYPE=Release
-```
-
-## Installation
-Follow the build instrcutions above, then run the following command from the root of the source directory:
-
-```shell
-# Install the library to the system
-cmake --install build/
-```
-
-### Header-only classes and utilities
-Much of the functionality in this project is header-only and can be copied to your include directory without linkage. 
-Note that you may have to adjust the `#include` directives for files which reference other headers in this project. The 
-following files can be installed in this way:
-
-- `utils/Iteration.hpp`
-- `utils/Math.hpp`
-- `utils/String.hpp`
-- `types/Vec.hpp`  
-    - Requires:
-      - `utils/Math.hpp`
-- `types/Color.hpp` 
-    - Requires: 
-      - `types/Vec.hpp`
-- `types/Mesh.hpp` 
-    - Requires: 
-      - `types/Vec.hpp`
-      - `types/Color.hpp`
-
-
 ## Usage
 
 Include the primary header to load all classes:
-```c++
+```{.cpp}
 #include <educelab/core.hpp>
 
 using namespace educelab;
 ```
 
 ### N-dimensional vector class
-```c++
+```{.cpp}
 #include <educelab/core/types/Vec.hpp>
 
 Vec3f v0{1, 0, 0}, v1{0, 1, 0};
@@ -67,7 +21,7 @@ std::cout << v0.cross(v1) << "\n";    // "[0, 0, 1]"
 ```
 
 ### Iteration utilities
-```c++
+```{.cpp}
 #include <educelab/core/utils/Iteration.hpp>
 
 // Numerical ranges
@@ -84,7 +38,7 @@ std::cout << "\n";                    // "[0] The [1] quick [2] brown [3] fox."
 ```
 
 ### String utilities
-```c++
+```{.cpp}
 #include <educelab/core/utils/String.hpp>
 
 std::string upper{"THE QUICK BROWN FOX"};

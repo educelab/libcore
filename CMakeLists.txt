@@ -1,0 +1,72 @@
+cmake_minimum_required(VERSION 3.15 FATAL_ERROR)
+project(EduceLabCore VERSION 1.0)
+
+# Setup project directories
+set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin)
+set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+
+# Modules
+include(FetchContent)
+include(CMakeDependentOption)
+
+# Build library
+set(public_hdrs
+    include/educelab/core.hpp
+    include/educelab/core/Version.hpp
+    include/educelab/core/types/Color.hpp
+    include/educelab/core/types/Mesh.hpp
+    include/educelab/core/types/Vec.hpp
+    include/educelab/core/utils/Iteration.hpp
+    include/educelab/core/utils/Math.hpp
+    include/educelab/core/utils/String.hpp
+)
+
+configure_file(src/Version.cpp.in Version.cpp)
+set(srcs
+    ${CMAKE_CURRENT_BINARY_DIR}/Version.cpp
+)
+
+add_library(core ${srcs})
+add_library(educelab::core ALIAS core)
+target_include_directories(core
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
+target_compile_features(core PUBLIC cxx_std_17)
+set_target_properties(core
+    PROPERTIES
+        PUBLIC_HEADER "${public_hdrs}"
+)
+install(
+    TARGETS core
+    EXPORT EduceLabCoreTargets
+    ARCHIVE DESTINATION "lib"
+    LIBRARY DESTINATION "lib"
+    INCLUDES DESTINATION "include/educelab/core"
+    PUBLIC_HEADER DESTINATION "include/educelab/core"
+)
+
+# Docs
+find_package(Doxygen OPTIONAL_COMPONENTS dot)
+CMAKE_DEPENDENT_OPTION(EDUCE_CORE_BUILD_DOCS "Build Doxygen documentation" off "DOXYGEN_FOUND" off)
+if(EDUCE_CORE_BUILD_DOCS)
+    add_subdirectory(docs)
+endif()
+
+# Examples
+option(EDUCE_CORE_BUILD_EXAMPLES "Compile EduceLab Core example applications" off)
+if(EDUCE_CORE_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
+
+# Tests
+option(EDUCE_CORE_BUILD_TESTS "Compile EduceLab Core unit tests" off)
+if(EDUCE_CORE_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
+# Install
+include(InstallProject)
