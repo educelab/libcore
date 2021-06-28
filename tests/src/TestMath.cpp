@@ -31,6 +31,8 @@ TEST(Math, CrossProduct)
     EXPECT_EQ(cross(Vec3f{1, 0, 0}, Vec3f{1, 0, 0}), Vec3f(0, 0, 0));
     EXPECT_EQ(cross(Vec3f{1, 0, 0}, Vec3f{0, 1, 0}), Vec3f(0, 0, 1));
     EXPECT_EQ(cross(Vec3f{1, 0, 0}, Vec3f{0, 0, 1}), Vec3f(0, -1, 0));
+
+    EXPECT_EQ(cross(Vec3f{1, 0, 0}, {1, 0, 0}), Vec3f(0, 0, 0));
 }
 
 TEST(Math, Norm)
