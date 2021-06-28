@@ -45,10 +45,21 @@ auto cross(const T1& a, const T2& b) -> T1
 }
 
 /** @brief Vector cross product for initializer list */
-template <typename T1, typename T2>
+template <
+    typename T1,
+    typename T2,
+    std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
 auto cross(const T1& a, const std::initializer_list<T2>& b) -> T1
 {
-    return cross(a, std::vector<T2>(b));
+    struct InitList : public std::initializer_list<T2> {
+        using Base = std::initializer_list<T2>;
+        InitList(const Base& b) : Base{b} {}
+        auto operator[](std::size_t idx) const -> const T2&
+        {
+            return *(Base::begin() + idx);
+        }
+    };
+    return cross(a, InitList{b});
 }
 
 /** @brief Norm type enumeration */
