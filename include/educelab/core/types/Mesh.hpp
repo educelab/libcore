@@ -72,7 +72,7 @@ public:
 
         /** @brief Addition operator */
         template <class Vector>
-        friend Vertex operator+(Vertex lhs, const Vector& rhs)
+        friend auto operator+(Vertex lhs, const Vector& rhs) -> Vertex
         {
             lhs += rhs;
             return lhs;
