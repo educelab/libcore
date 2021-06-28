@@ -66,6 +66,9 @@ std::cout << v0 + v1 << "\n";         // "[1, 1, 0]"
 std::cout << v0.cross(v1) << "\n";    // "[0, 0, 1]"
 ```
 
+See [examples/VecExample.cpp](examples/VecExample.cpp) for more usage 
+examples.
+
 ### Iteration utilities
 ```c++
 #include <educelab/core/utils/Iteration.hpp>
@@ -74,22 +77,38 @@ std::cout << v0.cross(v1) << "\n";    // "[0, 0, 1]"
 for(const auto& i : range(4, 12, 2)) {
     std::cout << i << " ";
 }
-std::cout << "\n";                    // "4 6 8 10"
+std::cout << "\n";    // "4 6 8 10"
 
 // Indexed ranges
 for(const auto& [idx, val] : enumerate("The", "quick", "brown", "fox.")) {
     std::cout << "[" << idx << "] " << val << " ";
 }
-std::cout << "\n";                    // "[0] The [1] quick [2] brown [3] fox."
+std::cout << "\n";    // "[0] The [1] quick [2] brown [3] fox."
 ```
+
+See [examples/IterationExample.cpp](examples/IterationExample.cpp) for more 
+usage examples.
 
 ### String utilities
 ```c++
 #include <educelab/core/utils/String.hpp>
 
-std::string upper{"THE QUICK BROWN FOX"};
+// Upper and lower case transformers
+std::string upper{"The quick brown fox"};
 to_lower(upper);
-std::cout << upper << "\n";           // "the quick brown fox"
+std::cout << upper << "\n";    // "the quick brown fox"
 to_upper(upper);
-std::cout << upper << "\n";           // "THE QUICK BROWN FOX"
+std::cout << upper << "\n";    // "THE QUICK BROWN FOX"
+
+// Trim operations
+std::cout << trim_left("  left") << "\n";      // "left"
+std::cout << trim_right("right  ") << "\n";    // "right"
+std::cout << trim("  center  ") << "\n";       // "center"
+
+// Conversion to numeric types
+std::cout << to_numeric<int>("3.14") << "\n";   // 3
+std::cout << to_numeric<float>("3.14") << "\n"; // 3.14
 ```
+
+See [examples/StringExample.cpp](examples/StringExample.cpp) for more usage
+examples.

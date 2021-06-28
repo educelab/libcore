@@ -95,24 +95,22 @@ public:
     {
     }
 
-    /** @brief Construct from hexadecimal CString */
-    explicit Color(const char* str)
+    /** @brief Construct from hexadecimal string */
+    explicit Color(std::string_view str)
     {
-        if (not std::regex_match(str, detail::REGEX_HEX_COLOR)) {
+        if (not std::regex_match(
+                str.begin(), str.end(), detail::REGEX_HEX_COLOR)) {
             throw std::invalid_argument(
-                "CString not a hex color code: " + std::string(str));
+                "String not a hex color code: " + std::string(str));
         }
-        val_ = str;
+        val_ = std::string(str);
     }
 
+    /** @brief Construct from hexadecimal CString */
+    explicit Color(const char* str) : Color(std::string_view(str)) {}
+
     /** @brief Construct from hexadecimal std::string */
-    explicit Color(const std::string& str)
-    {
-        if (not std::regex_match(str, detail::REGEX_HEX_COLOR)) {
-            throw std::invalid_argument("String not a hex color code: " + str);
-        }
-        val_ = str;
-    }
+    explicit Color(const std::string& str) : Color(std::string_view(str)) {}
 
     /** @brief Assign a value */
     template <typename T>
@@ -122,24 +120,29 @@ public:
         return *this;
     }
 
+    /** @brief Assign a hexadecimal string value */
+    auto operator=(std::string_view str) -> Color&
+    {
+        if (not std::regex_match(
+                str.begin(), str.end(), detail::REGEX_HEX_COLOR)) {
+            throw std::invalid_argument(
+                "String not a hex color code: " + std::string(str));
+        }
+        val_ = std::string(str);
+        return *this;
+    }
+
     /** @brief Assign a hexadecimal CString value */
     auto operator=(const char* str) -> Color&
     {
-        if (not std::regex_match(str, detail::REGEX_HEX_COLOR)) {
-            throw std::invalid_argument(
-                "CString not a hex color code: " + std::string(str));
-        }
-        val_ = str;
+        operator=(std::string_view(str));
         return *this;
     }
 
     /** @brief Assign a hexadecimal std::string value */
     auto operator=(const std::string& str) -> Color&
     {
-        if (not std::regex_match(str, detail::REGEX_HEX_COLOR)) {
-            throw std::invalid_argument("String not a hex color code: " + str);
-        }
-        val_ = str;
+        operator=(std::string_view(str));
         return *this;
     }
 
@@ -197,10 +200,10 @@ public:
         // Already of the requested type
         if (std::holds_alternative<T>(val_)) {
             return std::get<T>(val_);
-        } else {
-            // TODO: Do convert to requested type
-            throw std::bad_variant_access();
         }
+
+        // TODO: Do convert to requested type
+        throw std::bad_variant_access();
     }
 
     /** @brief Clear the stored value */

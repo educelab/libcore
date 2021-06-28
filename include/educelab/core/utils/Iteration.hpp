@@ -2,6 +2,7 @@
 
 /** @file */
 
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <type_traits>
@@ -238,7 +239,7 @@ private:
         /** Iterator value pointer */
         using pointer = value_type*;
         /** Iterator value reference */
-        using reference = value_type;
+        using reference = value_type const;
         /** Iterator type */
         using iterator_category = std::input_iterator_tag;
         /** @} */
@@ -413,8 +414,7 @@ template <class Iterable>
 inline auto enumerate(Iterable&& it);
 
 template <typename... Args>
-inline EnumerateIterable<std::vector<std::common_type_t<Args...>>> enumerate(
-    Args&&... args);
+inline auto enumerate(Args&&... args);
 
 /**
  * @brief Iterable wrapper for enumerating elements of a container by index and
@@ -505,8 +505,7 @@ private:
     friend auto enumerate<Iterable>(Iterable&& it);
 
     template <typename... Args>
-    friend EnumerateIterable<std::vector<std::common_type_t<Args...>>>
-    enumerate(Args&&... args);
+    friend auto enumerate(Args&&... args);
 
 public:
     /** Iterator type */
@@ -590,11 +589,10 @@ inline auto enumerate(Iterable&& it)
  * @ingroup Util
  */
 template <typename... Args>
-inline EnumerateIterable<std::vector<std::common_type_t<Args...>>> enumerate(
-    Args&&... args)
+inline auto enumerate(Args&&... args)
 {
     using Type = std::common_type_t<Args...>;
-    using Iterable = std::vector<Type>;
+    using Iterable = std::array<Type, sizeof...(Args)>;
     return EnumerateIterable<Iterable>(std::forward<Args>(args)...);
 }
 

@@ -3,9 +3,13 @@
 /** @file */
 
 #include <algorithm>
+#include <charconv>
+#include <exception>
 #include <locale>
 #include <string>
+#include <string_view>
 #include <type_traits>
+#include <vector>
 
 namespace educelab
 {
@@ -18,14 +22,14 @@ static inline void to_upper(std::string& s)
 }
 
 /** @brief Convert string characters to upper case (r-value) */
-static inline std::string to_upper(std::string&& s)
+static inline auto to_upper(std::string&& s) -> std::string
 {
     to_upper(s);
-    return s;
+    return std::move(s);
 }
 
 /** @brief Convert string characters to upper case (copy) */
-static inline std::string to_upper_copy(std::string s)
+static inline auto to_upper_copy(std::string s) -> std::string
 {
     to_upper(s);
     return s;
@@ -39,16 +43,27 @@ static inline void to_lower(std::string& s)
 }
 
 /** @brief Convert string characters to lower case (r-value) */
-static inline std::string to_lower(std::string&& s)
+static inline auto to_lower(std::string&& s) -> std::string
+{
+    to_lower(s);
+    return std::move(s);
+}
+
+/** @brief Convert string characters to lower case (copy) */
+static inline auto to_lower_copy(std::string s) -> std::string
 {
     to_lower(s);
     return s;
 }
 
-/** @brief Convert string characters to lower case (copy) */
-static inline std::string to_lower_copy(std::string s)
+/** @brief Left trim */
+static inline auto trim_left(std::string_view s) -> std::string_view
 {
-    to_lower(s);
+    const auto& loc = std::locale();
+    const auto* start = std::find_if_not(
+        std::begin(s), std::end(s),
+        [&loc](auto ch) -> bool { return std::isspace(ch, loc); });
+    s.remove_prefix(std::distance(std::begin(s), start));
     return s;
 }
 
@@ -57,7 +72,7 @@ static inline std::string to_lower_copy(std::string s)
  *
  * https://stackoverflow.com/a/217605
  */
-static inline void trim_left(std::string& s)
+static inline void trim_left_in_place(std::string& s)
 {
     const auto& loc = std::locale();
     s.erase(
@@ -67,25 +82,21 @@ static inline void trim_left(std::string& s)
         }));
 }
 
-/**
- * @brief Left trim (r-value)
- *
- * https://stackoverflow.com/a/217605
- */
-static inline std::string trim_left(std::string&& s)
+/** @brief Left trim (copy) */
+static inline auto trim_left_copy(std::string_view s) -> std::string
 {
-    trim_left(s);
-    return s;
+    return std::string{trim_left(s)};
 }
 
-/**
- * @brief Left trim (copy)
- *
- * https://stackoverflow.com/a/217605
- */
-static inline std::string trim_left_copy(std::string s)
+/** @brief Right trim */
+static inline auto trim_right(std::string_view s) -> std::string_view
 {
-    trim_left(s);
+    const auto& loc = std::locale();
+    const auto* start =
+        std::find_if_not(s.rbegin(), s.rend(), [&loc](auto ch) -> bool {
+            return std::isspace(ch, loc);
+        }).base();
+    s.remove_suffix(std::distance(start, std::end(s)));
     return s;
 }
 
@@ -94,7 +105,7 @@ static inline std::string trim_left_copy(std::string s)
  *
  * https://stackoverflow.com/a/217605
  */
-static inline void trim_right(std::string& s)
+static inline void trim_right_in_place(std::string& s)
 {
     const auto& loc = std::locale();
     s.erase(
@@ -105,25 +116,17 @@ static inline void trim_right(std::string& s)
         s.end());
 }
 
-/**
- * @brief Right trim (r-value)
- *
- * https://stackoverflow.com/a/217605
- */
-static inline std::string trim_right(std::string&& s)
+/** @brief Right trim (copy) */
+static inline auto trim_right_copy(std::string_view s) -> std::string
 {
-    trim_right(s);
-    return s;
+    return std::string{trim_right(s)};
 }
 
-/**
- * @brief Right trim (copy)
- *
- * https://stackoverflow.com/a/217605
- */
-static inline std::string trim_right_copy(std::string s)
+/** @brief Trim from both ends */
+static inline auto trim(std::string_view s) -> std::string_view
 {
-    trim_right(s);
+    s = trim_left(s);
+    s = trim_right(s);
     return s;
 }
 
@@ -132,38 +135,22 @@ static inline std::string trim_right_copy(std::string s)
  *
  * https://stackoverflow.com/a/217605
  */
-static inline void trim(std::string& s)
+static inline void trim_in_place(std::string& s)
 {
-    trim_left(s);
-    trim_right(s);
+    trim_left_in_place(s);
+    trim_right_in_place(s);
 }
 
-/**
- * @brief Trim from both ends (r-value)
- *
- * https://stackoverflow.com/a/217605
- */
-static inline std::string trim(std::string&& s)
+/** @brief Right trim (copy) */
+static inline auto trim_copy(std::string_view s) -> std::string
 {
-    trim(s);
-    return s;
-}
-
-/**
- * @brief Right trim (copy)
- *
- * https://stackoverflow.com/a/217605
- */
-static inline std::string trim_copy(std::string s)
-{
-    trim(s);
-    return s;
+    return std::string{trim(s)};
 }
 
 /** @brief Split a string by a delimiter */
 template <typename... Ds>
-static inline std::vector<std::string> split(
-    const std::string& s, const Ds&... ds)
+static inline auto split(std::string_view s, const Ds&... ds)
+    -> std::vector<std::string_view>
 {
     // Build delimiters list
     std::vector<char> delimiters;
@@ -174,10 +161,10 @@ static inline std::vector<std::string> split(
     }
 
     // Get a list of all delimiter start positions
-    std::vector<std::string::size_type> delimPos;
+    std::vector<std::string_view::size_type> delimPos;
     for (const auto& delim : delimiters) {
         auto b = s.find(delim, 0);
-        while (b != std::string::npos) {
+        while (b != std::string_view::npos) {
             delimPos.emplace_back(b);
             b = s.find(delim, b + 1);
         }
@@ -187,8 +174,8 @@ static inline std::vector<std::string> split(
     std::sort(delimPos.begin(), delimPos.end());
 
     // Split string
-    std::vector<std::string> tokens;
-    std::string::size_type begin{0};
+    std::vector<std::string_view> tokens;
+    std::string_view::size_type begin{0};
     for (auto end : delimPos) {
         auto t = s.substr(begin, end - begin);
         if (not t.empty()) {
@@ -203,5 +190,68 @@ static inline std::vector<std::string> split(
 
     return tokens;
 }
+
+/**
+ * @brief Convert a string to a numeric type.
+ *
+ * A drop-in replacement for the `std:sto` family of functions which uses
+ * `std::from_chars` for conversion. Like `std::sto`, throws exceptions when
+ * conversion fails or if the converted value is out of range of the result
+ * type.
+ *
+ * @throws std::invalid_argument If string cannot be converted to the result
+ * type.
+ * @throws std::result_out_of_range If converted value is out of range for the
+ * result type.
+ * @tparam T Requested numeric type
+ * @tparam Args Parameter pack type
+ * @param str Value to convert
+ * @param args Extra parameters passed directly to `std::to_chars`
+ * @return Converted value
+ */
+template <typename T, typename... Args>
+auto to_numeric(std::string_view str, Args... args) -> T
+{
+    T val;
+    const auto* first = std::data(str);
+    const auto* last = std::data(str) + std::size(str);
+    auto [ptr, ec] = std::from_chars(first, last, val, args...);
+    if (ec == std::errc::invalid_argument) {
+        throw std::invalid_argument("Conversion could not be performed");
+    }
+    if (ec == std::errc::result_out_of_range) {
+        throw std::out_of_range("Value out of range for the result type");
+    }
+    return val;
+}
+
+#ifdef EDUCELAB_NEED_TO_NUMERIC_FP
+/**
+ * @copybrief to_numeric
+ *
+ * Template specialization as fallback when the compiler does not support
+ * `std::from_chars` for floating point types. Converts the input to a
+ * `std::string` and passes to the appropriate `std::sto` function.
+ */
+template <>
+auto to_numeric<float>(std::string_view str) -> float
+{
+    return std::stof(std::string(str));
+}
+
+/** @copydoc to_numeric<float> */
+template <>
+auto to_numeric<double>(std::string_view str) -> double
+{
+    return std::stod(std::string(str));
+}
+
+/** @copydoc to_numeric<float> */
+template <>
+auto to_numeric<long double>(std::string_view str) -> long double
+{
+    return std::stold(std::string(str));
+}
+#endif
 
 }  // namespace educelab

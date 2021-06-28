@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15 FATAL_ERROR)
-project(EduceLabCore VERSION 1.0)
+project(EduceLabCore VERSION 0.1)
 
 # Setup project directories
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin)
@@ -8,7 +8,21 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
 # Modules
 include(FetchContent)
+include(CheckCXXSourceCompiles)
 include(CMakeDependentOption)
+
+# Get Git hash
+include(GetGitRevisionDescription)
+get_git_head_revision(GIT_REFSPEC GIT_SHA1)
+if(GIT_SHA1)
+    string(SUBSTRING ${GIT_SHA1} 0 7 GIT_SHA1_SHORT)
+else()
+    set(GIT_SHA1 Untracked)
+    set(GIT_SHA1_SHORT Untracked)
+endif()
+
+# Extra compile definitions
+include(CheckToNumericFP)
 
 # Build library
 set(public_hdrs
