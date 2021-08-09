@@ -22,6 +22,7 @@ set(tests
     src/TestMath.cpp
     src/TestMesh.cpp
     src/TestString.cpp
+    src/TestUuid.cpp
     src/TestVec.cpp
     src/TestVersion.cpp
 )
