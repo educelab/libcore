@@ -4,6 +4,7 @@
 
 #include "educelab/core/types/Color.hpp"
 #include "educelab/core/types/Mesh.hpp"
+#include "educelab/core/types/Signals.hpp"
 #include "educelab/core/types/Uuid.hpp"
 #include "educelab/core/types/Vec.hpp"
 

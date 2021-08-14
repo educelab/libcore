@@ -5,7 +5,7 @@
 
 using namespace educelab;
 
-int main()
+auto main() -> int
 {
     // Default constructor
     Vec3f v0;

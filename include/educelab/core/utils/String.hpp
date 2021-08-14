@@ -234,21 +234,21 @@ auto to_numeric(std::string_view str, Args... args) -> T
  * `std::string` and passes to the appropriate `std::sto` function.
  */
 template <>
-auto to_numeric<float>(std::string_view str) -> float
+inline auto to_numeric<float>(std::string_view str) -> float
 {
     return std::stof(std::string(str));
 }
 
 /** @copydoc to_numeric<float> */
 template <>
-auto to_numeric<double>(std::string_view str) -> double
+inline auto to_numeric<double>(std::string_view str) -> double
 {
     return std::stod(std::string(str));
 }
 
 /** @copydoc to_numeric<float> */
 template <>
-auto to_numeric<long double>(std::string_view str) -> long double
+inline auto to_numeric<long double>(std::string_view str) -> long double
 {
     return std::stold(std::string(str));
 }

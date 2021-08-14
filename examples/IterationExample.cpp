@@ -5,7 +5,7 @@
 
 using namespace educelab;
 
-int main()
+auto main() -> int
 {
     // 1D numerical ranges
     for (const auto& i : range(5)) {

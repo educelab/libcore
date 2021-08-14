@@ -21,6 +21,7 @@ set(tests
     src/TestIteration.cpp
     src/TestMath.cpp
     src/TestMesh.cpp
+    src/TestSignals.cpp
     src/TestString.cpp
     src/TestUuid.cpp
     src/TestVec.cpp
