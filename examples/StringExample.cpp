@@ -6,7 +6,7 @@
 
 using namespace educelab;
 
-int main()
+auto main() -> int
 {
     // Upper and lower case transformers
     std::string upper{"The quick, brown fox."};

@@ -66,12 +66,12 @@ auto Uuid::string() const -> std::string
     return ss.str();
 }
 
-auto Uuid::FromString(const std::string& str) -> Uuid
+auto Uuid::FromString(std::string_view str) -> Uuid
 {
     // TODO: 13th character (first digit of 7th byte) is version number
     static std::regex uuidRe{
         R"([a-f0-9]{8}\u002D[a-f0-9]{4}\u002D[a-f0-9]{4}\u002D[a-f0-9]{4}\u002D[a-f0-9]{12})"};
-    if (not std::regex_match(str, uuidRe)) {
+    if (not std::regex_match(str.cbegin(), str.cend(), uuidRe)) {
         throw std::invalid_argument("Provided string not a valid Uuid");
     }
 
@@ -88,7 +88,7 @@ auto Uuid::FromString(const std::string& str) -> Uuid
 
         // Get the next two chars and convert
         auto byteStr = str.substr(strIdx, 2);
-        byte = std::strtoul(byteStr.c_str(), nullptr, 16);
+        byte = std::strtoul(std::string(byteStr).c_str(), nullptr, 16);
         strIdx += 2;
     }
 
@@ -114,4 +114,10 @@ auto Uuid::Uuid4() -> Uuid
     uuid.buffer_[8] = 0x80u | (uuid.buffer_[8] & 0x3fu);
 
     return uuid;
+}
+
+auto educelab::operator<<(std::ostream& os, const Uuid& uuid) -> std::ostream&
+{
+    os << uuid.string();
+    return os;
 }

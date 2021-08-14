@@ -4,6 +4,7 @@
 
 #include <array>
 #include <string>
+#include <string_view>
 
 namespace educelab
 {
@@ -16,9 +17,6 @@ namespace educelab
 class Uuid
 {
 public:
-    /** Byte type */
-    using Byte = uint8_t;
-
     /** Default constructor. Constructed UUID is nil valued. */
     Uuid() = default;
 
@@ -32,7 +30,7 @@ public:
     /** @brief Reset the UUID to a nil value */
     void reset();
     /** @brief Returns true is all bytes are zero */
-    auto is_nil() const -> bool;
+    [[nodiscard]] auto is_nil() const -> bool;
 
     /**
      * @brief Get a string representation of the UUID
@@ -40,7 +38,7 @@ public:
      * Gets a string representation of the UUID as 16 hexadecimal digits:
      * aabbccdd-eeff-0011-2233-445566778899
      */
-    auto string() const -> std::string;
+    [[nodiscard]] auto string() const -> std::string;
 
     /**
      * @brief Construct a UUID from a string
@@ -48,7 +46,7 @@ public:
      *  @throws std::invalid_argument if str is not of the form:
      *  aabbccdd-eeff-0011-2233-445566778899
      */
-    static auto FromString(const std::string& str) -> Uuid;
+    static auto FromString(std::string_view str) -> Uuid;
 
     /**
      * @brief Generate a UUIDv4 using pseudo-random numbers
@@ -58,9 +56,14 @@ public:
     static auto Uuid4() -> Uuid;
 
 private:
+    /** Byte type */
+    using Byte = uint8_t;
     /** Byte storage */
     std::array<Byte, 16> buffer_{};
 };
+
+/** std::ostream operator */
+auto operator<<(std::ostream& os, const Uuid& uuid) -> std::ostream&;
 
 }  // namespace educelab
 
