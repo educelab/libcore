@@ -41,6 +41,8 @@ TEST(Vec, OperatorMultiply)
     EXPECT_EQ(a, Vec3f(1, 1, 1));
     EXPECT_EQ(a *= 2, Vec3f(2, 2, 2));
     EXPECT_EQ(a, Vec3f(2, 2, 2));
+    EXPECT_EQ(-a, Vec3f(-2, -2, -2));
+    EXPECT_EQ(a, Vec3f(2, 2, 2));
 }
 
 TEST(Vec, OperatorDivide)

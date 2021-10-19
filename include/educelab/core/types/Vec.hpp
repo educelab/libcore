@@ -281,11 +281,20 @@ public:
     }
 
     /** @brief Multiplication operator */
-    template <class Vector>
-    friend auto operator*(Vec lhs, const Vector& rhs) -> Vec
+    template <
+        typename T2,
+        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    friend auto operator*(Vec lhs, const T2& rhs) -> Vec
     {
         lhs *= rhs;
         return lhs;
+    }
+
+    /** @brief Negation operator */
+    friend auto operator-(Vec rhs) -> Vec
+    {
+        rhs *= -1;
+        return rhs;
     }
 
     /** @brief Division assignment operator */
@@ -301,8 +310,10 @@ public:
     }
 
     /** @brief Division operator */
-    template <class Vector>
-    friend auto operator/(Vec lhs, const Vector& rhs) -> Vec
+    template <
+        typename T2,
+        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    friend auto operator/(Vec lhs, const T2& rhs) -> Vec
     {
         lhs /= rhs;
         return lhs;
