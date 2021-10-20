@@ -11,11 +11,16 @@ namespace educelab
 {
 
 /** @brief Pi, templated for floating-point type */
-template <class T, std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
-constexpr T PI = T(3.141592653589793238462643383279502884198716939937510582097164L);
+template <
+    class T,
+    std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
+constexpr T PI =
+    T(3.141592653589793238462643383279502884198716939937510582097164L);
 
 /** @brief Inf, templated for floating-point type */
-template <class T, std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
+template <
+    class T,
+    std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
 constexpr T INF = std::numeric_limits<T>::infinity();
 
 /** @brief Vector dot product (inner product) */

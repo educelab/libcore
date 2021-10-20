@@ -4,6 +4,7 @@
 
 #include <array>
 #include <iostream>
+#include <type_traits>
 
 #include "educelab/core/utils/Math.hpp"
 
