@@ -29,8 +29,8 @@ cmake --install build/
 ```
 
 ### Header-only classes and utilities
-Much of the functionality in this project is header-only and can be copied to your include directory without linkage. 
-Note that you may have to adjust the `#include` directives for files which reference other headers in this project. The 
+Much of the functionality in this project is header-only and can be copied to your include directory without linkage.
+Note that you may have to adjust the `#include` directives for files which reference other headers in this project. The
 following files can be installed in this way:
 
 - `utils/Iteration.hpp`
@@ -42,7 +42,7 @@ following files can be installed in this way:
 - `utils/LinearAlgebra.hpp`
     - Requires:
       - `utils/Math.hpp`
-      - `MatrixType` and `VectorType` which implement the `Mat` and `Vec` 
+      - `MatrixType` and `VectorType` which implement the `Mat` and `Vec`
         interfaces.
 - `types/Signals.hpp`
 - `types/Vec.hpp`  
@@ -51,11 +51,11 @@ following files can be installed in this way:
 - `types/Mat.hpp`
     - Requires:
       - `types/Vec.hpp`
-- `types/Color.hpp` 
-    - Requires: 
+- `types/Color.hpp`
+    - Requires:
       - `types/Vec.hpp`
-- `types/Mesh.hpp` 
-    - Requires: 
+- `types/Mesh.hpp`
+    - Requires:
       - `types/Vec.hpp`
       - `types/Color.hpp`
 
@@ -78,11 +78,15 @@ std::cout << v0 + v1 << "\n";         // "[1, 1, 0]"
 std::cout << v0.cross(v1) << "\n";    // "[0, 0, 1]"
 ```
 
-See [examples/VecExample.cpp](examples/VecExample.cpp) for more usage 
+See [examples/VecExample.cpp](examples/VecExample.cpp) for more usage
 examples.
 
 ### Dense 2D matrix class
+
 ```c++
+#include <educelab/core/types/Mat.hpp>
+#include <educelab/core/types/Vec.hpp>
+
 // Input point
 Vec<float, 4> p{0, 0, 0, 1};
 std::cout << p << "\n";          // [0, 0, 0, 1]
@@ -106,8 +110,10 @@ See [examples/MatExample.cpp](examples/MatExample.cpp) for more usage
 examples.
 
 ### Image class
+
 ```c++
-#include <educelab/core/types/Mat.hpp>
+#include <educelab/core/types/Image.hpp>
+#include <educelab/core/types/Vec.hpp>
 
 // Construct an image
 Image image(600, 800, 3, Depth::F32);
@@ -125,6 +131,7 @@ See [examples/ImageExample.cpp](examples/ImageExample.cpp) for more usage
 examples.
 
 ### Iteration utilities
+
 ```c++
 #include <educelab/core/utils/Iteration.hpp>
 
@@ -141,10 +148,11 @@ for(const auto& [idx, val] : enumerate("The", "quick", "brown", "fox.")) {
 std::cout << "\n";    // "[0] The [1] quick [2] brown [3] fox."
 ```
 
-See [examples/IterationExample.cpp](examples/IterationExample.cpp) for more 
+See [examples/IterationExample.cpp](examples/IterationExample.cpp) for more
 usage examples.
 
 ### String utilities
+
 ```c++
 #include <educelab/core/utils/String.hpp>
 

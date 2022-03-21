@@ -12,6 +12,7 @@ using namespace educelab;
 ```
 
 ### N-dimensional vector class
+
 ```{.cpp}
 #include <educelab/core/types/Vec.hpp>
 
@@ -21,7 +22,11 @@ std::cout << v0.cross(v1) << "\n";    // "[0, 0, 1]"
 ```
 
 ### Dense 2D matrix class
+
 ```{.cpp}
+#include <educelab/core/types/Mat.hpp>
+#include <educelab/core/types/Vec.hpp>
+
 // Input point
 Vec<float, 4> p{0, 0, 0, 1};
 std::cout << p << "\n";          // [0, 0, 0, 1]
@@ -42,8 +47,10 @@ std::cout << p << "\n";          // [1, 2, 3, 1]
 ```
 
 ### Image class
+
 ```{.cpp}
-#include <educelab/core/types/Mat.hpp>
+#include <educelab/core/types/Image.hpp>
+#include <educelab/core/types/Vec.hpp>
 
 // Construct an image
 Image image(600, 800, 3, Depth::F32);
@@ -58,6 +65,7 @@ for (const auto [y, x] : range2D(image.height(), image.width())) {
 ```
 
 ### Iteration utilities
+
 ```{.cpp}
 #include <educelab/core/utils/Iteration.hpp>
 
@@ -75,6 +83,7 @@ std::cout << "\n";                    // "[0] The [1] quick [2] brown [3] fox."
 ```
 
 ### String utilities
+
 ```{.cpp}
 #include <educelab/core/utils/String.hpp>
 

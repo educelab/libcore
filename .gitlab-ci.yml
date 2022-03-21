@@ -47,11 +47,11 @@ examples:debian:11:
 ### Docs ###
 pages:
   stage: deploy
-  image: debian:buster-backports
+  image: debian:bullseye-backports
   before_script:
     - apt-get update
     - apt-get install -y build-essential doxygen graphviz texlive ghostscript
-    - apt-get -t buster-backports install -y cmake
+    - apt-get -t bullseye-backports install -y cmake
   script:
     - mkdir -p build/
     - mkdir -p public/
