@@ -81,9 +81,12 @@ auto cross(const T1& a, const std::initializer_list<T2>& b) -> T1
 
 /** @brief Norm type enumeration */
 enum class Norm {
-    L1,  /**< \f$L_1\f$ norm */
-    L2,  /**< \f$L_2\f$ norm */
-    LInf /**< \f$L_{Inf}\f$ norm */
+    /** \f$L_1\f$ norm */
+    L1,
+    /** \f$L_2\f$ norm */
+    L2,
+    /** \f$L_{Inf}\f$ norm */
+    LInf
 };
 
 /** @brief Compute vector norm */
@@ -174,7 +177,17 @@ inline auto almost_zero(T v, T eps = 1e-7) -> bool
 /**
  * @brief Solve for the solutions of a quadratic equation
  *
- * @note t0 and t1 are sorted from lowest to highest value.
+ * Returns a structure with the results from the solver:
+ *
+ * ```{.cpp}
+ * struct quadratic_result {
+ *     bool is_real;
+       operator bool() { return is_real; }
+ *     T t0;
+ *     T t1;
+ * }
+ * ```
+ * @note `t0` and `t1` are sorted from lowest to highest value.
  */
 template <
     typename T,
@@ -186,15 +199,14 @@ inline auto solve_quadratic(T a, T b, T c)
         throw std::invalid_argument("First quadratic coefficient is zero");
     }
 
-    /** Structure for storing solutions to a quadratic equation */
+    // Structure for storing solutions to a quadratic equation
     struct quadratic_result {
-        /** Whether the solution is real or imaginary */
+        // Whether the solution is real or imaginary
         bool is_real{false};
-        /** @copydoc is_real */
         explicit operator bool() const noexcept { return is_real; }
-        /** First solution */
+        // First solution
         T t0{INF<T>};
-        /** Second solution */
+        // Second solution
         T t1{INF<T>};
     };
 

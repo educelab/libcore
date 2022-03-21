@@ -32,7 +32,7 @@ Vec<float, 4> p{0, 0, 0, 1};
 std::cout << p << "\n";          // [0, 0, 0, 1]
 
 // Construct a translation matrix
-auto M = Matrix::Eye();
+auto M = Mat<4,4>::Eye();
 M(0, 3) = 1.f;
 M(1, 3) = 2.f;
 M(2, 3) = 3.f;
