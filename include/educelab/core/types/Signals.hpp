@@ -116,7 +116,9 @@ public:
 private:
     /** Basic connection struct */
     struct Connection {
+        /** Constructor */
         explicit Connection(const SlotFnType& f) : slot{f} {}
+        /** Slot function reference */
         SlotFnType slot;
     };
     /** List of connections */

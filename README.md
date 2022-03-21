@@ -21,7 +21,7 @@ cmake -S . -B build/ -DCMAKE_BUILD_TYPE=Release
 ```
 
 ## Installation
-Follow the build instrcutions above, then run the following command from the root of the source directory:
+Follow the build instructions above, then run the following command from the root of the source directory:
 
 ```shell
 # Install the library to the system
@@ -36,9 +36,21 @@ following files can be installed in this way:
 - `utils/Iteration.hpp`
 - `utils/Math.hpp`
 - `utils/String.hpp`
+- `utils/Filesystem.hpp`
+    - Requires:
+      - `utils/String.hpp`
+- `utils/LinearAlgebra.hpp`
+    - Requires:
+      - `utils/Math.hpp`
+      - `MatrixType` and `VectorType` which implement the `Mat` and `Vec` 
+        interfaces.
+- `types/Signals.hpp`
 - `types/Vec.hpp`  
     - Requires:
       - `utils/Math.hpp`
+- `types/Mat.hpp`
+    - Requires:
+      - `types/Vec.hpp`
 - `types/Color.hpp` 
     - Requires: 
       - `types/Vec.hpp`
@@ -67,6 +79,49 @@ std::cout << v0.cross(v1) << "\n";    // "[0, 0, 1]"
 ```
 
 See [examples/VecExample.cpp](examples/VecExample.cpp) for more usage 
+examples.
+
+### Dense 2D matrix class
+```c++
+// Input point
+Vec<float, 4> p{0, 0, 0, 1};
+std::cout << p << "\n";          // [0, 0, 0, 1]
+
+// Construct a translation matrix
+auto M = Matrix::Eye();
+M(0, 3) = 1.f;
+M(1, 3) = 2.f;
+M(2, 3) = 3.f;
+std::cout << "\n" << M << "\n";  // [[1, 0, 0, 1]
+                                 //  [0, 1, 0, 2]
+                                 //  [0, 0, 1, 3]
+                                 //  [0, 0, 0, 1]]
+
+// Apply transform               
+p = translate * p;
+std::cout << p << "\n";          // [1, 2, 3, 1]
+```
+
+See [examples/MatExample.cpp](examples/MatExample.cpp) for more usage
+examples.
+
+### Image class
+```c++
+#include <educelab/core/types/Mat.hpp>
+
+// Construct an image
+Image image(600, 800, 3, Depth::F32);
+
+// Fill image with a color gradient
+for (const auto [y, x] : range2D(image.height(), image.width())) {
+    auto r = float(x) / float(image.width() - 1);
+    auto g = float(y) / float(image.height() - 1);
+    auto b = 0.25F;
+    image.at<Vec3f>(y, x) = {r, g, b};
+}
+```
+
+See [examples/ImageExample.cpp](examples/ImageExample.cpp) for more usage
 examples.
 
 ### Iteration utilities

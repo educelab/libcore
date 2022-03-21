@@ -24,21 +24,21 @@
     - *test_script
 
 ### Tests ###
-test:debian:10:
+test:debian:11:
   extends: .build_and_test
   stage: test
   needs: []
-  image: volcart/vcbuilder-debian:10_v1.static
+  image: volcart/vcbuilder-debian:11_v1.static
   variables:
     EXTRA_CMAKE_FLAGS: "-DEDUCE_CORE_BUILD_TESTS=ON"
   tags:
     - docker
 
-examples:debian:10:
+examples:debian:11:
   extends: .build
   stage: test
   needs: []
-  image: volcart/vcbuilder-debian:10_v1.static
+  image: volcart/vcbuilder-debian:11_v1.static
   variables:
     EXTRA_CMAKE_FLAGS: "-DEDUCE_CORE_BUILD_EXAMPLES=ON"
   tags:

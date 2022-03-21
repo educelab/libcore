@@ -38,6 +38,7 @@ TEST(Vec, OperatorMultiply)
 {
     Vec3f a{1, 1, 1};
     EXPECT_EQ(a * 2, Vec3f(2, 2, 2));
+    EXPECT_EQ(2 * a, Vec3f(2, 2, 2));
     EXPECT_EQ(a, Vec3f(1, 1, 1));
     EXPECT_EQ(a *= 2, Vec3f(2, 2, 2));
     EXPECT_EQ(a, Vec3f(2, 2, 2));
@@ -49,6 +50,7 @@ TEST(Vec, OperatorDivide)
 {
     Vec3f a{2, 2, 2};
     EXPECT_EQ(a / 2, Vec3f(1, 1, 1));
+    EXPECT_EQ(2 / a, Vec3f(1, 1, 1));
     EXPECT_EQ(a, Vec3f(2, 2, 2));
     EXPECT_EQ(a /= 2, Vec3f(1, 1, 1));
     EXPECT_EQ(a, Vec3f(1, 1, 1));
@@ -87,6 +89,13 @@ TEST(Vec, Magnitude)
     EXPECT_EQ(Vec3f(1, 0, 0).magnitude(), 1.f);
     EXPECT_EQ(Vec3f(0, 2, 0).magnitude(), 2.f);
     EXPECT_EQ(Vec3f(0, 0, 3).magnitude(), 3.f);
+}
+
+TEST(Vec, Magnitude2)
+{
+    EXPECT_EQ(Vec3f(1, 0, 0).magnitude2(), 1.f);
+    EXPECT_EQ(Vec3f(0, 2, 0).magnitude2(), 4.f);
+    EXPECT_EQ(Vec3f(0, 0, 3).magnitude2(), 9.f);
 }
 
 TEST(Vec, UnitVector)

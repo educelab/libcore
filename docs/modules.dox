@@ -9,6 +9,11 @@
  */
 
 /**
+ * @namespace educelab::linalg
+ * @brief Linear algebra library
+ */
+
+/**
  * @namespace educelab::traits
  * @brief Class traits
  */

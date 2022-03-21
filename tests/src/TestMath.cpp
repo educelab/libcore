@@ -66,3 +66,71 @@ TEST(Math, InteriorAngle)
     EXPECT_EQ(interior_angle(Vec2f{1, 0}, Vec2f{0, 1}), to_radians(90));
     EXPECT_EQ(interior_angle(Vec3f{1, 0, 0}, Vec3f{0, 1, 0}), to_radians(90));
 }
+
+TEST(Math, RandomFloatDefault)
+{
+    for ([[maybe_unused]] const auto r : range(1000)) {
+        auto val = random<float>();
+        EXPECT_GE(val, 0.F);
+        EXPECT_LT(val, 1.F);
+    }
+}
+
+TEST(Math, RandomFloatCustom)
+{
+    for ([[maybe_unused]] const auto r : range(1000)) {
+        auto val = random(0.F, 10.F);
+        EXPECT_GE(val, 0.F);
+        EXPECT_LT(val, 10.F);
+    }
+}
+
+TEST(Math, RandomDoubleDefault)
+{
+    for ([[maybe_unused]] const auto r : range(1000)) {
+        auto val = random<double>();
+        EXPECT_GE(val, 0.);
+        EXPECT_LT(val, 1.);
+    }
+}
+
+TEST(Math, RandomDoubleCustom)
+{
+    for ([[maybe_unused]] const auto r : range(1000)) {
+        auto val = random(0., 10.);
+        EXPECT_GE(val, 0.);
+        EXPECT_LT(val, 10.);
+    }
+}
+
+TEST(Math, AlmostZero)
+{
+    EXPECT_TRUE(almost_zero(1e-8F));
+    EXPECT_FALSE(almost_zero(1e-7F));
+}
+
+TEST(Math, SolveQuadraticReal)
+{
+    if (auto res = solve_quadratic(5.F, 6.F, 1.F)) {
+        EXPECT_FLOAT_EQ(res.t0, -1.F);
+        EXPECT_FLOAT_EQ(res.t1, -0.2F);
+    }
+}
+
+TEST(Math, SolveQuadraticImaginary)
+{
+    EXPECT_FALSE(solve_quadratic(5.F, 2.F, 1.F));
+}
+
+TEST(Math, SolveQuadraticLinear)
+{
+    EXPECT_THROW(solve_quadratic(0.F, 2.F, 1.F), std::invalid_argument);
+}
+
+TEST(Math, SchurProduct)
+{
+    Vec3f a{1, 2, 3};
+    Vec3f b{4, 5, 6};
+    auto result = schur_product(a, b);
+    EXPECT_EQ(result, Vec3f(4, 10, 18));
+}
