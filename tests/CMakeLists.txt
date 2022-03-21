@@ -18,7 +18,11 @@ endif()
 ## Build the tests ##
 set(tests
     src/TestColor.cpp
+    src/TestFilesystem.cpp
+    src/TestImage.cpp
     src/TestIteration.cpp
+    src/TestLinearAlgebra.cpp
+    src/TestMat.cpp
     src/TestMath.cpp
     src/TestMesh.cpp
     src/TestSignals.cpp

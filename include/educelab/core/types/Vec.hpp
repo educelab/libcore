@@ -281,7 +281,7 @@ public:
         return *this;
     }
 
-    /** @brief Multiplication operator */
+    /** @brief Vector-scalar multiplication operator */
     template <
         typename T2,
         std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
@@ -289,6 +289,16 @@ public:
     {
         lhs *= rhs;
         return lhs;
+    }
+
+    /** @brief Scalar-vector multiplication operator */
+    template <
+        typename T2,
+        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    friend auto operator*(const T2& lhs, Vec rhs) -> Vec
+    {
+        rhs *= lhs;
+        return rhs;
     }
 
     /** @brief Negation operator */
@@ -310,7 +320,14 @@ public:
         return *this;
     }
 
-    /** @brief Division operator */
+    /**
+     * @brief Vector-scalar division operator
+     *
+     * Performs the following operation:
+     * \f[
+     *   ret_i = \frac{rhs_i}{lhs},\ \forall i \in rhs
+     * \f]
+     */
     template <
         typename T2,
         std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
@@ -320,9 +337,28 @@ public:
         return lhs;
     }
 
+    /**
+     * @brief Scalar-vector division operator
+     *
+     * Performs the following operation:
+     * \f[
+     *   ret_i = \frac{lhs}{rhs_i},\ \forall i \in rhs
+     * \f]
+     */
+    template <
+        typename T2,
+        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    friend auto operator/(const T2& lhs, Vec rhs) -> Vec
+    {
+        for (auto& v : rhs) {
+            v = lhs / v;
+        }
+        return rhs;
+    }
+
     /** @brief Compute the vector dot product (i.e. inner product) */
     template <class Vector>
-    auto dot(const Vector& v) -> T
+    auto dot(const Vector& v) const -> T
     {
         return educelab::dot(val_, v);
     }
@@ -334,14 +370,14 @@ public:
     template <
         typename T2,
         std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
-    auto dot(const std::initializer_list<T2>& b) -> T
+    auto dot(const std::initializer_list<T2>& b) const -> T
     {
         return educelab::dot(val_, b);
     }
 
     /** @brief Compute the vector cross product */
     template <class Vector, std::size_t D = Dims>
-    auto cross(const Vector& v) -> std::enable_if_t<D == 3, Vec>
+    auto cross(const Vector& v) const -> std::enable_if_t<D == 3, Vec>
     {
         return educelab::cross(*this, v);
     }
@@ -351,7 +387,7 @@ public:
         typename T2,
         std::size_t D = Dims,
         std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
-    auto cross(const std::initializer_list<T2>& b)
+    auto cross(const std::initializer_list<T2>& b) const
         -> std::enable_if_t<D == 3, Vec>
     {
         return educelab::cross(*this, b);
@@ -359,6 +395,15 @@ public:
 
     /** @brief Compute the vector magnitude */
     auto magnitude() const -> T { return educelab::norm(*this, Norm::L2); }
+
+    /** @brief Compute the squared vector magnitude */
+    auto magnitude2() const -> T
+    {
+        auto sum = std::accumulate(
+            std::begin(val_), std::end(val_), T(0),
+            [](auto a, auto b) { return a + (b * b); });
+        return sum;
+    }
 
     /** @brief Return the unit vector of this vector */
     auto unit() const -> Vec { return educelab::normalize(*this); }
@@ -368,6 +413,8 @@ private:
     Container val_{};
 };
 
+/** @brief 3D, 8-bit unsigned int vector */
+using Vec3b = Vec<uint8_t, 3>;
 /** @brief 3D, 32-bit float vector */
 using Vec3f = Vec<float, 3>;
 /** @brief 3D, 64-bit float vector */

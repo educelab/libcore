@@ -60,7 +60,8 @@ public:
         F32C3,
         /** 32-bit float RGBA color */
         F32C4,
-        /** Hexadecimal RGB color string of 3 or 6 digits (`#0a3` or `#00aa33`)
+        /**
+         * Hexadecimal RGB color string of 3 or 6 digits (`#0a3` or `#00aa33`)
          */
         HexCode
     };

@@ -6,6 +6,7 @@
 #include <cmath>
 #include <limits>
 #include <numeric>
+#include <random>
 
 namespace educelab
 {
@@ -47,6 +48,17 @@ auto cross(const T1& a, const T2& b) -> T1
     c[1] = a[2] * b[0] - a[0] * b[2];
     c[2] = a[0] * b[1] - a[1] * b[0];
     return c;
+}
+
+/** @brief Element-wise vector product */
+template <typename T1, typename T2>
+auto schur_product(const T1& a, const T2& b) -> T1
+{
+    T1 res;
+    std::transform(
+        std::begin(a), std::end(a), std::begin(b), std::begin(res),
+        std::multiplies<typename T1::value_type>());
+    return res;
 }
 
 /** @brief Vector cross product for initializer list */
@@ -132,6 +144,90 @@ template <
 constexpr auto to_degrees(T2 rad) -> T
 {
     return rad * T(180) / PI<T>;
+}
+
+/**
+ * @brief Generate a uniformly random number in the range [min, max)
+ *
+ * @note For each type T, this function statically defines a single std::mt19937
+ * generator and seeds it from std::random_device. This behavior may not be
+ * desirable for all applications.
+ */
+template <typename T>
+inline auto random(T min = 0, T max = 1) -> T
+{
+    std::uniform_real_distribution<T> distribution(min, max);
+    static std::random_device source;
+    static std::mt19937 generator(source());
+    return distribution(generator);
+}
+
+/** @brief Check if the given value is almost zero using an absolute epsilon */
+template <
+    typename T,
+    std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
+inline auto almost_zero(T v, T eps = 1e-7) -> bool
+{
+    return std::abs(v) < eps;
+}
+
+/**
+ * @brief Solve for the solutions of a quadratic equation
+ *
+ * @note t0 and t1 are sorted from lowest to highest value.
+ */
+template <
+    typename T,
+    std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
+inline auto solve_quadratic(T a, T b, T c)
+{
+    // Zero a means the equation is linear
+    if (almost_zero(a)) {
+        throw std::invalid_argument("First quadratic coefficient is zero");
+    }
+
+    /** Structure for storing solutions to a quadratic equation */
+    struct quadratic_result {
+        /** Whether the solution is real or imaginary */
+        bool is_real{false};
+        /** @copydoc is_real */
+        explicit operator bool() const noexcept { return is_real; }
+        /** First solution */
+        T t0{INF<T>};
+        /** Second solution */
+        T t1{INF<T>};
+    };
+
+    // Calculate the discriminant
+    auto dis = std::pow(b, 2) - 4 * a * c;
+    if (dis < 0) {
+        return quadratic_result{};
+    }
+
+    // Setup result
+    quadratic_result res;
+    res.is_real = true;
+
+    // Zero discriminant means t0 and t1 are the same
+    if (almost_zero(dis)) {
+        res.t0 = res.t1 = -b / (T(2) * a);
+    }
+
+    // Numerically stable solution calculations
+    // https://pbr-book.org/3ed-2018/Utilities/Mathematical_Routines#Quadratic
+    else {
+        auto disR = std::sqrt(dis);
+        T q = (b < T(0)) ? T(-0.5) * (b - disR) : T(-0.5) * (b + disR);
+        res.t0 = q / a;
+        res.t1 = c / q;
+    }
+
+    // Sort solutions least to greatest
+    if (res.t0 > res.t1) {
+        std::swap(res.t0, res.t1);
+    }
+
+    return res;
 }
 
 }  // namespace educelab

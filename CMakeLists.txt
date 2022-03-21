@@ -28,18 +28,27 @@ include(CheckToNumericFP)
 set(public_hdrs
     include/educelab/core.hpp
     include/educelab/core/Version.hpp
+    include/educelab/core/io/ImageIO.hpp
     include/educelab/core/types/Color.hpp
+    include/educelab/core/types/Image.hpp
+    include/educelab/core/types/Mat.hpp
     include/educelab/core/types/Mesh.hpp
+    include/educelab/core/types/Signals.hpp
     include/educelab/core/types/Uuid.hpp
     include/educelab/core/types/Vec.hpp
+    include/educelab/core/utils/Filesystem.hpp
     include/educelab/core/utils/Iteration.hpp
+    include/educelab/core/utils/LinearAlgebra.hpp
     include/educelab/core/utils/Math.hpp
     include/educelab/core/utils/String.hpp
 )
 
 configure_file(src/Version.cpp.in Version.cpp)
 set(srcs
+    ${public_hdrs}
     ${CMAKE_CURRENT_BINARY_DIR}/Version.cpp
+    src/Image.cpp
+    src/ImageIO.cpp
     src/Uuid.cpp
 )
 
