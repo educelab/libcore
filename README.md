@@ -33,6 +33,7 @@ Much of the functionality in this project is header-only and can be copied to yo
 Note that you may have to adjust the `#include` directives for files which reference other headers in this project. The
 following files can be installed in this way:
 
+- `utils/Caching.hpp`
 - `utils/Iteration.hpp`
 - `utils/Math.hpp`
 - `utils/String.hpp`
@@ -174,4 +175,44 @@ std::cout << to_numeric<float>("3.14") << "\n"; // 3.14
 ```
 
 See [examples/StringExample.cpp](examples/StringExample.cpp) for more usage
+examples.
+
+### Data caching
+
+```c++
+#include <educelab/core/utils/Iteration.hpp>
+#include <educelab/core/utils/Caching.hpp>
+
+// Create cache
+using Key = ObjectCache<>::key_type;
+ObjectCache cache;
+
+// Store 5 ints and floats
+std::vector<Key> keys;
+for (auto val : range(5)) {
+    keys.emplace_back(cache.insert(val));
+    keys.emplace_back(cache.insert(0.5f + val));
+}
+
+// Print cached values
+for (const auto& k : keys) {
+    // Check that the key is still in the cache
+    if (not cache.contains(k)) {
+        continue;
+    }
+    
+    // Get the value and cast to the correct type
+    auto val = cache.get(k);
+    if (val.type() == typeid(int)) {
+        std::cout << std::any_cast<int>(val) << " ";
+    } 
+    
+    else if (val.type() == typeid(float)) {
+        std::cout << std::any_cast<float>(val) << " ";
+    } 
+} 
+std::cout << "\n";  // 0 0.5 1 1.5 2 2.5 3 3.5 4 4.5
+```
+
+See [examples/CachingExample.cpp](examples/CachingExample.cpp) for more usage
 examples.

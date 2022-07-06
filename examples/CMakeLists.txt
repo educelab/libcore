@@ -18,3 +18,6 @@ target_link_libraries(educelab_core_ImageExample educelab::core)
 
 add_executable(educelab_core_MatExample MatExample.cpp)
 target_link_libraries(educelab_core_MatExample educelab::core)
+
+add_executable(educelab_core_CachingExample CachingExample.cpp)
+target_link_libraries(educelab_core_CachingExample educelab::core)
