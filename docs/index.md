@@ -93,3 +93,39 @@ std::cout << upper << "\n";           // "the quick brown fox"
 to_upper(upper);
 std::cout << upper << "\n";           // "THE QUICK BROWN FOX"
 ```
+
+### Data caching
+
+```{.cpp}
+#include <educelab/core/utils/Caching.hpp>
+
+// Create cache
+using Key = ObjectCache<>::key_type;
+ObjectCache cache;
+
+// Store 5 ints and floats
+std::vector<Key> keys;
+for (auto val : range(5)) {
+    keys.emplace_back(cache.insert(val));
+    keys.emplace_back(cache.insert(0.5f + val));
+}
+
+// Print cached values
+for (const auto& k : keys) {
+    // Check that the key is still in the cache
+    if (not cache.contains(k)) {
+        continue;
+    }
+    
+    // Get the value and cast to the correct type
+    auto val = cache.get(k);
+    if (val.type() == typeid(int)) {
+        std::cout << std::any_cast<int>(val) << " ";
+    } 
+    
+    else if (val.type() == typeid(float)) {
+        std::cout << std::any_cast<float>(val) << " ";
+    } 
+} 
+std::cout << "\n";  // 0 0.5 1 1.5 2 2.5 3 3.5 4 4.5
+```

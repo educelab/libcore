@@ -174,6 +174,8 @@ auto Image::type() const -> Depth { return type_; }
 
 auto Image::empty() const -> bool { return data_.empty(); }
 
+auto Image::size() const -> std::size_t { return data_.size(); }
+
 Image::operator bool() const noexcept { return not empty(); }
 
 void Image::clear()

@@ -52,6 +52,9 @@ public:
     /** @brief Whether image is empty */
     [[nodiscard]] auto empty() const -> bool;
 
+    /** @brief Get the size of the image in bytes */
+    [[nodiscard]] auto size() const -> std::size_t;
+
     /** @copydoc empty() */
     explicit operator bool() const noexcept;
 

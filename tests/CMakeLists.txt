@@ -17,6 +17,7 @@ endif()
 
 ## Build the tests ##
 set(tests
+    src/TestCaching.cpp
     src/TestColor.cpp
     src/TestFilesystem.cpp
     src/TestImage.cpp

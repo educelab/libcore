@@ -12,6 +12,7 @@
 #include "educelab/core/types/Uuid.hpp"
 #include "educelab/core/types/Vec.hpp"
 
+#include "educelab/core/utils/Caching.hpp"
 #include "educelab/core/utils/Filesystem.hpp"
 #include "educelab/core/utils/Iteration.hpp"
 #include "educelab/core/utils/LinearAlgebra.hpp"
