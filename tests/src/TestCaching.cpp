@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <unordered_set>
 
 #include "educelab/core/types/Image.hpp"
@@ -131,7 +132,7 @@ TEST(Caching, HeterogeneousData)
     EXPECT_EQ(imgOut.type(), imgIn.type());
 }
 
-TEST(Caching, LRUPolicy)
+TEST(Caching, LRUCache)
 {
     // Create cache
     Cache cache;
@@ -196,4 +197,46 @@ TEST(Caching, SpecializedCache)
     EXPECT_TRUE(cache.empty());
     EXPECT_EQ(erased, sizeof(int));
     EXPECT_EQ(cache.size(), 0);
+}
+
+TEST(Caching, SharedPtr)
+{
+    // Create cache
+    ObjectCache cache;
+
+    // Create key and weak_ptr to object
+    ObjectCache<>::key_type key{0};
+    std::weak_ptr<int> weak;
+
+    // Create scoped, shared int and put in the cache
+    {
+        auto shared = std::make_shared<int>(10);
+        weak = shared;
+        key = cache.insert(shared, sizeof(int));
+    }
+
+    // Check access through the weak_ptr
+    {
+        EXPECT_TRUE(weak.use_count() != 0);
+        auto shared = weak.lock();
+        EXPECT_TRUE(shared);
+        EXPECT_EQ(*shared, 10);
+    }
+
+    // Check access through the cache
+    {
+        auto shared = std::any_cast<std::shared_ptr<int>>(cache.get(key));
+        EXPECT_TRUE(shared);
+        EXPECT_EQ(*shared, 10);
+    }
+
+    // Delete cache reference
+    cache.erase(key);
+
+    // Check no access through the weak_ptr
+    {
+        EXPECT_TRUE(weak.use_count() == 0);
+        auto shared = weak.lock();
+        EXPECT_FALSE(shared);
+    }
 }
