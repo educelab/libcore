@@ -2,7 +2,8 @@
 
 A single C++ library for types and utilities shared across the various EduceLab projects.
 
-[[_TOC_]]
+[![](https://www.gitlab.com/educelab/libcore/badges/develop/pipeline.svg?ignore_skipped=true)](https://gitlab.com/educelab/libcore/-/commits/develop)
+[![](https://img.shields.io/static/v1?label=&message=docs&color=orange)](https://educelab.gitlab.io/libcore/docs/)
 
 ## Requirements
 - Compiler supporting C++17
