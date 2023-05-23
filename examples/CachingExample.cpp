@@ -80,7 +80,7 @@ auto main() -> int
     }
 
     // Store a vector of ints
-    std::vector<int> vals{5, 6, 7, 8, 9};
+    const std::vector<int> vals{5, 6, 7, 8, 9};
     keys.emplace_back(cache.insert(vals, sizeof(int) * vals.size()));
 
     // Print all cached values
