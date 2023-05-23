@@ -18,12 +18,18 @@ namespace educelab
 
 namespace detail
 {
-/** @brief No-op mutex */
+/**
+ * @brief No-op mutex
+ * @details Does nothing.
+ */
 class NoOpMutex
 {
 };
 
-/** @brief No-op lock guard implementing std::mutex compatible RAII syntax */
+/**
+ * @brief No-op lock guard implementing std::mutex compatible RAII syntax
+ * @details Does nothing.
+ */
 template <typename Mutex>
 struct NoopLockGuard {
     /** No-op acquire */
@@ -41,6 +47,8 @@ struct NoopLockGuard {
  * Determines the cache synchronization policy which controls thread-safety. The
  * synchronization policy should be configured based on both the desired thread
  * access pattern *and* the requirements of the cache's removal policy.
+ *
+ * @see NoSyncPolicy, ExclusiveRWSyncPolicy
  *
  * @tparam CacheSizeType The type to use for storing the cache's size and
  * capacity in bytes. Usually `std::size_t` or `std::atomic<std::size_t>`.
@@ -71,7 +79,12 @@ struct CacheSyncPolicy {
     using trivial_lock = TrivialLock;
 };
 
-/** @brief Cache synchronization policy which performs no synchronization. */
+/**
+ * @brief Cache synchronization policy which performs no synchronization.
+ *
+ * @tparam SizeType The type to use for storing the cache's size and capacity
+ * in bytes.
+ */
 template <typename SizeType>
 using NoSyncPolicy = CacheSyncPolicy<
     SizeType,
@@ -83,6 +96,10 @@ using NoSyncPolicy = CacheSyncPolicy<
 /**
  * @brief Cache synchronization policy which allows shared trivial reads but is
  * otherwise exclusive.
+ *
+ * @tparam SizeType The type to use for storing the cache's size and capacity
+ * in bytes.
+ * @tparam MutexType The cache mutex type.
  */
 template <typename SizeType, typename MutexType = std::shared_mutex>
 using ExclusiveRWSyncPolicy = CacheSyncPolicy<
@@ -250,9 +267,12 @@ private:
  *
  * For single-threaded applications, it is sufficient to use ObjectCache in
  * most circumstances. For multi-threaded applications, use
- * SynchronizedObjectCache, which utilizes a simple thread-safe synchronization
- * policy, or build your own synchronization policy. See detail::CacheSyncPolicy
- * for more information on the synchronization policy interface.
+ * @ref educelab::SynchronizedObjectCache "SynchronizedObjectCache", which
+ * utilizes a simple thread-safe synchronization policy, or build your own
+ * synchronization policy. See detail::CacheSyncPolicy for more information on
+ * the synchronization policy interface.
+ *
+ * @see SynchronizedObjectCache
  *
  * @tparam T Type of cached object.
  * @tparam KeyT Type of key.
@@ -508,6 +528,8 @@ private:
 
 /**
  * @brief Specialization of ObjectCache which uses an exclusive locking policy.
+ *
+ * @see ObjectCache
  *
  * @tparam T Type of cached object.
  * @tparam KeyT Type of key.
