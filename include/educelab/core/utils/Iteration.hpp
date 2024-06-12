@@ -411,10 +411,10 @@ template <class Iterable>
 class EnumerateIterable;
 
 template <class Iterable>
-inline auto enumerate(Iterable&& it);
+auto enumerate(Iterable&& it);
 
 template <typename... Args>
-inline auto enumerate(Args&&... args);
+auto enumerate(Args&&... args);
 
 /**
  * @brief Iterable wrapper for enumerating elements of a container by index and
@@ -567,7 +567,7 @@ private:
  * @ingroup Util
  */
 template <class Iterable>
-inline auto enumerate(Iterable&& it)
+auto enumerate(Iterable&& it)
 {
     return EnumerateIterable<Iterable>(std::forward<Iterable>(it));
 }
@@ -589,7 +589,7 @@ inline auto enumerate(Iterable&& it)
  * @ingroup Util
  */
 template <typename... Args>
-inline auto enumerate(Args&&... args)
+auto enumerate(Args&&... args)
 {
     using Type = std::common_type_t<Args...>;
     using Iterable = std::array<Type, sizeof...(Args)>;

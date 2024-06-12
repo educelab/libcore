@@ -157,7 +157,7 @@ constexpr auto to_degrees(T2 rad) -> T
  * desirable for all applications.
  */
 template <typename T>
-inline auto random(T min = 0, T max = 1) -> T
+auto random(T min = 0, T max = 1) -> T
 {
     std::uniform_real_distribution<T> distribution(min, max);
     static std::random_device source;
@@ -169,7 +169,7 @@ inline auto random(T min = 0, T max = 1) -> T
 template <
     typename T,
     std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
-inline auto almost_zero(T v, T eps = 1e-7) -> bool
+auto almost_zero(T v, T eps = 1e-7) -> bool
 {
     return std::abs(v) < eps;
 }
@@ -192,7 +192,7 @@ inline auto almost_zero(T v, T eps = 1e-7) -> bool
 template <
     typename T,
     std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
-inline auto solve_quadratic(T a, T b, T c)
+auto solve_quadratic(T a, T b, T c)
 {
     // Zero a means the equation is linear
     if (almost_zero(a)) {

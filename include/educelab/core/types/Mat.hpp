@@ -92,10 +92,7 @@ public:
 
 private:
     /** Compute flat index */
-    static inline auto Unravel(std::size_t y, std::size_t x)
-    {
-        return y * Cols + x;
-    }
+    static auto Unravel(std::size_t y, std::size_t x) { return y * Cols + x; }
     /** Storage array */
     std::array<T, Rows * Cols> vals_{};
 };
