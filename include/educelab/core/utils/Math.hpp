@@ -31,6 +31,15 @@ auto abs(const T& v) -> T
     return o;
 }
 
+/** @brief Per-element copysign */
+template<typename T>
+auto copysign(const T& mag, const T& sgn) -> T
+{
+    T o;
+    std::transform(std::begin(mag), std::end(mag), std::begin(sgn), std::begin(o), std::copysign);
+    return o;
+}
+
 /** @brief Vector dot product (inner product) */
 template <typename T1, typename T2>
 auto dot(const T1& a, const T2& b)
