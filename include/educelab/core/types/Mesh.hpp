@@ -181,13 +181,16 @@ public:
     }
 
     /** @brief Get a face by index */
-    [[nodiscard]] auto face(std::size_t idx) const -> const Face&
+    [[nodiscard]] auto face(const std::size_t idx) const -> const Face&
     {
         return faces_.at(idx);
     }
 
     /** @brief Get a face by index */
-    [[nodiscard]] auto face(std::size_t idx) -> Face& { return faces_.at(idx); }
+    [[nodiscard]] auto face(const std::size_t idx) -> Face&
+    {
+        return faces_.at(idx);
+    }
 
 private:
     /** Vertices */

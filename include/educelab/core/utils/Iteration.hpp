@@ -458,7 +458,7 @@ private:
         /** @} */
 
         /** Constructor for the iterator */
-        explicit EnumerateIterator(size_t idx, T&& it)
+        explicit EnumerateIterator(const size_t idx, T&& it)
             : idx_{idx}, it_{std::move(it)}
         {
         }

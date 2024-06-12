@@ -91,7 +91,7 @@ enum class Norm {
 
 /** @brief Compute vector norm */
 template <class Vector>
-auto norm(const Vector& v, Norm norm = Norm::L2)
+auto norm(const Vector& v, const Norm norm = Norm::L2)
 {
     using Ret = decltype(*std::begin(v));
     switch (norm) {

@@ -39,25 +39,25 @@ public:
     }
 
     /** @brief Matrix element access with bounds checking */
-    auto at(std::size_t y, std::size_t x) -> T&
+    auto at(const std::size_t y, const std::size_t x) -> T&
     {
         return vals_.at(Unravel(y, x));
     }
 
     /** @copydoc at(std::size_t, std::size_t) */
-    auto at(std::size_t y, std::size_t x) const -> const T&
+    auto at(const std::size_t y, const std::size_t x) const -> const T&
     {
         return vals_.at(Unravel(y, x));
     }
 
     /** @brief Matrix element access without bounds checking */
-    auto operator()(std::size_t y, std::size_t x) -> T&
+    auto operator()(const std::size_t y, const std::size_t x) -> T&
     {
         return vals_[Unravel(y, x)];
     }
 
     /** @copydoc operator()(std::size_t, std::size_t) */
-    auto operator()(std::size_t y, std::size_t x) const -> const T&
+    auto operator()(const std::size_t y, const std::size_t x) const -> const T&
     {
         return vals_[Unravel(y, x)];
     }
@@ -92,7 +92,10 @@ public:
 
 private:
     /** Compute flat index */
-    static auto Unravel(std::size_t y, std::size_t x) { return y * Cols + x; }
+    static auto Unravel(const std::size_t y, const std::size_t x)
+    {
+        return y * Cols + x;
+    }
     /** Storage array */
     std::array<T, Rows * Cols> vals_{};
 };

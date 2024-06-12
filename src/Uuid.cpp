@@ -66,7 +66,7 @@ auto Uuid::string() const -> std::string
     return ss.str();
 }
 
-auto Uuid::FromString(std::string_view str) -> Uuid
+auto Uuid::FromString(const std::string_view str) -> Uuid
 {
     // TODO: 13th character (first digit of 7th byte) is version number
     static std::regex uuidRe{

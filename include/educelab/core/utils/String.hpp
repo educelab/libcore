@@ -83,7 +83,7 @@ static inline void trim_left_in_place(std::string& s)
 }
 
 /** @brief Left trim (copy) */
-static inline auto trim_left_copy(std::string_view s) -> std::string
+static inline auto trim_left_copy(const std::string_view s) -> std::string
 {
     return std::string{trim_left(s)};
 }
@@ -117,7 +117,7 @@ static inline void trim_right_in_place(std::string& s)
 }
 
 /** @brief Right trim (copy) */
-static inline auto trim_right_copy(std::string_view s) -> std::string
+static inline auto trim_right_copy(const std::string_view s) -> std::string
 {
     return std::string{trim_right(s)};
 }
@@ -142,7 +142,7 @@ static inline void trim_in_place(std::string& s)
 }
 
 /** @brief Right trim (copy) */
-static inline auto trim_copy(std::string_view s) -> std::string
+static inline auto trim_copy(const std::string_view s) -> std::string
 {
     return std::string{trim(s)};
 }
@@ -210,7 +210,7 @@ static inline auto split(std::string_view s, const Ds&... ds)
  * @return Converted value
  */
 template <typename T, typename... Args>
-auto to_numeric(std::string_view str, Args... args) -> T
+auto to_numeric(const std::string_view str, Args... args) -> T
 {
     T val;
     const auto* first = std::data(str);
@@ -234,21 +234,21 @@ auto to_numeric(std::string_view str, Args... args) -> T
  * `std::string` and passes to the appropriate `std::sto` function.
  */
 template <>
-inline auto to_numeric<float>(std::string_view str) -> float
+inline auto to_numeric<float>(const std::string_view str) -> float
 {
     return std::stof(std::string(str));
 }
 
 /** @copydoc to_numeric<float> */
 template <>
-inline auto to_numeric<double>(std::string_view str) -> double
+inline auto to_numeric<double>(const std::string_view str) -> double
 {
     return std::stod(std::string(str));
 }
 
 /** @copydoc to_numeric<float> */
 template <>
-inline auto to_numeric<long double>(std::string_view str) -> long double
+inline auto to_numeric<long double>(const std::string_view str) -> long double
 {
     return std::stold(std::string(str));
 }

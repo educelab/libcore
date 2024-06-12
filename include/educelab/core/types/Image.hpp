@@ -121,13 +121,13 @@ private:
 };
 
 template <typename T>
-auto Image::at(std::size_t y, std::size_t x) -> T&
+auto Image::at(const std::size_t y, const std::size_t x) -> T&
 {
     return reinterpret_cast<T&>(data_.at(unravel_(y, x)));
 }
 
 template <typename T>
-auto Image::at(std::size_t y, std::size_t x) const -> const T&
+auto Image::at(const std::size_t y, const std::size_t x) const -> const T&
 {
     return reinterpret_cast<const T&>(data_.at(unravel_(y, x)));
 }

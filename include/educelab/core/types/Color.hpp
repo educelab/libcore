@@ -97,7 +97,7 @@ public:
     }
 
     /** @brief Construct from hexadecimal string */
-    explicit Color(std::string_view str)
+    explicit Color(const std::string_view str)
     {
         if (not std::regex_match(
                 str.begin(), str.end(), detail::REGEX_HEX_COLOR)) {
@@ -122,7 +122,7 @@ public:
     }
 
     /** @brief Assign a hexadecimal string value */
-    auto operator=(std::string_view str) -> Color&
+    auto operator=(const std::string_view str) -> Color&
     {
         if (not std::regex_match(
                 str.begin(), str.end(), detail::REGEX_HEX_COLOR)) {
