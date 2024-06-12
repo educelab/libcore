@@ -170,6 +170,29 @@ auto almost_zero(T v, T eps = 1e-7) -> bool
     return std::abs(v) < eps;
 }
 
+/** @brief Check if two values are almost equal to each other */
+template <
+    typename T,
+    typename T2,
+    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+auto almost_equal(
+    const T lhs,
+    const T2 rhs,
+    T epsAbs = 1e-7,
+    T epsRel = std::numeric_limits<T>::epsilon()) -> bool
+{
+    auto rhsT = static_cast<T>(rhs);
+    T d = std::abs(lhs - rhsT);
+    if (d <= epsAbs) {
+        return true;
+    }
+    T l = std::abs(lhs);
+    T r = std::abs(rhsT);
+
+    T largest = std::max(r, l);
+    return d <= largest * epsRel;
+}
+
 /**
  * @brief Solve for the solutions of a quadratic equation
  *
