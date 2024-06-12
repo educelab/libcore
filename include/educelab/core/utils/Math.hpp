@@ -20,6 +20,17 @@ constexpr T PI =
 template <class T, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 constexpr T INF = std::numeric_limits<T>::infinity();
 
+/** @brief Per-element absolute value for container types */
+template <typename T>
+auto abs(const T& v) -> T
+{
+    T o;
+    std::transform(std::begin(v), std::end(v), std::begin(o), [](auto e) {
+        return std::abs(e);
+    });
+    return o;
+}
+
 /** @brief Vector dot product (inner product) */
 template <typename T1, typename T2>
 auto dot(const T1& a, const T2& b)
