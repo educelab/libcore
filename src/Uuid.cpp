@@ -22,7 +22,7 @@ namespace detail
 template <
     class T = std::mt19937,
     std::size_t N = T::state_size * sizeof(typename T::result_type)>
-auto SeededRandomEngine() -> typename std::enable_if<N != 0, T>::type
+auto SeededRandomEngine() -> std::enable_if_t<N != 0, T>
 {
     std::random_device source;
     using ArrayT = std::random_device::result_type;

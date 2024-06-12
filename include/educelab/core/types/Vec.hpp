@@ -23,7 +23,7 @@ namespace educelab
 template <
     typename T,
     std::size_t Dims,
-    std::enable_if_t<std::is_arithmetic<T>::value, bool> = true>
+    std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
 class Vec
 {
     /** Underlying element storage */
@@ -192,7 +192,7 @@ public:
     /** @brief Assignment operator for std::initializer_list */
     template <
         typename T2,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+        std::enable_if_t<std::is_arithmetic_v<T2>, bool> = true>
     auto operator=(const std::initializer_list<T2>& b) -> Vec&
     {
         auto it = b.begin();
@@ -217,7 +217,7 @@ public:
     /** @brief Addition assignment operator for std::initializer_list */
     template <
         typename T2,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+        std::enable_if_t<std::is_arithmetic_v<T2>, bool> = true>
     auto operator+=(const std::initializer_list<T2>& b) -> Vec&
     {
         auto it = b.begin();
@@ -250,7 +250,7 @@ public:
     /** @brief Subtraction assignment operator for std::initializer_list */
     template <
         typename T2,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+        std::enable_if_t<std::is_arithmetic_v<T2>, bool> = true>
     auto operator-=(const std::initializer_list<T2>& b) -> Vec&
     {
         auto it = b.begin();
@@ -272,7 +272,7 @@ public:
     /** @brief Multiplication assignment operator */
     template <
         typename T2,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+        std::enable_if_t<std::is_arithmetic_v<T2>, bool> = true>
     auto operator*=(const T2& b) -> Vec&
     {
         for (auto& v : val_) {
@@ -284,7 +284,7 @@ public:
     /** @brief Vector-scalar multiplication operator */
     template <
         typename T2,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+        std::enable_if_t<std::is_arithmetic_v<T2>, bool> = true>
     friend auto operator*(Vec lhs, const T2& rhs) -> Vec
     {
         lhs *= rhs;
@@ -294,7 +294,7 @@ public:
     /** @brief Scalar-vector multiplication operator */
     template <
         typename T2,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+        std::enable_if_t<std::is_arithmetic_v<T2>, bool> = true>
     friend auto operator*(const T2& lhs, Vec rhs) -> Vec
     {
         rhs *= lhs;
@@ -311,7 +311,7 @@ public:
     /** @brief Division assignment operator */
     template <
         typename T2,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+        std::enable_if_t<std::is_arithmetic_v<T2>, bool> = true>
     auto operator/=(const T2& b) -> Vec&
     {
         for (auto& v : val_) {
@@ -330,7 +330,7 @@ public:
      */
     template <
         typename T2,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+        std::enable_if_t<std::is_arithmetic_v<T2>, bool> = true>
     friend auto operator/(Vec lhs, const T2& rhs) -> Vec
     {
         lhs /= rhs;
@@ -347,7 +347,7 @@ public:
      */
     template <
         typename T2,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+        std::enable_if_t<std::is_arithmetic_v<T2>, bool> = true>
     friend auto operator/(const T2& lhs, Vec rhs) -> Vec
     {
         for (auto& v : rhs) {
@@ -369,7 +369,7 @@ public:
      */
     template <
         typename T2,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+        std::enable_if_t<std::is_arithmetic_v<T2>, bool> = true>
     auto dot(const std::initializer_list<T2>& b) const -> T
     {
         return educelab::dot(val_, b);
@@ -386,7 +386,7 @@ public:
     template <
         typename T2,
         std::size_t D = Dims,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+        std::enable_if_t<std::is_arithmetic_v<T2>, bool> = true>
     auto cross(const std::initializer_list<T2>& b) const
         -> std::enable_if_t<D == 3, Vec>
     {
