@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <list>
 #include <mutex>
+#include <optional>
 #include <random>
 #include <shared_mutex>
 #include <unordered_map>
