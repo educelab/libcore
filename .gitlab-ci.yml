@@ -1,19 +1,14 @@
 ### Prototype build jobs ###
 .build_script: &build_script
-  - mkdir -p build/
-  - cd build/
-  - echo $CMAKE_CMD
-  - $CMAKE_CMD
-  - ninja
+  - cmake -S . -B build/ -GNinja $EXTRA_CMAKE_FLAGS
+  - cmake --build build/
 
 .test_script: &test_script
-  - ctest -V
+  - ctest -V --test-dir build/
 
 .build:
   variables:
     EXTRA_CMAKE_FLAGS: ""
-  before_script:
-    - export CMAKE_CMD="cmake -GNinja $EXTRA_CMAKE_FLAGS .."
   script:
     - *build_script
 

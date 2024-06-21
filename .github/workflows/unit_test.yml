@@ -1,0 +1,26 @@
+name: Unit tests
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+
+jobs:
+  build_and_test:
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, ubuntu-22.04, macos-13, macos-14]
+    runs-on: ${{ matrix.os }}
+    env:
+      EXTRA_CMAKE_FLAGS: -DCMAKE_BUILD_TYPE=Release -DEDUCE_CORE_BUILD_TESTS=ON -DEDUCE_CORE_BUILD_EXAMPLES=ON
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build libcore
+        run: |
+          cmake -S . -B build -GNinja $EXTRA_CMAKE_FLAGS
+          cmake --build build/
+
+      - name: Run tess
+        run: ctest -V --test-dir build/
