@@ -19,21 +19,21 @@
     - *test_script
 
 ### Tests ###
-test:debian:11:
+test:debian:12:
   extends: .build_and_test
   stage: test
   needs: []
-  image: volcart/vcbuilder-debian:11_v1.static
+  image: ghcr.io/educelab/ci-docker:static.12.0
   variables:
     EXTRA_CMAKE_FLAGS: "-DEDUCE_CORE_BUILD_TESTS=ON"
   tags:
     - docker
 
-examples:debian:11:
+examples:debian:12:
   extends: .build
   stage: test
   needs: []
-  image: volcart/vcbuilder-debian:11_v1.static
+  image: ghcr.io/educelab/ci-docker:static.12.0
   variables:
     EXTRA_CMAKE_FLAGS: "-DEDUCE_CORE_BUILD_EXAMPLES=ON"
   tags:
@@ -42,11 +42,10 @@ examples:debian:11:
 ### Docs ###
 pages:
   stage: deploy
-  image: debian:bullseye-backports
+  image: ghcr.io/educelab/ci-docker:static.12.0
   before_script:
-    - apt-get update
-    - apt-get install -y build-essential doxygen graphviz texlive ghostscript
-    - apt-get -t bullseye-backports install -y cmake
+    - apt-get -y update
+    - apt-get install --fix-missing --fix-broken -y doxygen graphviz
   script:
     - mkdir -p build/
     - mkdir -p public/
