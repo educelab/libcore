@@ -53,7 +53,7 @@ TEST(Math, CrossProduct)
 
 TEST(Math, Norm)
 {
-    Vec3f vec{1, 0, 0};
+    const Vec3f vec{1, 0, 0};
     EXPECT_EQ(norm(vec, Norm::L1), 1.f);
     EXPECT_EQ(norm(vec, Norm::L2), 1.f);
     EXPECT_EQ(norm(vec, Norm::LInf), 1.f);
@@ -130,7 +130,7 @@ TEST(Math, AlmostEqual)
 
 TEST(Math, SolveQuadraticReal)
 {
-    if (auto res = solve_quadratic(5.F, 6.F, 1.F)) {
+    if (const auto res = solve_quadratic(5.F, 6.F, 1.F)) {
         EXPECT_FLOAT_EQ(res.t0, -1.F);
         EXPECT_FLOAT_EQ(res.t1, -0.2F);
     }
@@ -148,8 +148,8 @@ TEST(Math, SolveQuadraticLinear)
 
 TEST(Math, SchurProduct)
 {
-    Vec3f a{1, 2, 3};
-    Vec3f b{4, 5, 6};
-    auto result = schur_product(a, b);
+    const Vec3f a{1, 2, 3};
+    const Vec3f b{4, 5, 6};
+    const auto result = schur_product(a, b);
     EXPECT_EQ(result, Vec3f(4, 10, 18));
 }

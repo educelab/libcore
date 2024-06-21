@@ -169,7 +169,7 @@ TEST(Signals, PointerParameterFn)
     Signal<int*> signal;
     signal.connect(FreeFnIntPtrSlot);
 
-    auto val = std::make_unique<int>();
+    const auto val = std::make_unique<int>();
     signal.send(val.get());
     EXPECT_EQ(*val, 1);
 }
@@ -180,7 +180,7 @@ TEST(Signals, Sendlval)
     Signal<size_t> signal;
     signal.connect([&val](size_t v) { val = v; });
 
-    size_t i{1};
+    const size_t i{1};
     signal(i);
 
     EXPECT_EQ(val, 1);

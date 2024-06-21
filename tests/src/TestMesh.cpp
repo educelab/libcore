@@ -74,12 +74,12 @@ TEST(Mesh, AddVerticesAndFace)
 {
     // Build mesh
     Mesh3f mesh;
-    std::vector<float> expectedVerts{10, 12, 13};
+    const std::vector<float> expectedVerts{10, 12, 13};
     Mesh3f::Face expectedFace;
     for (const auto& i : expectedVerts) {
         expectedFace.emplace_back(mesh.insertVertex(i, i, i));
     }
-    auto faceIdx = mesh.insertFace(expectedFace);
+    const auto faceIdx = mesh.insertFace(expectedFace);
 
     // Check vertices
     Vec3f expected;
