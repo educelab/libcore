@@ -36,7 +36,7 @@ template<typename T>
 auto copysign(const T& mag, const T& sgn) -> T
 {
     T o;
-    std::transform(std::begin(mag), std::end(mag), std::begin(sgn), std::begin(o), std::copysign);
+    std::transform(std::begin(mag), std::end(mag), std::begin(sgn), std::begin(o), [](const auto& a, const auto& b) { return std::copysign(a, b); });
     return o;
 }
 
