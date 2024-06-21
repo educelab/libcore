@@ -19,6 +19,18 @@ TEST(Math, Constants)
     EXPECT_DOUBLE_EQ(INF<double>, std::numeric_limits<double>::infinity());
 }
 
+TEST(Math, Abs)
+{
+    EXPECT_EQ(abs(Vec3f{-1, -2, -3}), Vec3f(1, 2, 3));
+}
+
+TEST(Math, CopySign)
+{
+    EXPECT_EQ(copysign(Vec3f{1, 1, 1}, Vec3f{-4, -5, -6}), Vec3f(-1, -1, -1));
+    EXPECT_EQ(copysign(Vec3f{-1, -1, -1}, Vec3f{4, 5, 6}), Vec3f(1, 1, 1));
+    EXPECT_EQ(copysign(Vec3f{1, -1, 1}, Vec3f{-4, 5, -6}), Vec3f(-1, 1, -1));
+}
+
 TEST(Math, DotProduct)
 {
     EXPECT_EQ(dot(Vec3f{1, 0, 0}, Vec3f{0, 1, 0}), 0);
@@ -41,7 +53,7 @@ TEST(Math, CrossProduct)
 
 TEST(Math, Norm)
 {
-    Vec3f vec{1, 0, 0};
+    const Vec3f vec{1, 0, 0};
     EXPECT_EQ(norm(vec, Norm::L1), 1.f);
     EXPECT_EQ(norm(vec, Norm::L2), 1.f);
     EXPECT_EQ(norm(vec, Norm::LInf), 1.f);
@@ -109,9 +121,16 @@ TEST(Math, AlmostZero)
     EXPECT_FALSE(almost_zero(1e-7F));
 }
 
+TEST(Math, AlmostEqual)
+{
+    EXPECT_TRUE(almost_equal(1e-6f, 1.1e-6f));
+    EXPECT_TRUE(almost_equal(1.0000001f, 1.00000015f));
+    EXPECT_TRUE(almost_equal(2.0000001f, 2.00000015f));
+}
+
 TEST(Math, SolveQuadraticReal)
 {
-    if (auto res = solve_quadratic(5.F, 6.F, 1.F)) {
+    if (const auto res = solve_quadratic(5.F, 6.F, 1.F)) {
         EXPECT_FLOAT_EQ(res.t0, -1.F);
         EXPECT_FLOAT_EQ(res.t1, -0.2F);
     }
@@ -129,8 +148,8 @@ TEST(Math, SolveQuadraticLinear)
 
 TEST(Math, SchurProduct)
 {
-    Vec3f a{1, 2, 3};
-    Vec3f b{4, 5, 6};
-    auto result = schur_product(a, b);
+    const Vec3f a{1, 2, 3};
+    const Vec3f b{4, 5, 6};
+    const auto result = schur_product(a, b);
     EXPECT_EQ(result, Vec3f(4, 10, 18));
 }

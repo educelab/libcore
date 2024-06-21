@@ -12,17 +12,33 @@ namespace educelab
 {
 
 /** @brief Pi, templated for floating-point type */
-template <
-    class T,
-    std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
+template <class T, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 constexpr T PI =
     T(3.141592653589793238462643383279502884198716939937510582097164L);
 
 /** @brief Inf, templated for floating-point type */
-template <
-    class T,
-    std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
+template <class T, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 constexpr T INF = std::numeric_limits<T>::infinity();
+
+/** @brief Per-element absolute value for container types */
+template <typename T>
+auto abs(const T& v) -> T
+{
+    T o;
+    std::transform(std::begin(v), std::end(v), std::begin(o), [](auto e) {
+        return std::abs(e);
+    });
+    return o;
+}
+
+/** @brief Per-element copysign */
+template<typename T>
+auto copysign(const T& mag, const T& sgn) -> T
+{
+    T o;
+    std::transform(std::begin(mag), std::end(mag), std::begin(sgn), std::begin(o), [](const auto& a, const auto& b) { return std::copysign(a, b); });
+    return o;
+}
 
 /** @brief Vector dot product (inner product) */
 template <typename T1, typename T2>
@@ -65,7 +81,7 @@ auto schur_product(const T1& a, const T2& b) -> T1
 template <
     typename T1,
     typename T2,
-    std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    std::enable_if_t<std::is_arithmetic_v<T2>, bool> = true>
 auto cross(const T1& a, const std::initializer_list<T2>& b) -> T1
 {
     struct InitList : public std::initializer_list<T2> {
@@ -91,7 +107,7 @@ enum class Norm {
 
 /** @brief Compute vector norm */
 template <class Vector>
-auto norm(const Vector& v, Norm norm = Norm::L2)
+auto norm(const Vector& v, const Norm norm = Norm::L2)
 {
     using Ret = decltype(*std::begin(v));
     switch (norm) {
@@ -133,7 +149,7 @@ auto interior_angle(const Vector1& a, const Vector2& b)
 template <
     typename T = float,
     typename T2,
-    std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
+    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 constexpr auto to_radians(T2 deg) -> T
 {
     return deg * PI<T> / T(180);
@@ -143,7 +159,7 @@ constexpr auto to_radians(T2 deg) -> T
 template <
     typename T = float,
     typename T2,
-    std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
+    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 constexpr auto to_degrees(T2 rad) -> T
 {
     return rad * T(180) / PI<T>;
@@ -157,7 +173,7 @@ constexpr auto to_degrees(T2 rad) -> T
  * desirable for all applications.
  */
 template <typename T>
-inline auto random(T min = 0, T max = 1) -> T
+auto random(T min = 0, T max = 1) -> T
 {
     std::uniform_real_distribution<T> distribution(min, max);
     static std::random_device source;
@@ -168,10 +184,33 @@ inline auto random(T min = 0, T max = 1) -> T
 /** @brief Check if the given value is almost zero using an absolute epsilon */
 template <
     typename T,
-    std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
-inline auto almost_zero(T v, T eps = 1e-7) -> bool
+    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+auto almost_zero(T v, T eps = 1e-7) -> bool
 {
     return std::abs(v) < eps;
+}
+
+/** @brief Check if two values are almost equal to each other */
+template <
+    typename T,
+    typename T2,
+    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+auto almost_equal(
+    const T lhs,
+    const T2 rhs,
+    T epsAbs = 1e-7,
+    T epsRel = std::numeric_limits<T>::epsilon()) -> bool
+{
+    auto rhsT = static_cast<T>(rhs);
+    T d = std::abs(lhs - rhsT);
+    if (d <= epsAbs) {
+        return true;
+    }
+    T l = std::abs(lhs);
+    T r = std::abs(rhsT);
+
+    T largest = std::max(r, l);
+    return d <= largest * epsRel;
 }
 
 /**
@@ -191,8 +230,8 @@ inline auto almost_zero(T v, T eps = 1e-7) -> bool
  */
 template <
     typename T,
-    std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
-inline auto solve_quadratic(T a, T b, T c)
+    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+auto solve_quadratic(T a, T b, T c)
 {
     // Zero a means the equation is linear
     if (almost_zero(a)) {

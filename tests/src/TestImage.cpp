@@ -7,7 +7,7 @@ using namespace educelab;
 
 TEST(Image, DefaultConstructor)
 {
-    Image img;
+    const Image img;
     EXPECT_EQ(img.height(), 0);
     EXPECT_EQ(img.width(), 0);
     EXPECT_EQ(img.channels(), 0);
@@ -142,7 +142,7 @@ TEST(Image, Gamma)
     std::array<float, 11> expected;
 
     // Fill image and expected array
-    float gamma{2.F};
+    const float gamma{2.F};
     for (const auto x : range(11)) {
         // Assign to image
         img.at<float>(0, x) = 0.1F * float(x);

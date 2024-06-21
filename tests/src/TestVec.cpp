@@ -7,7 +7,7 @@ using namespace educelab;
 TEST(Vec, OperatorPlus)
 {
     Vec3f a{1, 1, 1};
-    Vec3f b{1, 1, 1};
+    const Vec3f b{1, 1, 1};
     EXPECT_EQ(a + b, Vec3f(2, 2, 2));
     EXPECT_EQ(a, Vec3f(1, 1, 1));
     EXPECT_EQ(b, Vec3f(1, 1, 1));
@@ -22,7 +22,7 @@ TEST(Vec, OperatorPlus)
 TEST(Vec, OperatorMinus)
 {
     Vec3f a{1, 1, 1};
-    Vec3f b{1, 1, 1};
+    const Vec3f b{1, 1, 1};
     EXPECT_EQ(a - b, Vec3f(0, 0, 0));
     EXPECT_EQ(a, Vec3f(1, 1, 1));
     EXPECT_EQ(b, Vec3f(1, 1, 1));
@@ -100,7 +100,7 @@ TEST(Vec, Magnitude2)
 
 TEST(Vec, UnitVector)
 {
-    Vec3f a{2, 0, 0};
+    const Vec3f a{2, 0, 0};
     EXPECT_EQ(a.unit(), Vec3f(1, 0, 0));
     EXPECT_EQ(a, Vec3f(2, 0, 0));
 }

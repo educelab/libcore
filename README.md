@@ -13,12 +13,12 @@ A single C++ library for types and utilities shared across the various EduceLab 
 
 ```shell
 # Get the source
-git clone https://gitlab.com/educelab/libcore.git
+git clone https://github.com/educelab/libcore.git
 cd libcore/
 
 # Build the library
-mkdir build
 cmake -S . -B build/ -DCMAKE_BUILD_TYPE=Release
+cmake --build build/
 ```
 
 ## Installation

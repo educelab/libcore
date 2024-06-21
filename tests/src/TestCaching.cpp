@@ -29,7 +29,7 @@ public:
     void start()
     {
         threads_.resize(ts_);
-        for (auto t : range(ts_)) {
+        for (const auto t : range(ts_)) {
             threads_.at(t) = std::thread(&ThreadPool::loop_, this);
         }
     }
@@ -93,19 +93,19 @@ TEST(Caching, SimpleInsertErase)
     Cache cache;
 
     // Insert
-    auto key = cache.insert(10);
+    const auto key = cache.insert(10);
     EXPECT_TRUE(cache.contains(key));
     EXPECT_EQ(cache.count(), 1);
     EXPECT_FALSE(cache.empty());
     EXPECT_EQ(cache.size(), sizeof(int));
 
     // Get
-    auto result = cache.get(key);
+    const auto result = cache.get(key);
     EXPECT_TRUE(result.has_value());
     EXPECT_EQ(std::any_cast<int>(result), 10);
 
     // Erase
-    auto erased = cache.erase(key);
+    const auto erased = cache.erase(key);
     EXPECT_FALSE(cache.contains(key));
     EXPECT_EQ(cache.count(), 0);
     EXPECT_TRUE(cache.empty());
@@ -136,7 +136,7 @@ TEST(Caching, MassInsertClear)
     }
 
     // Clear 50%
-    auto erased = cache.clear(sizeof(int) * 50);
+    const auto erased = cache.clear(sizeof(int) * 50);
     EXPECT_EQ(cache.count(), 50);
     EXPECT_FALSE(cache.empty());
     EXPECT_EQ(erased, sizeof(int) * 50);
@@ -161,7 +161,7 @@ TEST(Caching, UniqueKeys)
     }
 
     // Remove duplicates with unordered_set
-    std::unordered_set<Cache::key_type> set(keys.begin(), keys.end());
+    const std::unordered_set<Cache::key_type> set(keys.begin(), keys.end());
     EXPECT_EQ(set.size(), keys.size());
 }
 
@@ -237,14 +237,14 @@ TEST(Caching, LRUCache)
     }
 
     // Touch the oldest key still in the cache
-    auto keepAlive = keys.at(50);
+    const auto keepAlive = keys.at(50);
     cache.get(keepAlive);
 
     // Insert a new value
-    auto newKey = cache.insert(10);
+    const auto newKey = cache.insert(10);
 
     // Check what was removed
-    auto expectRemoved = keys.at(51);
+    const auto expectRemoved = keys.at(51);
     EXPECT_TRUE(cache.contains(keepAlive));
     EXPECT_TRUE(cache.contains(newKey));
     EXPECT_FALSE(cache.contains(expectRemoved));
@@ -256,18 +256,18 @@ TEST(Caching, SpecializedCache)
     ObjectCache<int> cache;
 
     // Insert
-    auto key = cache.insert(10);
+    const auto key = cache.insert(10);
     EXPECT_TRUE(cache.contains(key));
     EXPECT_EQ(cache.count(), 1);
     EXPECT_FALSE(cache.empty());
     EXPECT_EQ(cache.size(), sizeof(int));
 
     // Get
-    auto result = cache.get(key);
+    const auto result = cache.get(key);
     EXPECT_EQ(result, 10);
 
     // Erase
-    auto erased = cache.erase(key);
+    const auto erased = cache.erase(key);
     EXPECT_FALSE(cache.contains(key));
     EXPECT_EQ(cache.count(), 0);
     EXPECT_TRUE(cache.empty());
@@ -289,11 +289,11 @@ TEST(Caching, DefaultCopy)
 {
     // Create first cache
     ObjectCache<int> a;
-    auto key0 = a.insert(0);
+    const auto key0 = a.insert(0);
 
     // Copy construct
     ObjectCache<int> b(a);
-    auto key1 = b.insert(1);
+    const auto key1 = b.insert(1);
 
     // Test the sizes
     EXPECT_EQ(b.count(), 2);
@@ -304,7 +304,7 @@ TEST(Caching, DefaultCopy)
     // Copy operator
     ObjectCache<int> c;
     c = b;
-    auto key2 = c.insert(2);
+    const auto key2 = c.insert(2);
 
     // Test the sizes
     EXPECT_EQ(c.count(), 3);
@@ -318,11 +318,11 @@ TEST(Caching, DefaultMove)
 {
     // Create first cache
     ObjectCache<int> a;
-    auto key0 = a.insert(0);
+    const auto key0 = a.insert(0);
 
     // Move construct
     ObjectCache<int> b(std::move(a));
-    auto key1 = b.insert(1);
+    const auto key1 = b.insert(1);
 
     // Test the sizes
     EXPECT_EQ(b.count(), 2);
@@ -332,7 +332,7 @@ TEST(Caching, DefaultMove)
     // Move operator
     ObjectCache<int> c;
     c = std::move(b);
-    auto key2 = c.insert(2);
+    const auto key2 = c.insert(2);
 
     // Test the sizes
     EXPECT_EQ(c.count(), 3);
@@ -360,14 +360,14 @@ TEST(Caching, SharedPtr)
     // Check access through the weak_ptr
     {
         EXPECT_TRUE(weak.use_count() != 0);
-        auto shared = weak.lock();
+        const auto shared = weak.lock();
         EXPECT_TRUE(shared);
         EXPECT_EQ(*shared, 10);
     }
 
     // Check access through the cache
     {
-        auto shared = std::any_cast<std::shared_ptr<int>>(cache.get(key));
+        const auto shared = std::any_cast<std::shared_ptr<int>>(cache.get(key));
         EXPECT_TRUE(shared);
         EXPECT_EQ(*shared, 10);
     }
@@ -378,7 +378,7 @@ TEST(Caching, SharedPtr)
     // Check no access through the weak_ptr
     {
         EXPECT_TRUE(weak.use_count() == 0);
-        auto shared = weak.lock();
+        const auto shared = weak.lock();
         EXPECT_FALSE(shared);
     }
 }
@@ -402,7 +402,7 @@ TEST(Caching, Threading)
     for (auto i : range(5'000)) {
         // Try to retrieve one of our starting keys
         pool.push_back([&cache, &keys, &hits, i]() {
-            auto value = cache.find(keys[i]);
+            const auto value = cache.find(keys[i]);
             if (value) {
                 hits++;
             }

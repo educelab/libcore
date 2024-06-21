@@ -85,9 +85,8 @@ public:
      * @brief Connect signals with parameters to functions without parameters
      */
     template <
-        class Enabled = typename std::enable_if<
-            std::is_empty<std::tuple<Types...>(Types...)>::value,
-            bool>>
+        class Enabled = typename std::
+            enable_if<std::is_empty_v<std::tuple<Types...>(Types...)>, bool>>
     void connect(const std::function<void()>& slot)
     {
         connections_.emplace_back([=](Types&&... /*unused*/) { slot(); });

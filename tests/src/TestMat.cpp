@@ -19,7 +19,7 @@ TEST(Mat, DefaultConstructor)
 TEST(Mat, FillConstructor)
 {
     Mat3f m{0, 1, 2, 3, 4, 5, 6, 7, 8};
-    for (auto i : range(9)) {
+    for (const auto i : range(9)) {
         EXPECT_FLOAT_EQ(m.data()[i], float(i));
     }
 }
@@ -78,8 +78,8 @@ TEST(Mat, Eye)
 TEST(Mat, MatrixMatrixMultiplication)
 {
     // Square multiplication
-    Mat<2, 2> m0{1, 2, 3, 4};
-    Mat<2, 2> m1{5, 6, 7, 8};
+    const Mat<2, 2> m0{1, 2, 3, 4};
+    const Mat<2, 2> m1{5, 6, 7, 8};
     auto result = m0 * m1;
 
     // Check result
@@ -89,8 +89,8 @@ TEST(Mat, MatrixMatrixMultiplication)
     }
 
     // Non-square multiplication
-    Mat<2, 3> m2{1, 2, 3, 4, 5, 6};
-    Mat<3, 2> m3{7, 8, 9, 10, 11, 12};
+    const Mat<2, 3> m2{1, 2, 3, 4, 5, 6};
+    const Mat<3, 2> m3{7, 8, 9, 10, 11, 12};
     result = m2 * m3;
 
     // Check result
@@ -105,25 +105,25 @@ TEST(Mat, MatrixVectorMultiplication)
     using Vec4f = Vec<float, 4>;
 
     // Input point
-    Vec4f x{0, 0, 0, 1};
+    const Vec4f x{0, 0, 0, 1};
 
     // Translation matrix
     auto M = Mat<4, 4>::Eye();
     M(0, 3) = 1.F;
     M(1, 3) = 2.F;
     M(2, 3) = 3.F;
-    auto result = M * x;
+    const auto result = M * x;
     EXPECT_EQ(result, Vec4f(1, 2, 3, 1));
 }
 
 TEST(Mat, Determinant2x2)
 {
-    Mat<2, 2> m{1, 2, 3, 4};
+    const Mat<2, 2> m{1, 2, 3, 4};
     EXPECT_FLOAT_EQ(determinant(m), -2.F);
 }
 
 TEST(Mat, Determinant3x3)
 {
-    Mat3f m{1, 2, 3, 4, 5, 6, 7, 8, 9};
+    const Mat3f m{1, 2, 3, 4, 5, 6, 7, 8, 9};
     EXPECT_FLOAT_EQ(determinant(m), 0.F);
 }

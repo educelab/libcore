@@ -24,7 +24,7 @@ namespace traits
 template <
     typename T,
     std::size_t Dims,
-    std::enable_if_t<std::is_arithmetic<T>::value, bool> = true>
+    std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
 struct DefaultVertexTraits {
     /** @brief Vertex normal */
     std::optional<Vec<T, Dims>> normal;
@@ -45,7 +45,7 @@ template <
     typename T,
     std::size_t Dims,
     typename VertexTraits = traits::DefaultVertexTraits<T, Dims>,
-    std::enable_if_t<std::is_arithmetic<T>::value, bool> = true>
+    std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
 class Mesh
 {
 public:
@@ -181,13 +181,16 @@ public:
     }
 
     /** @brief Get a face by index */
-    [[nodiscard]] auto face(std::size_t idx) const -> const Face&
+    [[nodiscard]] auto face(const std::size_t idx) const -> const Face&
     {
         return faces_.at(idx);
     }
 
     /** @brief Get a face by index */
-    [[nodiscard]] auto face(std::size_t idx) -> Face& { return faces_.at(idx); }
+    [[nodiscard]] auto face(const std::size_t idx) -> Face&
+    {
+        return faces_.at(idx);
+    }
 
 private:
     /** Vertices */

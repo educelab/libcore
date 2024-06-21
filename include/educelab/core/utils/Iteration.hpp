@@ -20,7 +20,7 @@ namespace educelab
  *
  * @ingroup Util
  */
-template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
+template <typename T, std::enable_if_t<std::is_arithmetic_v<T>, int> = 0>
 class RangeIterable
 {
 private:
@@ -117,15 +117,14 @@ public:
 
     /** Returns the size of the range (floating point ranges) */
     template <typename Q = T>
-    auto size() const
-        -> std::enable_if_t<std::is_floating_point<Q>::value, size_t>
+    auto size() const -> std::enable_if_t<std::is_floating_point_v<Q>, size_t>
     {
         return static_cast<size_t>(std::ceil((end_ - start_) / step_));
     }
 
     /** Returns the size of the range (integral ranges) */
     template <typename Q = T>
-    auto size() const -> std::enable_if_t<std::is_integral<Q>::value, size_t>
+    auto size() const -> std::enable_if_t<std::is_integral_v<Q>, size_t>
     {
         return static_cast<size_t>((end_ - start_) / step_);
     }
@@ -208,7 +207,7 @@ auto range(T0 start, T1 stop, T2 step) -> RangeIterable<T0>
  *
  * @ingroup Util
  */
-template <typename T, std::enable_if_t<std::is_arithmetic<T>::value, int> = 0>
+template <typename T, std::enable_if_t<std::is_arithmetic_v<T>, int> = 0>
 class Range2DIterable
 {
 private:
@@ -326,8 +325,7 @@ public:
 
     /** Returns the size of the range (floating point ranges) */
     template <typename Q = T>
-    auto size() const
-        -> std::enable_if_t<std::is_floating_point<Q>::value, size_t>
+    auto size() const -> std::enable_if_t<std::is_floating_point_v<Q>, size_t>
     {
         auto vLen = static_cast<size_t>(std::ceil((vEnd_ - vStart_) / step_));
         return static_cast<size_t>(std::ceil((uEnd_ - uStart_) / step_)) * vLen;
@@ -335,7 +333,7 @@ public:
 
     /** Returns the size of the range (integral ranges) */
     template <typename Q = T>
-    auto size() const -> std::enable_if_t<std::is_integral<Q>::value, size_t>
+    auto size() const -> std::enable_if_t<std::is_integral_v<Q>, size_t>
     {
         auto vLen = static_cast<size_t>((vEnd_ - vStart_) / step_);
         return static_cast<size_t>((uEnd_ - uStart_) / step_) * vLen;
@@ -411,10 +409,10 @@ template <class Iterable>
 class EnumerateIterable;
 
 template <class Iterable>
-inline auto enumerate(Iterable&& it);
+auto enumerate(Iterable&& it);
 
 template <typename... Args>
-inline auto enumerate(Args&&... args);
+auto enumerate(Args&&... args);
 
 /**
  * @brief Iterable wrapper for enumerating elements of a container by index and
@@ -458,7 +456,7 @@ private:
         /** @} */
 
         /** Constructor for the iterator */
-        explicit EnumerateIterator(size_t idx, T&& it)
+        explicit EnumerateIterator(const size_t idx, T&& it)
             : idx_{idx}, it_{std::move(it)}
         {
         }
@@ -567,7 +565,7 @@ private:
  * @ingroup Util
  */
 template <class Iterable>
-inline auto enumerate(Iterable&& it)
+auto enumerate(Iterable&& it)
 {
     return EnumerateIterable<Iterable>(std::forward<Iterable>(it));
 }
@@ -589,7 +587,7 @@ inline auto enumerate(Iterable&& it)
  * @ingroup Util
  */
 template <typename... Args>
-inline auto enumerate(Args&&... args)
+auto enumerate(Args&&... args)
 {
     using Type = std::common_type_t<Args...>;
     using Iterable = std::array<Type, sizeof...(Args)>;

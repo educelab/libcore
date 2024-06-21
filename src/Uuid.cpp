@@ -22,7 +22,7 @@ namespace detail
 template <
     class T = std::mt19937,
     std::size_t N = T::state_size * sizeof(typename T::result_type)>
-auto SeededRandomEngine() -> typename std::enable_if<N != 0, T>::type
+auto SeededRandomEngine() -> std::enable_if_t<N != 0, T>
 {
     std::random_device source;
     using ArrayT = std::random_device::result_type;
@@ -66,7 +66,7 @@ auto Uuid::string() const -> std::string
     return ss.str();
 }
 
-auto Uuid::FromString(std::string_view str) -> Uuid
+auto Uuid::FromString(const std::string_view str) -> Uuid
 {
     // TODO: 13th character (first digit of 7th byte) is version number
     static std::regex uuidRe{

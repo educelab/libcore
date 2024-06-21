@@ -15,14 +15,14 @@ TEST(String, ToUpperInPlace)
 
 TEST(String, ToUpperRValue)
 {
-    auto result = to_upper("This is only a test.");
+    const auto result = to_upper("This is only a test.");
     EXPECT_EQ(result, "THIS IS ONLY A TEST.");
 }
 
 TEST(String, ToUpperCopy)
 {
-    std::string input{"This is only a test."};
-    auto result = to_upper_copy(input);
+    const std::string input{"This is only a test."};
+    const auto result = to_upper_copy(input);
     EXPECT_EQ(input, "This is only a test.");
     EXPECT_EQ(result, "THIS IS ONLY A TEST.");
 }
@@ -36,21 +36,21 @@ TEST(String, ToLowerInPlace)
 
 TEST(String, ToLowerRValue)
 {
-    auto result = to_lower("This is only a test.");
+    const auto result = to_lower("This is only a test.");
     EXPECT_EQ(result, "this is only a test.");
 }
 
 TEST(String, ToLowerCopy)
 {
-    std::string input{"This is only a test."};
-    auto result = to_lower_copy(input);
+    const std::string input{"This is only a test."};
+    const auto result = to_lower_copy(input);
     EXPECT_EQ(input, "This is only a test.");
     EXPECT_EQ(result, "this is only a test.");
 }
 
 TEST(String, TrimLeft)
 {
-    std::string input{"    This is only a test.    "};
+    const std::string input{"    This is only a test.    "};
     auto result = trim_left(input);
     EXPECT_NE(result, input);
     EXPECT_EQ(result, "This is only a test.    ");
@@ -68,15 +68,15 @@ TEST(String, TrimLeftInPlace)
 
 TEST(String, TrimLeftCopy)
 {
-    std::string input{"    This is only a test.    "};
-    auto result = trim_left_copy(input);
+    const std::string input{"    This is only a test.    "};
+    const auto result = trim_left_copy(input);
     EXPECT_EQ(input, "    This is only a test.    ");
     EXPECT_EQ(result, "This is only a test.    ");
 }
 
 TEST(String, TrimRight)
 {
-    std::string input{"    This is only a test.    "};
+    const std::string input{"    This is only a test.    "};
     auto result = trim_right(input);
     EXPECT_NE(result, input);
     EXPECT_EQ(result, "    This is only a test.");
@@ -94,15 +94,15 @@ TEST(String, TrimRightInPlace)
 
 TEST(String, TrimRightCopy)
 {
-    std::string input{"    This is only a test.    "};
-    auto result = trim_right_copy(input);
+    const std::string input{"    This is only a test.    "};
+    const auto result = trim_right_copy(input);
     EXPECT_EQ(input, "    This is only a test.    ");
     EXPECT_EQ(result, "    This is only a test.");
 }
 
 TEST(String, Trim)
 {
-    std::string input{"    This is only a test.    "};
+    const std::string input{"    This is only a test.    "};
     auto result = trim(input);
     EXPECT_NE(result, input);
     EXPECT_EQ(result, "This is only a test.");
@@ -120,8 +120,8 @@ TEST(String, TrimInPlace)
 
 TEST(String, TrimCopy)
 {
-    std::string input{"    This is only a test.    "};
-    auto result = trim_copy(input);
+    const std::string input{"    This is only a test.    "};
+    const auto result = trim_copy(input);
     EXPECT_EQ(input, "    This is only a test.    ");
     EXPECT_EQ(result, "This is only a test.");
 }
