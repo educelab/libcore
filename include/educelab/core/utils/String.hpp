@@ -15,49 +15,49 @@ namespace educelab
 {
 
 /** @brief Convert string characters to upper case (in place) */
-static inline void to_upper(std::string& s)
+static void to_upper(std::string& s)
 {
     const auto& f = std::use_facet<std::ctype<char>>(std::locale());
     f.toupper(s.data(), s.data() + s.size());
 }
 
 /** @brief Convert string characters to upper case (r-value) */
-static inline auto to_upper(std::string&& s) -> std::string
+static auto to_upper(std::string&& s) -> std::string
 {
     to_upper(s);
     return std::move(s);
 }
 
 /** @brief Convert string characters to upper case (copy) */
-static inline auto to_upper_copy(std::string s) -> std::string
+static auto to_upper_copy(std::string s) -> std::string
 {
     to_upper(s);
     return s;
 }
 
 /** @brief Convert string characters to lower case (in place) */
-static inline void to_lower(std::string& s)
+static void to_lower(std::string& s)
 {
     const auto& f = std::use_facet<std::ctype<char>>(std::locale());
     f.tolower(s.data(), s.data() + s.size());
 }
 
 /** @brief Convert string characters to lower case (r-value) */
-static inline auto to_lower(std::string&& s) -> std::string
+static auto to_lower(std::string&& s) -> std::string
 {
     to_lower(s);
     return std::move(s);
 }
 
 /** @brief Convert string characters to lower case (copy) */
-static inline auto to_lower_copy(std::string s) -> std::string
+static auto to_lower_copy(std::string s) -> std::string
 {
     to_lower(s);
     return s;
 }
 
 /** @brief Left trim */
-static inline auto trim_left(std::string_view s) -> std::string_view
+static auto trim_left(std::string_view s) -> std::string_view
 {
     const auto& loc = std::locale();
     const auto* start = std::find_if_not(
@@ -72,7 +72,7 @@ static inline auto trim_left(std::string_view s) -> std::string_view
  *
  * https://stackoverflow.com/a/217605
  */
-static inline void trim_left_in_place(std::string& s)
+static void trim_left_in_place(std::string& s)
 {
     const auto& loc = std::locale();
     s.erase(
@@ -83,13 +83,13 @@ static inline void trim_left_in_place(std::string& s)
 }
 
 /** @brief Left trim (copy) */
-static inline auto trim_left_copy(const std::string_view s) -> std::string
+static auto trim_left_copy(const std::string_view s) -> std::string
 {
     return std::string{trim_left(s)};
 }
 
 /** @brief Right trim */
-static inline auto trim_right(std::string_view s) -> std::string_view
+static auto trim_right(std::string_view s) -> std::string_view
 {
     const auto& loc = std::locale();
     const auto* start =
@@ -105,7 +105,7 @@ static inline auto trim_right(std::string_view s) -> std::string_view
  *
  * https://stackoverflow.com/a/217605
  */
-static inline void trim_right_in_place(std::string& s)
+static void trim_right_in_place(std::string& s)
 {
     const auto& loc = std::locale();
     s.erase(
@@ -117,13 +117,13 @@ static inline void trim_right_in_place(std::string& s)
 }
 
 /** @brief Right trim (copy) */
-static inline auto trim_right_copy(const std::string_view s) -> std::string
+static auto trim_right_copy(const std::string_view s) -> std::string
 {
     return std::string{trim_right(s)};
 }
 
 /** @brief Trim from both ends */
-static inline auto trim(std::string_view s) -> std::string_view
+static auto trim(std::string_view s) -> std::string_view
 {
     s = trim_left(s);
     s = trim_right(s);
@@ -135,21 +135,21 @@ static inline auto trim(std::string_view s) -> std::string_view
  *
  * https://stackoverflow.com/a/217605
  */
-static inline void trim_in_place(std::string& s)
+static void trim_in_place(std::string& s)
 {
     trim_left_in_place(s);
     trim_right_in_place(s);
 }
 
 /** @brief Right trim (copy) */
-static inline auto trim_copy(const std::string_view s) -> std::string
+static auto trim_copy(const std::string_view s) -> std::string
 {
     return std::string{trim(s)};
 }
 
 /** @brief Split a string by a delimiter */
 template <typename... Ds>
-static inline auto split(std::string_view s, const Ds&... ds)
+static auto split(std::string_view s, const Ds&... ds)
     -> std::vector<std::string_view>
 {
     // Build delimiters list
@@ -176,15 +176,13 @@ static inline auto split(std::string_view s, const Ds&... ds)
     // Split string
     std::vector<std::string_view> tokens;
     std::string_view::size_type begin{0};
-    for (auto end : delimPos) {
-        auto t = s.substr(begin, end - begin);
-        if (not t.empty()) {
+    for (const auto end : delimPos) {
+        if (auto t = s.substr(begin, end - begin); not t.empty()) {
             tokens.emplace_back(t);
         }
         begin = end + 1;
     }
-    auto t = s.substr(begin);
-    if (not t.empty()) {
+    if (auto t = s.substr(begin); not t.empty()) {
         tokens.emplace_back(t);
     }
 
