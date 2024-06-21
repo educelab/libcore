@@ -19,8 +19,8 @@ jobs:
 
       - name: Build libcore
         run: |
-          cmake -S . -B build -GNinja $EXTRA_CMAKE_FLAGS
-          cmake --build build/
+          cmake -S . -B build $EXTRA_CMAKE_FLAGS
+          cmake --build build/ -j 0
 
       - name: Run tess
         run: ctest -V --test-dir build/
