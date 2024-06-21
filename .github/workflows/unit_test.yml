@@ -22,5 +22,5 @@ jobs:
           cmake -S . -B build $EXTRA_CMAKE_FLAGS
           cmake --build build/ -j 4
 
-      - name: Run tess
+      - name: Run tests
         run: ctest -V --test-dir build/

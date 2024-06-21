@@ -4,6 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <queue>
 #include <thread>
 #include <unordered_set>
