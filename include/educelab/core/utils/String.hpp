@@ -223,7 +223,7 @@ auto to_numeric(const std::string_view str, Args... args) -> T
     return val;
 }
 
-#ifdef EDUCELAB_NEED_TO_NUMERIC_FP
+#ifdef EDUCE_CORE_NEED_TO_NUMERIC_FP
 /**
  * @copybrief to_numeric
  *
