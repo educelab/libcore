@@ -176,7 +176,44 @@ std::cout << to_numeric<float>("3.14") << "\n"; // 3.14
 ```
 
 See [examples/StringExample.cpp](examples/StringExample.cpp) for more usage
-examples.
+examples.å
+
+#### A note on `to_numeric` compilation
+The default `to_numeric` implementation relies upon `std::from_chars`.
+However, many compilers do not provide implementations for this function for 
+floating point types. In these circumstances, you may fall back to a 
+`std::sto*`-based `to_numeric` implementation by adding the 
+`EDUCE_CORE_NEED_TO_NUMERIC_FP` compiler definition. When using this project 
+with CMake, this definition will automatically be added when you link against 
+the `educelab::core` target. 
+
+**(v0.2.1 and later)** If not linking against the target (i.e. when using the 
+library as header-only), you may alternatively check the result of the 
+`EDUCE_CORE_NEED_TO_NUMERIC_FP` CMake cache variable and set the definition 
+manually in your own project.
+
+```cmake
+# Import libcore
+FetchContent_Declare(
+    libcore
+    GIT_REPOSITORY https://github.com/educelab/libcore.git
+    GIT_TAG v0.2.1
+    EXCLUDE_FROM_ALL
+)
+FetchContent_MakeAvailable(libcore)
+
+# Add an executable which has access to the libcore headers
+add_executable(foo foo.cpp)
+target_include_directories(foo
+    PUBLIC
+        $<BUILD_INTERFACE:${libcore_SOURCE_DIR}/include>
+)
+
+# Conditionally add the to_numeric compiler definition
+if(EDUCE_CORE_NEED_TO_NUMERIC_FP)
+    target_compile_definitions(foo PRIVATE EDUCE_CORE_NEED_TO_NUMERIC_FP)
+endif()
+```
 
 ### Data caching
 
