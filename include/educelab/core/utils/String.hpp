@@ -189,6 +189,28 @@ static auto split(std::string_view s, const Ds&... ds)
     return tokens;
 }
 
+/** @brief Partition a string by a separator substring */
+static auto partition(std::string_view s, const std::string_view sep)
+    -> std::tuple<std::string_view, std::string_view, std::string_view>
+{
+    // Find the starting position
+    const auto startPos = s.find(sep);
+
+    // Didn't find the delimiter
+    if (startPos == std::string::npos) {
+        return {s, "", ""};
+    }
+
+    // Split into parts
+    const auto endPos = startPos + sep.size();
+    auto pre = s.substr(0, startPos);
+    auto mid = s.substr(startPos, endPos);
+    auto post = s.substr(endPos);
+
+    // Return the parts
+    return {pre, mid, post};
+}
+
 /**
  * @brief Convert a string to a numeric type.
  *
