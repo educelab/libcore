@@ -211,6 +211,18 @@ static auto partition(std::string_view s, const std::string_view sep)
     return {pre, mid, post};
 }
 
+/** @brief Convert an Integer to a padded string */
+template <
+    typename Integer,
+    std::enable_if_t<std::is_integral_v<Integer>, bool> = true>
+auto to_padded_string(Integer val, const int padding, const char fill = '0')
+    -> std::string
+{
+    std::stringstream stream;
+    stream << std::setw(padding) << std::setfill(fill) << val;
+    return stream.str();
+}
+
 /**
  * @brief Convert a string to a numeric type.
  *
