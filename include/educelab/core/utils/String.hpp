@@ -5,7 +5,9 @@
 #include <algorithm>
 #include <charconv>
 #include <exception>
+#include <iomanip>
 #include <locale>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -187,6 +189,39 @@ static auto split(std::string_view s, const Ds&... ds)
     }
 
     return tokens;
+}
+
+/** @brief Partition a string by a separator substring */
+static auto partition(std::string_view s, const std::string_view sep)
+    -> std::tuple<std::string_view, std::string_view, std::string_view>
+{
+    // Find the starting position
+    const auto startPos = s.find(sep);
+
+    // Didn't find the delimiter
+    if (startPos == std::string::npos) {
+        return {s, "", ""};
+    }
+
+    // Split into parts
+    auto pre = s.substr(0, startPos);
+    auto mid = s.substr(startPos, sep.size());
+    auto post = s.substr(startPos + sep.size());
+
+    // Return the parts
+    return {pre, mid, post};
+}
+
+/** @brief Convert an Integer to a padded string */
+template <
+    typename Integer,
+    std::enable_if_t<std::is_integral_v<Integer>, bool> = true>
+auto to_padded_string(Integer val, const int padding, const char fill = '0')
+    -> std::string
+{
+    std::stringstream stream;
+    stream << std::setw(padding) << std::setfill(fill) << val;
+    return stream.str();
 }
 
 /**
