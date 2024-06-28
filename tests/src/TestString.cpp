@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <string>
+#include <tuple>
 
 #include "educelab/core/utils/String.hpp"
 
@@ -151,17 +152,50 @@ TEST(String, Split)
     EXPECT_EQ(split("This is only a test."), expected);
 }
 
+TEST(String, Partition)
+{
+    // key=value
+    const auto [p0, m0, s0] = partition("key=value", "=");
+    EXPECT_EQ(p0, "key");
+    EXPECT_EQ(m0, "=");
+    EXPECT_EQ(s0, "value");
+
+    // {} replacement
+    const auto [p1, m1, s1] = partition("prefix{}suffix", "{}");
+    EXPECT_EQ(p1, "prefix");
+    EXPECT_EQ(m1, "{}");
+    EXPECT_EQ(s1, "suffix");
+
+    // to existing strings
+    std::string p2, m2, s2;
+    std::tie(p2, m2, s2) = partition("abc", "b");
+    EXPECT_EQ(p2, "a");
+    EXPECT_EQ(m2, "b");
+    EXPECT_EQ(s2, "c");
+}
+
+TEST(String, ToPaddedString)
+{
+    // zero-pad (default)
+    EXPECT_EQ(to_padded_string(5, 3), "005");
+    EXPECT_EQ(to_padded_string(5, 10), "0000000005");
+
+    // zero-pad (custom)
+    EXPECT_EQ(to_padded_string(5, 3, '5'), "555");
+    EXPECT_EQ(to_padded_string(5, 3, 'x'), "xx5");
+}
+
 TEST(String, ToNumeric)
 {
     std::string test{"100.3456 unparsed"};
-    EXPECT_EQ(to_numeric<int8_t>(test), int8_t(100));
-    EXPECT_EQ(to_numeric<uint8_t>(test), uint8_t(100));
-    EXPECT_EQ(to_numeric<int16_t>(test), int16_t(100));
-    EXPECT_EQ(to_numeric<uint16_t>(test), uint16_t(100));
-    EXPECT_EQ(to_numeric<int32_t>(test), int32_t(100));
-    EXPECT_EQ(to_numeric<uint32_t>(test), uint32_t(100));
-    EXPECT_EQ(to_numeric<int64_t>(test), int64_t(100));
-    EXPECT_EQ(to_numeric<uint64_t>(test), uint64_t(100));
+    EXPECT_EQ(to_numeric<int8_t>(test), std::int8_t{100});
+    EXPECT_EQ(to_numeric<uint8_t>(test), std::uint8_t{100});
+    EXPECT_EQ(to_numeric<int16_t>(test), std::int16_t{100});
+    EXPECT_EQ(to_numeric<uint16_t>(test), std::uint16_t{100});
+    EXPECT_EQ(to_numeric<int32_t>(test), std::int32_t{100});
+    EXPECT_EQ(to_numeric<uint32_t>(test), std::uint32_t{100});
+    EXPECT_EQ(to_numeric<int64_t>(test), std::int64_t{100});
+    EXPECT_EQ(to_numeric<uint64_t>(test), std::uint64_t{100});
 
     EXPECT_EQ(to_numeric<float>(test), 100.3456F);
     EXPECT_EQ(to_numeric<double>(test), 100.3456);

@@ -7,6 +7,7 @@
 #include <exception>
 #include <iomanip>
 #include <locale>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -203,10 +204,9 @@ static auto partition(std::string_view s, const std::string_view sep)
     }
 
     // Split into parts
-    const auto endPos = startPos + sep.size();
     auto pre = s.substr(0, startPos);
-    auto mid = s.substr(startPos, endPos);
-    auto post = s.substr(endPos);
+    auto mid = s.substr(startPos, sep.size());
+    auto post = s.substr(startPos + sep.size());
 
     // Return the parts
     return {pre, mid, post};
