@@ -28,14 +28,14 @@ auto main() -> int
     // a b c
 
     // Split comma separated
-    for (const auto& s : split("a,b,c", ',')) {
+    for (const auto& s : split("a,b,c", ",")) {
         std::cout << s << " ";
     }
     std::cout << "\n";
     // a b c
 
     // Split multiple delimiters
-    for (const auto& s : split("a+b-c", '+', '-')) {
+    for (const auto& s : split("a+b-c", "+", "-")) {
         std::cout << s << " ";
     }
     std::cout << "\n";
