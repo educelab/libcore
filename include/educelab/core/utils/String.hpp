@@ -150,40 +150,63 @@ static auto trim_copy(const std::string_view s) -> std::string
     return std::string{trim(s)};
 }
 
-/** @brief Split a string by a delimiter */
+/**
+ * @brief Split a string by a delimiter
+ *
+ * When provided conflicting delimiters, the largest delimiter will take
+ * precedence:
+ *
+ * ```{.cpp}
+ * split("a->b->c", "-", "->");  // returns {"a", "b", "c"}
+ * ```
+ */
 template <typename... Ds>
 static auto split(std::string_view s, const Ds&... ds)
     -> std::vector<std::string_view>
 {
+    constexpr std::string_view DEFAULT_DELIM{" "};
+
     // Build delimiters list
-    std::vector<char> delimiters;
+    std::vector<std::string_view> delimiters;
     if (sizeof...(ds) > 0) {
         delimiters = {ds...};
     } else {
-        delimiters.emplace_back(' ');
+        delimiters.emplace_back(DEFAULT_DELIM);
     }
 
-    // Get a list of all delimiter start positions
-    std::vector<std::string_view::size_type> delimPos;
+    // Get a list of all delimiter start pos and sizes
+    std::vector<
+        std::pair<std::string_view::size_type, std::string_view::size_type>>
+        delimPos;
     for (const auto& delim : delimiters) {
         auto b = s.find(delim, 0);
         while (b != std::string_view::npos) {
-            delimPos.emplace_back(b);
-            b = s.find(delim, b + 1);
+            delimPos.emplace_back(b, delim.size());
+            b = s.find(delim, b + delim.size());
         }
     }
 
-    // Sort the delimiter start positions
-    std::sort(delimPos.begin(), delimPos.end());
+    // Sort the delimiter start positions by first and largest
+    std::sort(
+        delimPos.begin(), delimPos.end(),
+        [](const auto& l, const auto& r) { return l.second > r.second; });
+    std::sort(
+        delimPos.begin(), delimPos.end(),
+        [](const auto& l, const auto& r) { return l.first < r.first; });
 
     // Split string
     std::vector<std::string_view> tokens;
     std::string_view::size_type begin{0};
-    for (const auto end : delimPos) {
+    for (const auto [end, size] : delimPos) {
+        // ignore nested delimiters
+        if (end < begin) {
+            continue;
+        }
+        // get from begin to delim start
         if (auto t = s.substr(begin, end - begin); not t.empty()) {
             tokens.emplace_back(t);
         }
-        begin = end + 1;
+        begin = end + size;
     }
     if (auto t = s.substr(begin); not t.empty()) {
         tokens.emplace_back(t);
