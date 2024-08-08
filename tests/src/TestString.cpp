@@ -139,13 +139,19 @@ TEST(String, Split)
     EXPECT_EQ(split("  a  b  c  "), expected);
 
     // Space separated (explicit)
-    EXPECT_EQ(split("a b c", ' '), expected);
+    EXPECT_EQ(split("a b c", " "), expected);
 
     // Comma separated
-    EXPECT_EQ(split("a,b,c", ','), expected);
+    EXPECT_EQ(split("a,b,c", ","), expected);
 
     // Multi-delimited
-    EXPECT_EQ(split("a+b-c", '+', '-'), expected);
+    EXPECT_EQ(split("a+b-c", "+", "-"), expected);
+
+    // Multi-character delimiter
+    EXPECT_EQ(split("a->b->c", "->"), expected);
+
+    // Multi-character, ignore nested
+    EXPECT_EQ(split("a->b->c", "-", "->"), expected);
 
     // Sentence
     expected = {"This", "is", "only", "a", "test."};
