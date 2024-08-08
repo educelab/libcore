@@ -155,7 +155,10 @@ static auto trim_copy(const std::string_view s) -> std::string
  *
  * When provided conflicting delimiters, the largest delimiter will take
  * precedence:
+ *
+ * ```{.cpp}
  * split("a->b->c", "-", "->");  // returns {"a", "b", "c"}
+ * ```
  */
 template <typename... Ds>
 static auto split(std::string_view s, const Ds&... ds)

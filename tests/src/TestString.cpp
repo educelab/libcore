@@ -148,10 +148,14 @@ TEST(String, Split)
     EXPECT_EQ(split("a+b-c", "+", "-"), expected);
 
     // Multi-character delimiter
-    EXPECT_EQ(split("a->b->c", "->"), expected);
+    EXPECT_EQ(split("a b->c", " ", "->"), expected);
 
     // Multi-character, ignore nested
-    EXPECT_EQ(split("a->b->c", "-", "->"), expected);
+    EXPECT_EQ(split("a-b->c", "-", "->"), expected);
+
+    // Overlapping will only consume first delim
+    expected = {"a", "b", ">c"};
+    EXPECT_EQ(split("a--b-->c", "--", "->"), expected);
 
     // Sentence
     expected = {"This", "is", "only", "a", "test."};
