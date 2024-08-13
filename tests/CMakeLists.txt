@@ -18,6 +18,7 @@ set(tests
     src/TestCaching.cpp
     src/TestColor.cpp
     src/TestFilesystem.cpp
+    src/TestFlags.cpp
     src/TestImage.cpp
     src/TestIteration.cpp
     src/TestLinearAlgebra.cpp

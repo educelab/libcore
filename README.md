@@ -41,6 +41,7 @@ following files can be installed in this way:
 - `utils/Filesystem.hpp`
     - Requires:
       - `utils/String.hpp`
+- `utils/Flags.hpp`
 - `utils/LinearAlgebra.hpp`
     - Requires:
       - `utils/Math.hpp`
