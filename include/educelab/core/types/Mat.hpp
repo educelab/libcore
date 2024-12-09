@@ -26,7 +26,7 @@ public:
     static constexpr std::size_t cols{Cols};
 
     /** Default constructor */
-    Mat() { vals_.fill(0); };
+    Mat() { vals_.fill(0); }
 
     /** @brief Constructor with fill values */
     template <typename... Args>
