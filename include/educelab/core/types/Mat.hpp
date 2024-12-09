@@ -116,10 +116,10 @@ auto operator*(const Mat<M, N, T1>& A, const Mat<N, P, T2>& B) -> Mat<M, P, T1>
 }
 
 /** @brief Matrix-vector multiplication */
-template <typename T1, typename T2, std::size_t M, std::size_t N>
-auto operator*(const Mat<M, N, T1>& mat, const Vec<T2, N>& vec) -> Vec<T1, N>
+template <typename T, typename Vector, std::size_t M, std::size_t N>
+auto operator*(const Mat<M, N, T>& mat, const Vector& vec) -> Vector
 {
-    Vec<T1, N> res;
+    Vector res;
     for (std::size_t m{0}; m < M; m++) {
         for (std::size_t n{0}; n < N; n++) {
             res[m] += mat(m, n) * vec[n];
