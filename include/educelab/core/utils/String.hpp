@@ -197,7 +197,7 @@ static auto split(std::string_view s, const Ds&... ds)
     // Split string
     std::vector<std::string_view> tokens;
     std::string_view::size_type begin{0};
-    for (const auto [end, size] : delimPos) {
+    for (const auto& [end, size] : delimPos) {
         // ignore nested delimiters
         if (end < begin) {
             continue;
