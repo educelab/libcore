@@ -3,6 +3,7 @@
 /** @file */
 
 #include <array>
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -57,7 +58,7 @@ public:
 
 private:
     /** Byte type */
-    using Byte = uint8_t;
+    using Byte = std::uint8_t;
     /** Byte storage */
     std::array<Byte, 16> buffer_{};
 };
@@ -67,15 +68,12 @@ auto operator<<(std::ostream& os, const Uuid& uuid) -> std::ostream&;
 
 }  // namespace educelab
 
-namespace std
-{
 /** @brief Hash function for educelab::Uuid */
 template <>
-struct hash<educelab::Uuid> {
+struct std::hash<educelab::Uuid> {
     /** Hash Uuid */
     auto operator()(educelab::Uuid const& u) const noexcept -> std::size_t
     {
         return std::hash<std::string>{}(u.string());
     }
-};
-}  // namespace std
+};  // namespace std
