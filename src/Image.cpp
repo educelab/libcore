@@ -8,15 +8,17 @@
 
 using namespace educelab;
 
+namespace
+{
 // Conversion constants
-static constexpr float max_u8{std::numeric_limits<uint8_t>::max()};
-static constexpr float max_u16{std::numeric_limits<uint16_t>::max()};
-static constexpr float u8_to_u16{max_u16 / max_u8};
-static constexpr float u8_to_f32{1.F / max_u8};
-static constexpr float u16_to_u8{max_u8 / max_u16};
-static constexpr float u16_to_f32{1.F / max_u16};
+constexpr float max_u8{std::numeric_limits<uint8_t>::max()};
+constexpr float max_u16{std::numeric_limits<uint16_t>::max()};
+constexpr float u8_to_u16{max_u16 / max_u8};
+constexpr float u8_to_f32{1.F / max_u8};
+constexpr float u16_to_u8{max_u8 / max_u16};
+constexpr float u16_to_f32{1.F / max_u16};
 
-static inline auto size_of(const Depth d) -> std::size_t
+auto size_of(const Depth d) -> std::size_t
 {
     switch (d) {
         case Depth::None:
@@ -40,8 +42,9 @@ void depth_cast<std::uint8_t, std::uint16_t>(
 {
     std::uint8_t tmpI{0};
     std::memcpy(&tmpI, in, sizeof(std::uint8_t));
-    auto f = static_cast<float>(tmpI) * u8_to_u16;
-    auto tmpO = static_cast<std::uint16_t>(std::max(std::min(f, max_u16), 0.F));
+    const auto f = static_cast<float>(tmpI) * u8_to_u16;
+    const auto tmpO =
+        static_cast<std::uint16_t>(std::max(std::min(f, max_u16), 0.F));
     std::memcpy(out, &tmpO, sizeof(std::uint16_t));
 }
 
@@ -50,7 +53,7 @@ void depth_cast<std::uint8_t, float>(const std::byte* in, std::byte* out)
 {
     std::uint8_t tmpI{0};
     std::memcpy(&tmpI, in, sizeof(std::uint8_t));
-    auto tmpO = static_cast<float>(tmpI) * u8_to_f32;
+    const auto tmpO = static_cast<float>(tmpI) * u8_to_f32;
     std::memcpy(out, &tmpO, sizeof(float));
 }
 
@@ -60,8 +63,9 @@ void depth_cast<std::uint16_t, std::uint8_t>(
 {
     std::uint16_t tmpI{0};
     std::memcpy(&tmpI, in, sizeof(std::uint16_t));
-    auto f = static_cast<float>(tmpI) * u16_to_u8;
-    auto tmpO = static_cast<std::uint8_t>(std::max(std::min(f, max_u8), 0.F));
+    const auto f = static_cast<float>(tmpI) * u16_to_u8;
+    const auto tmpO =
+        static_cast<std::uint8_t>(std::max(std::min(f, max_u8), 0.F));
     std::memcpy(out, &tmpO, sizeof(std::uint8_t));
 }
 
@@ -70,7 +74,7 @@ void depth_cast<std::uint16_t, float>(const std::byte* in, std::byte* out)
 {
     std::uint16_t tmpI{0};
     std::memcpy(&tmpI, in, sizeof(std::uint16_t));
-    auto tmpO = static_cast<float>(tmpI) * u16_to_f32;
+    const auto tmpO = static_cast<float>(tmpI) * u16_to_f32;
     std::memcpy(out, &tmpO, sizeof(float));
 }
 
@@ -79,7 +83,7 @@ void depth_cast<float, std::uint8_t>(const std::byte* in, std::byte* out)
 {
     float tmpI{0};
     std::memcpy(&tmpI, in, sizeof(float));
-    auto tmpO = static_cast<std::uint8_t>(
+    const auto tmpO = static_cast<std::uint8_t>(
         std::max(std::min(tmpI * max_u8, max_u8), 0.F));
     std::memcpy(out, &tmpO, sizeof(std::uint8_t));
 }
@@ -89,7 +93,7 @@ void depth_cast<float, std::uint16_t>(const std::byte* in, std::byte* out)
 {
     float tmpI{0};
     std::memcpy(&tmpI, in, sizeof(float));
-    auto tmpO = static_cast<std::uint16_t>(
+    const auto tmpO = static_cast<std::uint16_t>(
         std::max(std::min(tmpI * max_u16, max_u16), 0.F));
     std::memcpy(out, &tmpO, sizeof(std::uint16_t));
 }
@@ -98,13 +102,13 @@ template <typename TIn, typename TOut>
 void pixel_cast(const std::byte* in, std::byte* out, const std::size_t cns)
 {
     for (std::size_t idx{0}; idx < cns; idx++) {
-        auto i_idx = idx * sizeof(TIn);
-        auto o_idx = idx * sizeof(TOut);
+        const auto i_idx = idx * sizeof(TIn);
+        const auto o_idx = idx * sizeof(TOut);
         depth_cast<TIn, TOut>(&in[i_idx], &out[o_idx]);
     }
 }
 
-static void convert_pixel(
+void convert_pixel(
     const std::byte* in,
     const Depth inType,
     std::byte* out,
@@ -147,6 +151,7 @@ static void convert_pixel(
         throw std::runtime_error("Conversion not supported.");
     }
 }
+}  // namespace
 
 Image::Image(
     const std::size_t height,
@@ -205,8 +210,8 @@ auto Image::Convert(const Image& i, const Depth type) -> Image
     // Iterate over original image data
     for (std::size_t y{0}; y < i.h_; y++) {
         for (std::size_t x{0}; x < i.w_; x++) {
-            auto i_idx = i.unravel_(y, x);
-            auto r_idx = result.unravel_(y, x);
+            const auto i_idx = i.unravel_(y, x);
+            const auto r_idx = result.unravel_(y, x);
             convert_pixel(
                 &i.data_[i_idx], i.type(), &result.data_[r_idx], type, i.cns_);
         }
@@ -220,15 +225,16 @@ auto Image::Gamma(const Image& i, const float gamma) -> Image
     auto result = Convert(i, Depth::F32);
     for (std::size_t y{0}; y < result.h_; y++) {
         for (std::size_t x{0}; x < result.w_; x++) {
-            auto idx = result.unravel_(y, x);
+            const auto idx = result.unravel_(y, x);
             for (std::size_t c{0}; c < result.cns_; c++) {
-                auto o = c * sizeof(float);
+                const auto o = c * sizeof(float);
                 auto* v = reinterpret_cast<float*>(&result.data_[idx + o]);
                 *v = std::pow(*v, 1.F / gamma);
             }
         }
     }
-    return Convert(result, i.type());
+    result = Convert(result, i.type());
+    return result;
 }
 
 auto Image::convert(const Depth type) const -> Image
