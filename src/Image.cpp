@@ -11,8 +11,8 @@ using namespace educelab;
 namespace
 {
 // Conversion constants
-constexpr float max_u8{std::numeric_limits<uint8_t>::max()};
-constexpr float max_u16{std::numeric_limits<uint16_t>::max()};
+constexpr float max_u8{std::numeric_limits<std::uint8_t>::max()};
+constexpr float max_u16{std::numeric_limits<std::uint16_t>::max()};
 constexpr float u8_to_u16{max_u16 / max_u8};
 constexpr float u8_to_f32{1.F / max_u8};
 constexpr float u16_to_u8{max_u8 / max_u16};
