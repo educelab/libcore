@@ -10,7 +10,7 @@ jobs:
   build_and_test:
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04, macos-13, macos-14, macos-15]
+        os: [ubuntu-22.04, ubuntu-24.04, macos-14, macos-15, macos-26]
     runs-on: ${{ matrix.os }}
     env:
       EXTRA_CMAKE_FLAGS: -DCMAKE_BUILD_TYPE=Release -DEDUCE_CORE_BUILD_TESTS=ON -DEDUCE_CORE_BUILD_EXAMPLES=ON
