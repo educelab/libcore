@@ -1,0 +1,45 @@
+{
+  "status": "complete",
+  "project_type": "brownfield",
+  "current_section": "complete",
+  "current_question": 0,
+  "completed_sections": ["product", "guidelines", "tech_stack", "workflow", "styleguides"],
+  "answers": {
+    "project_name": "EduceLab Core",
+    "description": "A C++ utility library providing common types and utilities for EduceLab projects",
+    "problem": "Developers across EduceLab projects need to reimplement common types and utilities repeatedly; there is no shared foundation for EduceLab C++ projects to build upon",
+    "target_users": "EduceLab developers building C++ applications and libraries",
+    "key_goals": [
+      "Provide a stable, reusable foundation for all EduceLab C++ projects",
+      "Offer well-tested, header-friendly types (Vec, Mat, Image, Mesh, etc.)",
+      "Minimize external dependencies while maximizing utility"
+    ],
+    "voice_tone": "Concise and direct",
+    "design_principles": ["Developer experience focused", "Minimize dependencies"],
+    "languages": ["C++17"],
+    "build_system": "CMake 3.15+",
+    "testing": "GoogleTest (via FetchContent)",
+    "docs": "Doxygen",
+    "frontend": "None / Library only",
+    "backend": "None / Library only",
+    "database": "None / Stateless",
+    "infrastructure": ["CMake FetchContent / find_package", "System library (apt, brew)"],
+    "tdd_strictness": "Strict - tests required before implementation",
+    "commit_strategy": "Conventional Commits (feat:, fix:, etc.)",
+    "code_review": "Required for all changes, via PR on GitHub",
+    "verification_checkpoints": "After each phase completion",
+    "style_guides": ["C++ (clang-format, clang-tidy)", "CMake"]
+  },
+  "files_created": [
+    "conductor/index.md",
+    "conductor/product.md",
+    "conductor/product-guidelines.md",
+    "conductor/tech-stack.md",
+    "conductor/workflow.md",
+    "conductor/tracks.md",
+    "conductor/code_styleguides/cpp.md",
+    "conductor/code_styleguides/cmake.md"
+  ],
+  "started_at": "2026-03-20T00:00:00Z",
+  "last_updated": "2026-03-20T00:00:00Z"
+}
