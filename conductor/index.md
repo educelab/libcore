@@ -12,7 +12,9 @@ Navigation hub for project context.
 
 ## Active Tracks
 
-<!-- Auto-populated by /conductor:new-track -->
+- [Mesh Class Redesign](./tracks/mesh-redesign_20260320/index.md) — `mesh-redesign_20260320`
+- [UVMap](./tracks/uv-map_20260323/index.md) — `uv-map_20260323`
+- [Mesh IO](./tracks/mesh-io_20260323/index.md) — `mesh-io_20260323` ⚠ blocked
 
 ## Getting Started
 
