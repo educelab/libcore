@@ -2,18 +2,23 @@
   "id": "mesh-redesign_20260320",
   "title": "Mesh Class Redesign",
   "type": "feature",
-  "status": "in_progress",
+  "status": "complete",
   "created": "2026-03-20T00:00:00Z",
   "updated": "2026-03-23T00:00:00Z",
-  "current_phase": 1,
-  "current_task": "1.1",
+  "current_phase": 4,
+  "current_task": "4.2",
   "phases": {
     "total": 4,
-    "completed": 0
+    "completed": 4
   },
   "tasks": {
     "total": 13,
-    "completed": 0
+    "completed": 13
   },
-  "commits": []
+  "commits": [
+    "a554476: refactor(Mesh): introduce WithNormal/WithColor mixins, empty DefaultVertexTraits",
+    "e7df70e: feat(Mesh): add lazy vertex-to-face adjacency index",
+    "f89d383: feat(Mesh): add lazy face normal cache and faceNormal()",
+    "3f8967b: feat(Mesh): add angle-weighted vertexNormal free function"
+  ]
 }

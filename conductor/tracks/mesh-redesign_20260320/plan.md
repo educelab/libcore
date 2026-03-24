@@ -3,7 +3,7 @@
 **Track ID:** mesh-redesign_20260320
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-03-20
-**Status:** [ ] Not Started
+**Status:** [x] Complete
 
 ## Overview
 
@@ -105,29 +105,29 @@ computes an angle-weighted average of incident face normals. No caching.
 
 ### Tasks
 
-- [ ] **Task 4.1**: Write tests for `vertexNormal` in `TestMesh.cpp` —
+- [x] **Task 4.1**: Write tests for `vertexNormal` in `TestMesh.cpp` —
       cover: vertex shared by known faces (verify weighted result), vertex on
       mesh boundary, mesh with a single face
-- [ ] **Task 4.2**: Implement `vertexNormal(const Mesh<T,Dims,Traits>& mesh, std::size_t idx)`
+- [x] **Task 4.2**: Implement `vertexNormal(const Mesh<T,Dims,Traits>& mesh, std::size_t idx)`
       as a free function below the `Mesh` class definition; uses `vertexFaces`
       and `faceNormal`; angle weights from the interior angle of the face at
       the given vertex; constrained to Dims == 3 via `static_assert`
 
 ### Verification
 
-- [ ] `ctest` passes with no regressions
-- [ ] `vertexNormal` tests pass
-- [ ] Build succeeds in Debug and Release
+- [x] `ctest` passes with no regressions
+- [x] `vertexNormal` tests pass
+- [x] Build succeeds in Debug and Release
 
 ---
 
 ## Final Verification
 
-- [ ] All acceptance criteria in `spec.md` met
-- [ ] All tests passing (`ctest`)
-- [ ] No regressions against pre-track test baseline
-- [ ] Doxygen builds cleanly for new public API
-- [ ] Ready for PR review
+- [x] All acceptance criteria in `spec.md` met
+- [x] All tests passing (`ctest`)
+- [x] No regressions against pre-track test baseline
+- [x] Doxygen builds cleanly for new public API
+- [x] Ready for PR review
 
 ---
 
