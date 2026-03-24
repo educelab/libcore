@@ -53,6 +53,54 @@ TEST(Vertex, OperatorDivide)
     EXPECT_EQ(a, Vertex(1, 1, 1));
 }
 
+// Compound-assignment operators must return Vertex& (not Vec&) so that trait
+// fields remain accessible on the result. The tests below verify both the
+// computed value and the return type by writing to a trait field through the
+// returned reference.
+
+TEST(Vertex, CompoundAssignmentPlusReturnsVertexRef)
+{
+    TestVertex a{1, 1, 1};
+    const TestVertex b{1, 1, 1};
+    TestVertex& ref = (a += b);
+    EXPECT_EQ(a, TestVertex(2, 2, 2));
+    // ref must alias a and be typed Vertex& so trait fields are accessible
+    const Vec3f n{0, 1, 0};
+    ref.normal = n;
+    EXPECT_EQ(a.normal, n);
+}
+
+TEST(Vertex, CompoundAssignmentMinusReturnsVertexRef)
+{
+    TestVertex a{2, 2, 2};
+    const TestVertex b{1, 1, 1};
+    TestVertex& ref = (a -= b);
+    EXPECT_EQ(a, TestVertex(1, 1, 1));
+    const Vec3f n{1, 0, 0};
+    ref.normal = n;
+    EXPECT_EQ(a.normal, n);
+}
+
+TEST(Vertex, CompoundAssignmentMultiplyReturnsVertexRef)
+{
+    TestVertex a{1, 1, 1};
+    TestVertex& ref = (a *= 3.f);
+    EXPECT_EQ(a, TestVertex(3, 3, 3));
+    const Vec3f n{0, 0, 1};
+    ref.normal = n;
+    EXPECT_EQ(a.normal, n);
+}
+
+TEST(Vertex, CompoundAssignmentDivideReturnsVertexRef)
+{
+    TestVertex a{4, 4, 4};
+    TestVertex& ref = (a /= 2.f);
+    EXPECT_EQ(a, TestVertex(2, 2, 2));
+    const Vec3f n{1, 1, 0};
+    ref.normal = n;
+    EXPECT_EQ(a.normal, n);
+}
+
 TEST(Vertex, NormalTrait)
 {
     TestVertex v;

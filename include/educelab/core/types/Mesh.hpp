@@ -104,8 +104,44 @@ public:
         {
         }
 
-        /** Inherit assignment operators */
+        // Compound-assignment and binary operators are defined on Vertex so
+        // that both return Vertex / Vertex& rather than Vec / Vec&, preserving
+        // trait fields. Vec's equivalents would silently slice any trait data.
+
+        /** Inherit value-assignment operator */
         using Vec<T, Dims>::operator=;
+
+        /** @brief Addition-assignment operator */
+        template <class Vector>
+        auto operator+=(const Vector& rhs) -> Vertex&
+        {
+            Vec<T, Dims>::operator+=(rhs);
+            return *this;
+        }
+
+        /** @brief Subtraction-assignment operator */
+        template <class Vector>
+        auto operator-=(const Vector& rhs) -> Vertex&
+        {
+            Vec<T, Dims>::operator-=(rhs);
+            return *this;
+        }
+
+        /** @brief Scalar multiplication-assignment operator */
+        template <class Scalar>
+        auto operator*=(const Scalar& rhs) -> Vertex&
+        {
+            Vec<T, Dims>::operator*=(rhs);
+            return *this;
+        }
+
+        /** @brief Scalar division-assignment operator */
+        template <class Scalar>
+        auto operator/=(const Scalar& rhs) -> Vertex&
+        {
+            Vec<T, Dims>::operator/=(rhs);
+            return *this;
+        }
 
         /** @brief Addition operator */
         template <class Vector>
@@ -123,17 +159,17 @@ public:
             return lhs;
         }
 
-        /** @brief Multiplication operator */
-        template <class Vector>
-        friend auto operator*(Vertex lhs, const Vector& rhs) -> Vertex
+        /** @brief Scalar multiplication operator */
+        template <class Scalar>
+        friend auto operator*(Vertex lhs, const Scalar& rhs) -> Vertex
         {
             lhs *= rhs;
             return lhs;
         }
 
-        /** @brief Division operator */
-        template <class Vector>
-        friend auto operator/(Vertex lhs, const Vector& rhs) -> Vertex
+        /** @brief Scalar division operator */
+        template <class Scalar>
+        friend auto operator/(Vertex lhs, const Scalar& rhs) -> Vertex
         {
             lhs /= rhs;
             return lhs;
