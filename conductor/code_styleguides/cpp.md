@@ -14,12 +14,13 @@
 | Entity | Convention | Example |
 |--------|-----------|---------|
 | Types / Classes | `PascalCase` | `Vec3d`, `ImageIO` |
-| Functions / Methods | `camelCase` | `splitString()`, `toNumeric()` |
+| Member functions | `snake_case` | `insert_vertex()`, `face_normal()` |
+| Free functions | `snake_case` | `split_string()`, `to_numeric()` |
 | Variables | `camelCase` | `imageWidth`, `numChannels` |
 | Constants | `SCREAMING_SNAKE_CASE` | `MAX_CHANNELS` |
 | Template parameters | `PascalCase` | `typename Scalar` |
 | Namespaces | `lowercase` | `educelab::core` |
-| Private members | `camelCase_` (trailing underscore) | `data_`, `width_` |
+| Private members | `snake_case_` (trailing underscore) | `data_`, `width_` |
 | File names | `PascalCase.hpp` / `PascalCase.cpp` | `Vec.hpp`, `Image.cpp` |
 
 ---
@@ -42,7 +43,7 @@ public:
     MyType() = default;
 
     int value() const { return value_; }
-    void setValue(int v) { value_ = v; }
+    void set_value(int v) { value_ = v; }
 
 private:
     int value_{0};
@@ -124,7 +125,9 @@ CheckOptions:
   - key: readability-identifier-naming.ClassCase
     value: CamelCase
   - key: readability-identifier-naming.FunctionCase
-    value: camelBack
+    value: lower_case
+  - key: readability-identifier-naming.MethodCase
+    value: lower_case
   - key: readability-identifier-naming.VariableCase
     value: camelBack
   - key: readability-identifier-naming.MemberSuffix

@@ -198,7 +198,7 @@ public:
         auto it = b.begin();
         for (auto& v : val_) {
             v = *it;
-            it++;
+            ++it;
         }
         return *this;
     }

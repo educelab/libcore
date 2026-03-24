@@ -157,10 +157,11 @@ public:
      *
      * Returns the index of the vertex in the mesh.
      */
-    auto insertVertex(const Vertex& v) -> std::size_t
+    auto insert_vertex(const Vertex& v) -> std::size_t
     {
-        auto idx = vertices_.size();
+        const auto idx = vertices_.size();
         vertices_.push_back(v);
+        // invalidate the adjacency and face normal cache
         adjacencyValid_ = false;
         faceNormalCache_.assign(faceNormalCache_.size(), std::nullopt);
         return idx;
@@ -173,11 +174,12 @@ public:
      * the vertex in the mesh.
      */
     template <typename... Args>
-    auto insertVertex(Args... args) -> std::size_t
+    auto insert_vertex(Args... args) -> std::size_t
     {
         static_assert(sizeof...(args) == Dims, "Incorrect number of arguments");
-        auto idx = vertices_.size();
+        const auto idx = vertices_.size();
         vertices_.emplace_back(args...);
+        // invalidate the adjacency and face normal cache
         adjacencyValid_ = false;
         faceNormalCache_.assign(faceNormalCache_.size(), std::nullopt);
         return idx;
@@ -200,9 +202,9 @@ public:
      *
      * Returns the index of the face in the mesh.
      */
-    auto insertFace(const Face& f) -> std::size_t
+    auto insert_face(const Face& f) -> std::size_t
     {
-        auto idx = faces_.size();
+        const auto idx = faces_.size();
         faces_.emplace_back(f);
         faceNormalCache_.emplace_back(std::nullopt);
         adjacencyValid_ = false;
@@ -215,10 +217,10 @@ public:
      * Returns the index of the face in the mesh.
      */
     template <typename... Indices>
-    auto insertFace(Indices... indices) -> std::size_t
+    auto insert_face(Indices... indices) -> std::size_t
     {
         static_assert(sizeof...(indices) >= 3, "Face must have >= 3 vertices");
-        auto idx = faces_.size();
+        const auto idx = faces_.size();
         faces_.push_back(Face{static_cast<std::size_t>(indices)...});
         faceNormalCache_.emplace_back(std::nullopt);
         adjacencyValid_ = false;
@@ -246,11 +248,11 @@ public:
      *
      * @throws std::out_of_range if @p idx >= number of vertices
      */
-    [[nodiscard]] auto vertexFaces(std::size_t idx) const
+    [[nodiscard]] auto vertex_faces(std::size_t idx) const
         -> const std::vector<std::size_t>&
     {
         if (idx >= vertices_.size()) {
-            throw std::out_of_range("vertexFaces: vertex index out of range");
+            throw std::out_of_range("vertex_faces: vertex index out of range");
         }
         if (!adjacencyValid_) {
             buildAdjacency_();
@@ -267,11 +269,11 @@ public:
      *
      * @throws std::out_of_range if @p idx >= number of faces
      */
-    [[nodiscard]] auto faceNormal(std::size_t idx) const -> Vec<T, Dims>
+    [[nodiscard]] auto face_normal(std::size_t idx) const -> Vec<T, Dims>
     {
-        static_assert(Dims == 3, "faceNormal requires Dims == 3");
+        static_assert(Dims == 3, "face_normal requires Dims == 3");
         if (idx >= faces_.size()) {
-            throw std::out_of_range("faceNormal: face index out of range");
+            throw std::out_of_range("face_normal: face index out of range");
         }
         if (!faceNormalCache_[idx].has_value()) {
             const auto& f = faces_[idx];
@@ -302,7 +304,7 @@ private:
     {
         adjacency_.assign(vertices_.size(), std::vector<std::size_t>{});
         for (std::size_t fi = 0; fi < faces_.size(); ++fi) {
-            for (auto vi : faces_[fi]) {
+            for (const auto vi : faces_[fi]) {
                 adjacency_[vi].push_back(fi);
             }
         }
@@ -332,13 +334,13 @@ template <
     std::size_t Dims,
     typename VertexTraits,
     std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
-[[nodiscard]] auto vertexNormal(
+[[nodiscard]] auto vertex_normal(
     const Mesh<T, Dims, VertexTraits>& mesh, std::size_t idx) -> Vec<T, Dims>
 {
-    static_assert(Dims == 3, "vertexNormal requires Dims == 3");
+    static_assert(Dims == 3, "vertex_normal requires Dims == 3");
 
     Vec<T, Dims> weighted{};
-    for (auto fi : mesh.vertexFaces(idx)) {
+    for (auto fi : mesh.vertex_faces(idx)) {
         const auto& f = mesh.face(fi);
         // Find position of idx within this face
         auto it = std::find(f.begin(), f.end(), idx);
@@ -350,7 +352,7 @@ template <
         const auto& vp = mesh.vertex(prev);
         const auto& vn = mesh.vertex(next);
         auto angle = interior_angle(vp - v, vn - v);
-        weighted += mesh.faceNormal(fi) * angle;
+        weighted += mesh.face_normal(fi) * angle;
     }
     return normalize(weighted);
 }
