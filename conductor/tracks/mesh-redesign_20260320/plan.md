@@ -80,21 +80,21 @@ index on any mutation.
 
 ### Tasks
 
-- [ ] **Task 3.1**: Write tests for `faceNormal(idx)` in `TestMesh.cpp` —
+- [x] **Task 3.1**: Write tests for `faceNormal(idx)` in `TestMesh.cpp` —
       cover: known triangle (verify cross product result), cache hit on second
       call, invalidation after `insertFace`/`insertVertex`
-- [ ] **Task 3.2**: Add `mutable std::vector<std::optional<Vec<T,Dims>>> faceNormalCache_`
+- [x] **Task 3.2**: Add `mutable std::vector<std::optional<Vec<T,Dims>>> faceNormalCache_`
       to `Mesh`; resize and reset alongside `faces_` in `insertFace`;
       reset on `insertVertex`
-- [ ] **Task 3.3**: Implement `faceNormal(idx)` — returns cached value if
+- [x] **Task 3.3**: Implement `faceNormal(idx)` — returns cached value if
       present, otherwise computes `normalize((v1-v0) × (v2-v0))`, stores, and
       returns; constrained to Dims == 3 via `static_assert`
 
 ### Verification
 
-- [ ] `ctest` passes with no regressions
-- [ ] `faceNormal` tests pass
-- [ ] Build succeeds in Debug and Release
+- [x] `ctest` passes with no regressions
+- [x] `faceNormal` tests pass
+- [x] Build succeeds in Debug and Release
 
 ---
 
