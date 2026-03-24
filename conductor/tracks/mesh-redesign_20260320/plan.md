@@ -56,19 +56,19 @@ cleared on any topology mutation.
 
 ### Tasks
 
-- [ ] **Task 2.1**: Write tests for `vertexFaces(idx)` in `TestMesh.cpp` —
+- [x] **Task 2.1**: Write tests for `vertexFaces(idx)` in `TestMesh.cpp` —
       cover: single face, shared vertex across multiple faces, index rebuilt
       after insert, out-of-range vertex
-- [ ] **Task 2.2**: Add `mutable` adjacency storage and private `buildAdjacency_()`
+- [x] **Task 2.2**: Add `mutable` adjacency storage and private `buildAdjacency_()`
       helper to `Mesh`; invalidate in `insertVertex` and `insertFace`
-- [ ] **Task 2.3**: Implement `vertexFaces(idx)` — builds index on first call,
+- [x] **Task 2.3**: Implement `vertexFaces(idx)` — builds index on first call,
       returns `const std::vector<std::size_t>&`
 
 ### Verification
 
-- [ ] `ctest` passes with no regressions
-- [ ] `vertexFaces` tests pass
-- [ ] Build succeeds in Debug and Release
+- [x] `ctest` passes with no regressions
+- [x] `vertexFaces` tests pass
+- [x] Build succeeds in Debug and Release
 
 ---
 
