@@ -161,6 +161,7 @@ public:
         auto idx = vertices_.size();
         vertices_.push_back(v);
         adjacencyValid_ = false;
+        faceNormalCache_.assign(faceNormalCache_.size(), std::nullopt);
         return idx;
     }
 
@@ -177,6 +178,7 @@ public:
         auto idx = vertices_.size();
         vertices_.emplace_back(args...);
         adjacencyValid_ = false;
+        faceNormalCache_.assign(faceNormalCache_.size(), std::nullopt);
         return idx;
     }
 
@@ -201,6 +203,7 @@ public:
     {
         auto idx = faces_.size();
         faces_.emplace_back(f);
+        faceNormalCache_.emplace_back(std::nullopt);
         adjacencyValid_ = false;
         return idx;
     }
@@ -216,6 +219,7 @@ public:
         static_assert(sizeof...(indices) >= 3, "Face must have >= 3 vertices");
         auto idx = faces_.size();
         faces_.push_back(Face{static_cast<std::size_t>(indices)...});
+        faceNormalCache_.emplace_back(std::nullopt);
         adjacencyValid_ = false;
         return idx;
     }
@@ -253,11 +257,39 @@ public:
         return adjacency_[idx];
     }
 
+    /**
+     * @brief Get the unit normal of a face
+     *
+     * Computed lazily as @c normalize((v1-v0) x (v2-v0)) on first access and
+     * cached in a parallel mutable vector. The cache is invalidated whenever
+     * a vertex or face is inserted. Only defined for 3D meshes.
+     *
+     * @throws std::out_of_range if @p idx >= number of faces
+     */
+    [[nodiscard]] auto faceNormal(std::size_t idx) const -> Vec<T, Dims>
+    {
+        static_assert(Dims == 3, "faceNormal requires Dims == 3");
+        if (idx >= faces_.size()) {
+            throw std::out_of_range("faceNormal: face index out of range");
+        }
+        if (!faceNormalCache_[idx].has_value()) {
+            const auto& f = faces_[idx];
+            const auto& v0 = vertices_[f[0]];
+            const auto& v1 = vertices_[f[1]];
+            const auto& v2 = vertices_[f[2]];
+            faceNormalCache_[idx] = normalize((v1 - v0).cross(v2 - v0));
+        }
+        return *faceNormalCache_[idx];
+    }
+
 private:
     /** Vertices */
     std::vector<Vertex> vertices_;
     /** Faces */
     std::vector<Face> faces_;
+
+    /** Per-face normal cache (lazy, nullopt until first access, reset on mutation) */
+    mutable std::vector<std::optional<Vec<T, Dims>>> faceNormalCache_;
 
     /** Vertex-to-face adjacency index (lazy, invalidated on mutation) */
     mutable std::vector<std::vector<std::size_t>> adjacency_;

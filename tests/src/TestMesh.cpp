@@ -161,3 +161,68 @@ TEST(Mesh, VertexFacesOutOfRange)
     mesh.insertVertex(0, 0, 0);
     EXPECT_THROW(mesh.vertexFaces(1), std::out_of_range);
 }
+
+TEST(Mesh, FaceNormalKnownTriangle)
+{
+    // Triangle in XY plane: normal should point in +Z
+    Mesh3f mesh;
+    auto v0 = mesh.insertVertex(0, 0, 0);
+    auto v1 = mesh.insertVertex(1, 0, 0);
+    auto v2 = mesh.insertVertex(0, 1, 0);
+    auto f0 = mesh.insertFace(v0, v1, v2);
+
+    auto n = mesh.faceNormal(f0);
+    EXPECT_NEAR(n[0], 0.f, 1e-6f);
+    EXPECT_NEAR(n[1], 0.f, 1e-6f);
+    EXPECT_NEAR(n[2], 1.f, 1e-6f);
+}
+
+TEST(Mesh, FaceNormalCacheHit)
+{
+    Mesh3f mesh;
+    auto v0 = mesh.insertVertex(0, 0, 0);
+    auto v1 = mesh.insertVertex(1, 0, 0);
+    auto v2 = mesh.insertVertex(0, 1, 0);
+    auto f0 = mesh.insertFace(v0, v1, v2);
+
+    // Two calls must return the same value (cache hit on second call)
+    auto n0 = mesh.faceNormal(f0);
+    auto n1 = mesh.faceNormal(f0);
+    EXPECT_EQ(n0, n1);
+}
+
+TEST(Mesh, FaceNormalInvalidatedAfterInsertFace)
+{
+    Mesh3f mesh;
+    auto v0 = mesh.insertVertex(0, 0, 0);
+    auto v1 = mesh.insertVertex(1, 0, 0);
+    auto v2 = mesh.insertVertex(0, 1, 0);
+    auto f0 = mesh.insertFace(v0, v1, v2);
+
+    // Prime the cache
+    auto n0 = mesh.faceNormal(f0);
+
+    // Add a new face — cache should be invalidated but f0 still correct
+    auto v3 = mesh.insertVertex(0, 0, 1);
+    mesh.insertFace(v0, v1, v3);
+
+    auto n1 = mesh.faceNormal(f0);
+    EXPECT_EQ(n0, n1);
+}
+
+TEST(Mesh, FaceNormalInvalidatedAfterInsertVertex)
+{
+    Mesh3f mesh;
+    auto v0 = mesh.insertVertex(0, 0, 0);
+    auto v1 = mesh.insertVertex(1, 0, 0);
+    auto v2 = mesh.insertVertex(0, 1, 0);
+    auto f0 = mesh.insertFace(v0, v1, v2);
+
+    // Prime the cache
+    auto n0 = mesh.faceNormal(f0);
+
+    // Insert a vertex — cache must be invalidated; f0 normal unchanged
+    mesh.insertVertex(5, 5, 5);
+    auto n1 = mesh.faceNormal(f0);
+    EXPECT_EQ(n0, n1);
+}
