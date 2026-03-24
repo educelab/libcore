@@ -3,7 +3,7 @@
 **Track ID:** mesh-redesign_20260320
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-03-20
-**Status:** [ ] Not Started
+**Status:** [x] Complete
 
 ## Overview
 
@@ -32,20 +32,20 @@ detection idiom in a future track.
 
 ### Tasks
 
-- [ ] **Task 1.1**: Update `TestMesh.cpp` — replace `Vertex.NormalTrait` and
+- [x] **Task 1.1**: Update `TestMesh.cpp` — replace `Vertex.NormalTrait` and
       `Vertex.ColorTrait` tests with equivalents using a custom traits type
       that composes `WithNormal` and `WithColor`; confirm remaining tests
       compile and pass
-- [ ] **Task 1.2**: Add `traits::WithNormal<T,Dims>` and `traits::WithColor`
+- [x] **Task 1.2**: Add `traits::WithNormal<T,Dims>` and `traits::WithColor`
       to `Mesh.hpp`; document that these are composable via multiple
       inheritance and are detected by I/O functions via `if constexpr`
-- [ ] **Task 1.3**: Empty `DefaultVertexTraits`; update its Doxygen comment
+- [x] **Task 1.3**: Empty `DefaultVertexTraits`; update its Doxygen comment
       to direct users to `WithNormal`, `WithColor`, and custom compositions
 
 ### Verification
 
-- [ ] `ctest` passes with no regressions
-- [ ] Build succeeds in Debug and Release
+- [x] `ctest` passes with no regressions
+- [x] Build succeeds in Debug and Release
 
 ---
 
@@ -56,19 +56,19 @@ cleared on any topology mutation.
 
 ### Tasks
 
-- [ ] **Task 2.1**: Write tests for `vertexFaces(idx)` in `TestMesh.cpp` —
+- [x] **Task 2.1**: Write tests for `vertexFaces(idx)` in `TestMesh.cpp` —
       cover: single face, shared vertex across multiple faces, index rebuilt
       after insert, out-of-range vertex
-- [ ] **Task 2.2**: Add `mutable` adjacency storage and private `buildAdjacency_()`
+- [x] **Task 2.2**: Add `mutable` adjacency storage and private `buildAdjacency_()`
       helper to `Mesh`; invalidate in `insertVertex` and `insertFace`
-- [ ] **Task 2.3**: Implement `vertexFaces(idx)` — builds index on first call,
+- [x] **Task 2.3**: Implement `vertexFaces(idx)` — builds index on first call,
       returns `const std::vector<std::size_t>&`
 
 ### Verification
 
-- [ ] `ctest` passes with no regressions
-- [ ] `vertexFaces` tests pass
-- [ ] Build succeeds in Debug and Release
+- [x] `ctest` passes with no regressions
+- [x] `vertexFaces` tests pass
+- [x] Build succeeds in Debug and Release
 
 ---
 
@@ -80,21 +80,21 @@ index on any mutation.
 
 ### Tasks
 
-- [ ] **Task 3.1**: Write tests for `faceNormal(idx)` in `TestMesh.cpp` —
+- [x] **Task 3.1**: Write tests for `faceNormal(idx)` in `TestMesh.cpp` —
       cover: known triangle (verify cross product result), cache hit on second
       call, invalidation after `insertFace`/`insertVertex`
-- [ ] **Task 3.2**: Add `mutable std::vector<std::optional<Vec<T,Dims>>> faceNormalCache_`
+- [x] **Task 3.2**: Add `mutable std::vector<std::optional<Vec<T,Dims>>> faceNormalCache_`
       to `Mesh`; resize and reset alongside `faces_` in `insertFace`;
       reset on `insertVertex`
-- [ ] **Task 3.3**: Implement `faceNormal(idx)` — returns cached value if
+- [x] **Task 3.3**: Implement `faceNormal(idx)` — returns cached value if
       present, otherwise computes `normalize((v1-v0) × (v2-v0))`, stores, and
       returns; constrained to Dims == 3 via `static_assert`
 
 ### Verification
 
-- [ ] `ctest` passes with no regressions
-- [ ] `faceNormal` tests pass
-- [ ] Build succeeds in Debug and Release
+- [x] `ctest` passes with no regressions
+- [x] `faceNormal` tests pass
+- [x] Build succeeds in Debug and Release
 
 ---
 
@@ -105,29 +105,29 @@ computes an angle-weighted average of incident face normals. No caching.
 
 ### Tasks
 
-- [ ] **Task 4.1**: Write tests for `vertexNormal` in `TestMesh.cpp` —
+- [x] **Task 4.1**: Write tests for `vertexNormal` in `TestMesh.cpp` —
       cover: vertex shared by known faces (verify weighted result), vertex on
       mesh boundary, mesh with a single face
-- [ ] **Task 4.2**: Implement `vertexNormal(const Mesh<T,Dims,Traits>& mesh, std::size_t idx)`
+- [x] **Task 4.2**: Implement `vertexNormal(const Mesh<T,Dims,Traits>& mesh, std::size_t idx)`
       as a free function below the `Mesh` class definition; uses `vertexFaces`
       and `faceNormal`; angle weights from the interior angle of the face at
       the given vertex; constrained to Dims == 3 via `static_assert`
 
 ### Verification
 
-- [ ] `ctest` passes with no regressions
-- [ ] `vertexNormal` tests pass
-- [ ] Build succeeds in Debug and Release
+- [x] `ctest` passes with no regressions
+- [x] `vertexNormal` tests pass
+- [x] Build succeeds in Debug and Release
 
 ---
 
 ## Final Verification
 
-- [ ] All acceptance criteria in `spec.md` met
-- [ ] All tests passing (`ctest`)
-- [ ] No regressions against pre-track test baseline
-- [ ] Doxygen builds cleanly for new public API
-- [ ] Ready for PR review
+- [x] All acceptance criteria in `spec.md` met
+- [x] All tests passing (`ctest`)
+- [x] No regressions against pre-track test baseline
+- [x] Doxygen builds cleanly for new public API
+- [x] Ready for PR review
 
 ---
 
