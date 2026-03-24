@@ -7,9 +7,11 @@
 
 ## Overview
 
-Single focused phase: port and generalize the `UVMap` from registration-toolkit
-into a standalone header-only class. No dependencies on other in-progress
-tracks.
+Single focused phase: implement `UVMap<T, Dims, Traits>` as a header-only class
+template with per-wedge UV/UVW storage. Uses `Vec<T,Dims>` from libcore; no
+OpenCV dependency. Two-level API (pool + per-wedge index) mirrors OBJ/PLY `vt`
+index structure. `Coordinate` inner struct mirrors `Mesh::Vertex` — inherits
+`Vec<T,Dims>` and `Traits` with full operator overloads to prevent slicing.
 
 ## Checkpoints
 
@@ -26,25 +28,71 @@ corresponding test in `tests/`.
 
 ### Tasks
 
-- [ ] **Task 1.1**: Review the `UVMap` implementation in registration-toolkit;
-      note any API surface, data structures, or edge cases to preserve or
-      generalize
-- [ ] **Task 1.2**: Write tests in `tests/src/TestUVMap.cpp` covering:
-      `insertUV`, `mapUV`, `uv`, `hasUV`, `numUVs`, unmapped wedge access,
-      face/corner indices that require growth of internal storage, copy and
-      move semantics
-- [ ] **Task 1.3**: Implement `UVMap` in `include/educelab/core/types/UVMap.hpp`;
-      internal storage: `std::vector<Vec<float,2>> uvs_` (pool) and
-      `std::vector<std::vector<std::size_t>> faceUVs_` (per-face per-corner
-      index); sentinel value `std::numeric_limits<std::size_t>::max()` for
-      unmapped wedges
-- [ ] **Task 1.4**: Register `TestUVMap` in `tests/CMakeLists.txt`
+- [x] **Task 1.1**: Write tests in `tests/src/TestUVMap.cpp` covering:
+      - `insert(Vec)` and `at` round-trip for a single coordinate
+      - variadic `insert(u, v)` round-trip
+      - `at` on a non-const map returns `Coordinate&`; mutating the returned
+        reference updates the pool entry (verify position and trait field)
+      - `at` on a const map returns `const Coordinate&`; implicit conversion
+        to `Vec<T,Dims>` works (verifies inheritance)
+      - `map` + `get` on a triangle face (corners 0, 1, 2)
+      - `map` + `get` on a quad face (4 corners)
+      - corners mapped out of order (e.g. corner 2 before corner 0)
+      - `has` returns false for unmapped corner, out-of-range face, and
+        out-of-range corner
+      - `get` throws `std::out_of_range` for unmapped wedge
+      - `get_coordinate` on a non-const map returns a mutable `Coordinate&`;
+        mutating it updates the pool entry
+      - `get_coordinate` throws for unmapped wedge
+      - `at` throws `std::out_of_range` for out-of-bounds pool index
+      - `map` auto-grows when face or corner index exceeds current storage
+      - two wedges sharing the same pool entry (verify `get` returns same index)
+      - `size` reflects pool count; `empty` true before any insert
+      - `reserve_uvs` and `reserve_faces` do not change logical state
+      - `clear` resets pool and wedge mapping; `empty` true after clear
+      - copy semantics: copied map is independent
+      - `Coordinate` arithmetic operators return `Coordinate` (not `Vec`) —
+        verify trait fields survive addition and scalar multiplication
+      - `UVMap<float, 2, WithChart>`: insert a `Coordinate` with `chart` set,
+        retrieve via `at` and verify `chart` field is preserved
+      - `UVMap<double, 3>` used for a UVW (3D) coordinate round-trip
+
+- [x] **Task 1.2**: Implement `UVMap<T, Dims, Traits>` in
+      `include/educelab/core/types/UVMap.hpp`:
+      - `DefaultUVTraits` empty struct and `WithChart` mixin above the class
+        definition
+      - Template signature:
+        `template <typename T = float, std::size_t Dims = 2, typename Traits = DefaultUVTraits, std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>`
+      - `Coordinate` inner struct: inherits `Vec<T,Dims>` and `Traits`; default
+        constructor; variadic constructor forwarding to `Vec<T,Dims>`;
+        `using Vec<T,Dims>::operator=`; compound-assignment operators
+        (`+=`, `-=`, `*=`, `/=`) returning `Coordinate&`; friend binary
+        operators (`+`, `-`, `*`, `/`) returning `Coordinate` — identical
+        pattern to `Mesh::Vertex`
+      - Internal storage: `std::vector<Coordinate> uvs_` and
+        `std::vector<std::vector<std::optional<std::size_t>>> face_uvs_`
+      - `insert(const Coordinate&)` appends to `uvs_`, returns index
+      - `insert(const Vec<T,Dims>&)` constructs a default `Coordinate` from the
+        Vec and appends
+      - Variadic `insert(Args...)` with `static_assert(sizeof...(Args) == Dims)`,
+        constructs `Coordinate` from args
+      - `at(idx)` — two overloads: non-const delegates to `uvs_.at(idx)`,
+        const delegates to `std::as_const(uvs_).at(idx)`
+      - `map(face, corner, uvIdx)` resizes outer then inner vector, assigns
+      - `get(face, corner)` returns `face_uvs_[face][corner].value()`, throws
+        `std::out_of_range` if out of range or nullopt
+      - `get_coordinate(face, corner)` — two overloads: non-const returns
+        `at(get(face, corner))`, const returns `std::as_const(*this).at(...)`
+      - `has(face, corner)` returns false for any out-of-range or nullopt slot
+      - `size()`, `empty()`, `clear()`, `reserve_uvs()`, `reserve_faces()`
+
+- [x] **Task 1.3**: Register `TestUVMap` in `tests/CMakeLists.txt`
 
 ### Verification
 
-- [ ] `ctest` passes with no regressions
-- [ ] All `TestUVMap` tests pass
-- [ ] Build succeeds in Debug and Release
+- [x] `ctest` passes with no regressions
+- [x] All `TestUVMap` tests pass
+- [x] Build succeeds in Debug and Release
 
 ---
 
