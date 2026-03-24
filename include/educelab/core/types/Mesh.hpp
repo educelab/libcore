@@ -16,7 +16,46 @@ namespace educelab
 namespace traits
 {
 /**
+ * @brief Opt-in vertex normal mixin
+ *
+ * Compose into a custom traits struct via multiple inheritance to add
+ * per-vertex normal storage. Detected at compile time by I/O functions
+ * via @c if @c constexpr and the C++17 detection idiom.
+ *
+ * @tparam T Numeric type of the normal vector
+ * @tparam Dims Number of dimensions of the normal vector
+ */
+template <
+    typename T,
+    std::size_t Dims,
+    std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
+struct WithNormal {
+    /** @brief Vertex normal */
+    std::optional<Vec<T, Dims>> normal;
+};
+
+/**
+ * @brief Opt-in vertex color mixin
+ *
+ * Compose into a custom traits struct via multiple inheritance to add
+ * per-vertex color storage. Detected at compile time by I/O functions
+ * via @c if @c constexpr and the C++17 detection idiom.
+ */
+struct WithColor {
+    /** @brief Vertex color */
+    Color color;
+};
+
+/**
  * @brief Default traits for Mesh vertices
+ *
+ * Empty by default. To add normals, colors, or other per-vertex data,
+ * compose @ref WithNormal, @ref WithColor, or a custom mixin struct via
+ * multiple inheritance:
+ * @code
+ * struct MyTraits : traits::WithNormal<float,3>, traits::WithColor {};
+ * using MyMesh = Mesh<float, 3, MyTraits>;
+ * @endcode
  *
  * @tparam T Mesh numeric type
  * @tparam Dims Mesh dimensions
@@ -26,11 +65,6 @@ template <
     std::size_t Dims,
     std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
 struct DefaultVertexTraits {
-    /** @brief Vertex normal */
-    std::optional<Vec<T, Dims>> normal;
-
-    /** @brief Vertex color */
-    Color color;
 };
 }  // namespace traits
 

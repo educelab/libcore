@@ -6,6 +6,11 @@
 
 using namespace educelab;
 
+// Custom traits composing both opt-in mixins
+struct MyTraits : traits::WithNormal<float, 3>, traits::WithColor {};
+using TestMesh = Mesh<float, 3, MyTraits>;
+using TestVertex = TestMesh::Vertex;
+
 using Vertex = Mesh3f::Vertex;
 
 TEST(Vertex, OperatorPlus)
@@ -50,8 +55,7 @@ TEST(Vertex, OperatorDivide)
 
 TEST(Vertex, NormalTrait)
 {
-    // Check normal
-    Vertex v;
+    TestVertex v;
     Vec3f expected_normal{0, 1, 0};
     EXPECT_FALSE(v.normal.has_value());
     v.normal = expected_normal;
@@ -61,8 +65,7 @@ TEST(Vertex, NormalTrait)
 
 TEST(Vertex, ColorTrait)
 {
-    // Check normal
-    Vertex v;
+    TestVertex v;
     Color expected_color{uint8_t(255)};
     EXPECT_FALSE(v.color.has_value());
     v.color = expected_color;
