@@ -2,8 +2,10 @@
 
 /** @file */
 
+#include <algorithm>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <variant>
 #include <vector>
 
@@ -158,6 +160,7 @@ public:
     {
         auto idx = vertices_.size();
         vertices_.push_back(v);
+        adjacencyValid_ = false;
         return idx;
     }
 
@@ -173,6 +176,7 @@ public:
         static_assert(sizeof...(args) == Dims, "Incorrect number of arguments");
         auto idx = vertices_.size();
         vertices_.emplace_back(args...);
+        adjacencyValid_ = false;
         return idx;
     }
 
@@ -197,6 +201,7 @@ public:
     {
         auto idx = faces_.size();
         faces_.emplace_back(f);
+        adjacencyValid_ = false;
         return idx;
     }
 
@@ -210,7 +215,8 @@ public:
     {
         static_assert(sizeof...(indices) >= 3, "Face must have >= 3 vertices");
         auto idx = faces_.size();
-        faces_.emplace_back(indices...);
+        faces_.push_back(Face{static_cast<std::size_t>(indices)...});
+        adjacencyValid_ = false;
         return idx;
     }
 
@@ -226,11 +232,49 @@ public:
         return faces_.at(idx);
     }
 
+    /**
+     * @brief Get the faces incident to a vertex
+     *
+     * Returns a reference to the list of face indices that contain the vertex
+     * at @p idx. The adjacency index is built lazily on the first call and
+     * invalidated whenever a vertex or face is inserted.
+     *
+     * @throws std::out_of_range if @p idx >= number of vertices
+     */
+    [[nodiscard]] auto vertexFaces(std::size_t idx) const
+        -> const std::vector<std::size_t>&
+    {
+        if (idx >= vertices_.size()) {
+            throw std::out_of_range("vertexFaces: vertex index out of range");
+        }
+        if (!adjacencyValid_) {
+            buildAdjacency_();
+        }
+        return adjacency_[idx];
+    }
+
 private:
     /** Vertices */
     std::vector<Vertex> vertices_;
     /** Faces */
     std::vector<Face> faces_;
+
+    /** Vertex-to-face adjacency index (lazy, invalidated on mutation) */
+    mutable std::vector<std::vector<std::size_t>> adjacency_;
+    /** Whether adjacency_ is up to date */
+    mutable bool adjacencyValid_{false};
+
+    /** @brief (Re)build the vertex-to-face adjacency index */
+    void buildAdjacency_() const
+    {
+        adjacency_.assign(vertices_.size(), std::vector<std::size_t>{});
+        for (std::size_t fi = 0; fi < faces_.size(); ++fi) {
+            for (auto vi : faces_[fi]) {
+                adjacency_[vi].push_back(fi);
+            }
+        }
+        adjacencyValid_ = true;
+    }
 };
 
 /** @brief 3D 32-bit floating-point mesh */

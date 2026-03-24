@@ -94,3 +94,70 @@ TEST(Mesh, AddVerticesAndFace)
     // Check face
     EXPECT_EQ(mesh.face(faceIdx), expectedFace);
 }
+
+TEST(Mesh, VertexFacesSingleFace)
+{
+    Mesh3f mesh;
+    auto v0 = mesh.insertVertex(0, 0, 0);
+    auto v1 = mesh.insertVertex(1, 0, 0);
+    auto v2 = mesh.insertVertex(0, 1, 0);
+    auto f0 = mesh.insertFace(v0, v1, v2);
+
+    EXPECT_EQ(mesh.vertexFaces(v0), (std::vector<std::size_t>{f0}));
+    EXPECT_EQ(mesh.vertexFaces(v1), (std::vector<std::size_t>{f0}));
+    EXPECT_EQ(mesh.vertexFaces(v2), (std::vector<std::size_t>{f0}));
+}
+
+TEST(Mesh, VertexFacesSharedVertex)
+{
+    // Two triangles sharing an edge (v1-v2)
+    Mesh3f mesh;
+    auto v0 = mesh.insertVertex(0, 0, 0);
+    auto v1 = mesh.insertVertex(1, 0, 0);
+    auto v2 = mesh.insertVertex(0, 1, 0);
+    auto v3 = mesh.insertVertex(1, 1, 0);
+    auto f0 = mesh.insertFace(v0, v1, v2);
+    auto f1 = mesh.insertFace(v1, v3, v2);
+
+    // Shared vertices appear in both faces
+    const auto& v1Faces = mesh.vertexFaces(v1);
+    ASSERT_EQ(v1Faces.size(), 2u);
+    EXPECT_TRUE(
+        std::find(v1Faces.begin(), v1Faces.end(), f0) != v1Faces.end());
+    EXPECT_TRUE(
+        std::find(v1Faces.begin(), v1Faces.end(), f1) != v1Faces.end());
+
+    // Non-shared vertex appears in only one face
+    EXPECT_EQ(mesh.vertexFaces(v0), (std::vector<std::size_t>{f0}));
+    EXPECT_EQ(mesh.vertexFaces(v3), (std::vector<std::size_t>{f1}));
+}
+
+TEST(Mesh, VertexFacesRebuiltAfterInsert)
+{
+    Mesh3f mesh;
+    auto v0 = mesh.insertVertex(0, 0, 0);
+    auto v1 = mesh.insertVertex(1, 0, 0);
+    auto v2 = mesh.insertVertex(0, 1, 0);
+    mesh.insertFace(v0, v1, v2);
+
+    // Prime the cache
+    EXPECT_EQ(mesh.vertexFaces(v0).size(), 1u);
+
+    // Add a new face referencing v0; cache must be rebuilt
+    auto v3 = mesh.insertVertex(1, 1, 0);
+    auto f1 = mesh.insertFace(v0, v2, v3);
+
+    EXPECT_EQ(mesh.vertexFaces(v0).size(), 2u);
+    const auto& v0Faces = mesh.vertexFaces(v0);
+    EXPECT_TRUE(
+        std::find(v0Faces.begin(), v0Faces.end(), f1) != v0Faces.end());
+}
+
+TEST(Mesh, VertexFacesOutOfRange)
+{
+    Mesh3f mesh;
+    EXPECT_THROW(mesh.vertexFaces(0), std::out_of_range);
+
+    mesh.insertVertex(0, 0, 0);
+    EXPECT_THROW(mesh.vertexFaces(1), std::out_of_range);
+}
