@@ -101,6 +101,35 @@ TEST(Vertex, CompoundAssignmentDivideReturnsVertexRef)
     EXPECT_EQ(a.normal, n);
 }
 
+TEST(Vertex, AssignFromVertexCopiesTraits)
+{
+    // Vertex = Vertex uses the compiler-generated copy-assignment, which copies
+    // all fields including trait members.
+    TestVertex a{1, 1, 1};
+    const Vec3f n{0, 1, 0};
+    a.normal = n;
+
+    TestVertex b{2, 2, 2};
+    b = a;
+
+    EXPECT_EQ(b, TestVertex(1, 1, 1));
+    EXPECT_EQ(b.normal, n);
+}
+
+TEST(Vertex, AssignFromVecUpdatesCoordinatesOnly)
+{
+    // Vertex = Vec uses the inherited Vec::operator=, which assigns only the
+    // coordinate values and leaves trait fields untouched.
+    TestVertex a{1, 1, 1};
+    const Vec3f n{0, 1, 0};
+    a.normal = n;
+
+    a = Vec3f{2, 2, 2};
+
+    EXPECT_EQ(a, TestVertex(2, 2, 2));
+    EXPECT_EQ(a.normal, n);  // trait preserved
+}
+
 TEST(Vertex, NormalTrait)
 {
     TestVertex v;
