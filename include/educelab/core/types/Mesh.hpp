@@ -11,6 +11,7 @@
 
 #include "educelab/core/types/Color.hpp"
 #include "educelab/core/types/Vec.hpp"
+#include "educelab/core/utils/Math.hpp"
 
 namespace educelab
 {
@@ -313,5 +314,45 @@ private:
 using Mesh3f = Mesh<float, 3>;
 /** @brief 3D 64-bit floating-point mesh */
 using Mesh3d = Mesh<double, 3>;
+
+/**
+ * @brief Compute an angle-weighted vertex normal
+ *
+ * Returns the normalized, angle-weighted average of the face normals incident
+ * to vertex @p idx. The weight for each face is the interior angle of that
+ * face at the given vertex. Uses the mesh's lazy adjacency index and face
+ * normal cache; result is not cached. Only defined for 3D meshes.
+ *
+ * @tparam T   Numeric type of the mesh
+ * @tparam Dims Must be 3
+ * @tparam VertexTraits Vertex traits type
+ */
+template <
+    typename T,
+    std::size_t Dims,
+    typename VertexTraits,
+    std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
+[[nodiscard]] auto vertexNormal(
+    const Mesh<T, Dims, VertexTraits>& mesh, std::size_t idx) -> Vec<T, Dims>
+{
+    static_assert(Dims == 3, "vertexNormal requires Dims == 3");
+
+    Vec<T, Dims> weighted{};
+    for (auto fi : mesh.vertexFaces(idx)) {
+        const auto& f = mesh.face(fi);
+        // Find position of idx within this face
+        auto it = std::find(f.begin(), f.end(), idx);
+        auto pos = static_cast<std::size_t>(std::distance(f.begin(), it));
+        auto n = f.size();
+        auto prev = f[(pos + n - 1) % n];
+        auto next = f[(pos + 1) % n];
+        const auto& v  = mesh.vertex(idx);
+        const auto& vp = mesh.vertex(prev);
+        const auto& vn = mesh.vertex(next);
+        auto angle = interior_angle(vp - v, vn - v);
+        weighted += mesh.faceNormal(fi) * angle;
+    }
+    return normalize(weighted);
+}
 
 }  // namespace educelab

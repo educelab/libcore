@@ -226,3 +226,53 @@ TEST(Mesh, FaceNormalInvalidatedAfterInsertVertex)
     auto n1 = mesh.faceNormal(f0);
     EXPECT_EQ(n0, n1);
 }
+
+TEST(Mesh, VertexNormalSingleFace)
+{
+    // A single XY-plane triangle: all vertices should have normal +Z
+    Mesh3f mesh;
+    auto v0 = mesh.insertVertex(0, 0, 0);
+    auto v1 = mesh.insertVertex(1, 0, 0);
+    auto v2 = mesh.insertVertex(0, 1, 0);
+    mesh.insertFace(v0, v1, v2);
+
+    auto n = vertexNormal(mesh, v0);
+    EXPECT_NEAR(n[0], 0.f, 1e-5f);
+    EXPECT_NEAR(n[1], 0.f, 1e-5f);
+    EXPECT_NEAR(n[2], 1.f, 1e-5f);
+}
+
+TEST(Mesh, VertexNormalSharedVertexWeighted)
+{
+    // Two right triangles sharing an edge, both in XY plane — shared vertex
+    // receives contributions from both faces; result should still be +Z
+    Mesh3f mesh;
+    auto v0 = mesh.insertVertex(0, 0, 0);
+    auto v1 = mesh.insertVertex(1, 0, 0);
+    auto v2 = mesh.insertVertex(0, 1, 0);
+    auto v3 = mesh.insertVertex(1, 1, 0);
+    mesh.insertFace(v0, v1, v2);
+    mesh.insertFace(v1, v3, v2);
+
+    // All vertices should have normal pointing in +Z
+    for (auto vi : {v0, v1, v2, v3}) {
+        auto n = vertexNormal(mesh, vi);
+        EXPECT_NEAR(n[2], 1.f, 1e-5f) << "vertex " << vi;
+    }
+}
+
+TEST(Mesh, VertexNormalBoundaryVertex)
+{
+    // A vertex that only belongs to one face — should equal the face normal
+    Mesh3f mesh;
+    auto v0 = mesh.insertVertex(0, 0, 0);
+    auto v1 = mesh.insertVertex(1, 0, 0);
+    auto v2 = mesh.insertVertex(0, 0, 1);
+    mesh.insertFace(v0, v1, v2);
+
+    auto fn = mesh.faceNormal(0);
+    auto vn = vertexNormal(mesh, v0);
+    for (std::size_t i = 0; i < 3; ++i) {
+        EXPECT_NEAR(vn[i], fn[i], 1e-5f);
+    }
+}
