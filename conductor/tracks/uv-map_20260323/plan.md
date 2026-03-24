@@ -3,7 +3,7 @@
 **Track ID:** uv-map_20260323
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-03-23
-**Status:** [ ] Not Started
+**Status:** [x] Complete
 
 ## Overview
 
@@ -98,8 +98,8 @@ corresponding test in `tests/`.
 
 ## Final Verification
 
-- [ ] All acceptance criteria in `spec.md` met
-- [ ] All tests passing (`ctest`)
+- [x] All acceptance criteria in `spec.md` met
+- [x] All tests passing (`ctest`)
 - [ ] Doxygen builds cleanly for `UVMap` public API
 - [ ] Ready for PR review
 
