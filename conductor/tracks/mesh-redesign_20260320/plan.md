@@ -32,20 +32,20 @@ detection idiom in a future track.
 
 ### Tasks
 
-- [ ] **Task 1.1**: Update `TestMesh.cpp` — replace `Vertex.NormalTrait` and
+- [x] **Task 1.1**: Update `TestMesh.cpp` — replace `Vertex.NormalTrait` and
       `Vertex.ColorTrait` tests with equivalents using a custom traits type
       that composes `WithNormal` and `WithColor`; confirm remaining tests
       compile and pass
-- [ ] **Task 1.2**: Add `traits::WithNormal<T,Dims>` and `traits::WithColor`
+- [x] **Task 1.2**: Add `traits::WithNormal<T,Dims>` and `traits::WithColor`
       to `Mesh.hpp`; document that these are composable via multiple
       inheritance and are detected by I/O functions via `if constexpr`
-- [ ] **Task 1.3**: Empty `DefaultVertexTraits`; update its Doxygen comment
+- [x] **Task 1.3**: Empty `DefaultVertexTraits`; update its Doxygen comment
       to direct users to `WithNormal`, `WithColor`, and custom compositions
 
 ### Verification
 
-- [ ] `ctest` passes with no regressions
-- [ ] Build succeeds in Debug and Release
+- [x] `ctest` passes with no regressions
+- [x] Build succeeds in Debug and Release
 
 ---
 
