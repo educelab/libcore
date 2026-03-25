@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 
+#include "educelab/core/io/MeshIO.hpp"
 #include "educelab/core/io/MeshIO_OBJ.hpp"
 #include "educelab/core/io/MeshIO_PLY.hpp"
 #include "educelab/core/types/Mesh.hpp"
@@ -851,4 +852,119 @@ TEST_F(PLYTest, ReadMissingFile_Throws)
     Mesh3f dst;
     EXPECT_THROW(
         read_ply(dir / "nonexistent.ply", dst), std::runtime_error);
+}
+
+//------------------------------------------------------------------------------
+// Task 4.1 — read_mesh / write_mesh convenience facade tests
+//------------------------------------------------------------------------------
+
+class MeshIOTest : public ::testing::Test
+{
+protected:
+    fs::path dir;
+
+    void SetUp() override
+    {
+        dir = fs::temp_directory_path() / "educelab_core_meshio_facadetest";
+        fs::create_directories(dir);
+    }
+
+    void TearDown() override { fs::remove_all(dir); }
+};
+
+TEST_F(MeshIOTest, OBJExtension_DispatchesToOBJ)
+{
+    const auto src  = make_triangle();
+    const auto path = dir / "dispatch.obj";
+    write_mesh(path, src);
+    ASSERT_TRUE(fs::exists(path));
+
+    Mesh3f dst;
+    read_mesh(path, dst);
+    EXPECT_EQ(dst.num_vertices(), 3u);
+    EXPECT_EQ(dst.num_faces(), 1u);
+}
+
+TEST_F(MeshIOTest, PLYExtension_DispatchesToPLY)
+{
+    const auto src  = make_triangle();
+    const auto path = dir / "dispatch.ply";
+    write_mesh(path, src);
+    ASSERT_TRUE(fs::exists(path));
+
+    Mesh3f dst;
+    read_mesh(path, dst);
+    EXPECT_EQ(dst.num_vertices(), 3u);
+    EXPECT_EQ(dst.num_faces(), 1u);
+}
+
+TEST_F(MeshIOTest, UnsupportedExtension_Throws)
+{
+    const auto src  = make_triangle();
+    const auto path = dir / "model.stl";
+    EXPECT_THROW(write_mesh(path, src), std::runtime_error);
+
+    Mesh3f dst;
+    EXPECT_THROW(read_mesh(path, dst), std::runtime_error);
+}
+
+TEST_F(MeshIOTest, OBJ_WithUVMap_DispatchesTier2)
+{
+    const auto src_mesh = make_triangle();
+    const auto src_uv   = make_triangle_uvmap(src_mesh);
+    const auto path     = dir / "uv.obj";
+    write_mesh(path, src_mesh, src_uv);
+
+    Mesh3f dst_mesh;
+    UVMap2f dst_uv;
+    read_mesh(path, dst_mesh, dst_uv);
+    EXPECT_EQ(dst_uv.size(), 3u);
+}
+
+TEST_F(MeshIOTest, PLY_WithUVMap_DispatchesTier2)
+{
+    const auto src_mesh = make_triangle();
+    const auto src_uv   = make_triangle_uvmap(src_mesh);
+    const auto path     = dir / "uv.ply";
+    write_mesh(path, src_mesh, src_uv);
+
+    Mesh3f dst_mesh;
+    UVMap2f dst_uv;
+    std::vector<fs::path> dst_textures;
+    read_mesh(path, dst_mesh, dst_uv, dst_textures);
+    EXPECT_EQ(dst_uv.size(), 3u);
+    EXPECT_TRUE(dst_textures.empty());
+}
+
+TEST_F(MeshIOTest, OBJ_WithUVMapAndTexturePath_DispatchesTier3)
+{
+    const auto src_mesh = make_triangle();
+    const auto src_uv   = make_triangle_uvmap(src_mesh);
+    const auto tex      = fs::path("texture.png");
+    const auto path     = dir / "tex.obj";
+    write_mesh(path, src_mesh, src_uv, tex);
+    ASSERT_TRUE(fs::exists(fs::path(path).replace_extension(".mtl")));
+
+    Mesh3f dst_mesh;
+    UVMap2f dst_uv;
+    std::vector<fs::path> dst_textures;
+    read_mesh(path, dst_mesh, dst_uv, dst_textures);
+    ASSERT_EQ(dst_textures.size(), 1u);
+    EXPECT_EQ(dst_textures[0], tex);
+}
+
+TEST_F(MeshIOTest, PLY_WithUVMapAndTexturePath_DispatchesTier3)
+{
+    const auto src_mesh = make_triangle();
+    const auto src_uv   = make_triangle_uvmap(src_mesh);
+    const auto tex      = fs::path("texture.png");
+    const auto path     = dir / "tex.ply";
+    write_mesh(path, src_mesh, src_uv, tex);
+
+    Mesh3f dst_mesh;
+    UVMap2f dst_uv;
+    std::vector<fs::path> dst_textures;
+    read_mesh(path, dst_mesh, dst_uv, dst_textures);
+    ASSERT_EQ(dst_textures.size(), 1u);
+    EXPECT_EQ(dst_textures[0], tex);
 }

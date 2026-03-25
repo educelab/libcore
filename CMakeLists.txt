@@ -28,6 +28,7 @@ set(public_hdrs
     include/educelab/core.hpp
     include/educelab/core/Version.hpp
     include/educelab/core/io/ImageIO.hpp
+    include/educelab/core/io/MeshIO.hpp
     include/educelab/core/io/MeshIO_OBJ.hpp
     include/educelab/core/io/MeshIO_PLY.hpp
     include/educelab/core/types/Color.hpp
