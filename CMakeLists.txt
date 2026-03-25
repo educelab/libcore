@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.15...4.3 FATAL_ERROR)
 project(EduceLabCore VERSION 0.3.0)
 
 # Setup project directories
