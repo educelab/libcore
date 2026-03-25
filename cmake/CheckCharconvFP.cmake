@@ -11,6 +11,19 @@
 # to_chars unconditionally and requires a platform where it is available.
 
 # --- from_chars (float) ------------------------------------------------------
+include(CMakePushCheckState)
+include(CheckCXXSourceCompiles)
+
+# Save the original CMake state
+cmake_push_check_state(RESET)
+
+# Require C++17
+if(MSVC)
+    set(CMAKE_REQUIRED_FLAGS "/std:c++17")
+else()
+    set(CMAKE_REQUIRED_FLAGS "-std=c++17")
+endif()
+
 set(_from_chars_code [[
     #include <charconv>
 
@@ -28,7 +41,7 @@ if(CXX_CHARCONV_FP_FROM_CHARS)
 else()
     message(STATUS "Float from_chars: std::sto[f|d|ld] (fallback)")
     set(EDUCE_CORE_NEED_CHARCONV_FP TRUE CACHE BOOL
-        "std::from_chars unavailable for float; to_numeric uses std::sto fallbacks")
+        "std::from_chars unavailable for float; to_numeric uses std::sto[f|d|ld] fallbacks")
     add_compile_definitions(EDUCE_CORE_NEED_CHARCONV_FP)
 endif()
 
@@ -49,5 +62,8 @@ check_cxx_source_compiles("${_to_chars_code}" CXX_CHARCONV_FP_TO_CHARS)
 if(CXX_CHARCONV_FP_TO_CHARS)
     message(STATUS "Float to_chars:   std::to_chars (native)")
 else()
-    message(STATUS "Float to_chars:   unavailable — to_string_view requires a platform where std::to_chars supports float")
+    message(WARNING "Float to_chars:   unavailable")
 endif()
+
+# Restore original CMake state
+cmake_pop_check_state()

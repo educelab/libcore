@@ -221,6 +221,12 @@ public:
         return idx;
     }
 
+    /** @brief Number of vertices in the mesh */
+    [[nodiscard]] auto num_vertices() const noexcept -> std::size_t
+    {
+        return vertices_.size();
+    }
+
     /** @brief Get a vertex by index */
     [[nodiscard]] auto vertex(std::size_t idx) const -> const Vertex&
     {
@@ -261,6 +267,12 @@ public:
         face_normal_cache_.emplace_back(std::nullopt);
         adjacency_valid_ = false;
         return idx;
+    }
+
+    /** @brief Number of faces in the mesh */
+    [[nodiscard]] auto num_faces() const noexcept -> std::size_t
+    {
+        return faces_.size();
     }
 
     /** @brief Get a face by index */
