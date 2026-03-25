@@ -61,6 +61,9 @@ following files can be installed in this way:
     - Requires:
       - `types/Vec.hpp`
       - `types/Color.hpp`
+- `types/UVMap.hpp`
+    - Requires:
+      - `types/Vec.hpp`
 
 
 ## Usage
@@ -111,6 +114,90 @@ std::cout << p << "\n";          // [1, 2, 3, 1]
 
 See [examples/MatExample.cpp](examples/MatExample.cpp) for more usage
 examples.
+
+### Mesh class
+
+```c++
+#include "educelab/core/types/Mesh.hpp"
+
+// Default mesh: 3D float positions, no extra traits
+Mesh<float, 3> mesh;
+
+auto v0 = mesh.insert_vertex(0.F, 0.F, 0.F);
+auto v1 = mesh.insert_vertex(1.F, 0.F, 0.F);
+auto v2 = mesh.insert_vertex(1.F, 1.F, 0.F);
+auto v3 = mesh.insert_vertex(0.F, 1.F, 0.F);
+
+// N-gon faces are supported
+auto f0 = mesh.insert_face(v0, v1, v2, v3);
+
+std::cout << mesh.vertex(v0) << "\n";       // [0, 0, 0]
+std::cout << mesh.face_normal(f0) << "\n";  // [0, 0, 1]
+
+// Adjacency index (lazy, cached)
+for (auto fi : mesh.vertex_faces(v1)) {
+    std::cout << "face " << fi << "\n";     // face 0
+}
+```
+
+Opt-in per-vertex traits compose via multiple inheritance:
+
+```c++
+#include "educelab/core/types/Mesh.hpp"
+
+struct MyTraits : traits::WithNormal<float, 3>, traits::WithColor {};
+using RichMesh = Mesh<float, 3, MyTraits>;
+
+RichMesh rich;
+auto v = rich.insert_vertex(0.F, 0.F, 0.F);
+rich.vertex(v).normal = Vec3f{0.F, 0.F, 1.F};
+rich.vertex(v).color  = Color::U8C3{255, 0, 0};
+```
+
+See [examples/MeshExample.cpp](examples/MeshExample.cpp) for more usage examples.
+
+### UVMap class
+
+`UVMap` stores per-wedge UV coordinates as a flat coordinate pool plus a
+per-face, per-corner index into that pool — mirroring the OBJ/PLY `vt` index
+structure. Multiple corners may reference the same pool entry; the same vertex
+can map to different UVs in adjacent faces (seam support).
+
+```c++
+#include "educelab/core/types/UVMap.hpp"
+
+UVMap<float, 2> uvmap;
+
+// Insert coordinates into the pool
+auto uv0 = uvmap.insert(0.0F, 0.0F);
+auto uv1 = uvmap.insert(1.0F, 0.0F);
+auto uv2 = uvmap.insert(1.0F, 1.0F);
+
+// Assign pool entries to wedges (face, corner, pool index)
+uvmap.map(0, 0, uv0);
+uvmap.map(0, 1, uv1);
+uvmap.map(0, 2, uv2);
+
+// Look up the coordinate for a wedge
+const auto& c = uvmap.get_coordinate(0, 2);
+std::cout << "[" << c[0] << ", " << c[1] << "]\n";  // [1, 1]
+```
+
+Attach a chart index to each coordinate for multi-texture atlases:
+
+```c++
+using ChartedUVMap = UVMap<float, 2, traits::WithChart>;
+ChartedUVMap charted;
+
+ChartedUVMap::Coordinate c(0.25F, 0.25F);
+c.chart = 1;
+auto idx = charted.insert(c);
+charted.map(0, 0, idx);
+
+std::cout << charted.get_coordinate(0, 0).chart << "\n";  // 1
+```
+
+See [examples/MeshExample.cpp](examples/MeshExample.cpp) for more usage examples.
 
 ### Image class
 

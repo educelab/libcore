@@ -21,3 +21,6 @@ target_link_libraries(educelab_core_MatExample educelab::core)
 
 add_executable(educelab_core_CachingExample CachingExample.cpp)
 target_link_libraries(educelab_core_CachingExample educelab::core)
+
+add_executable(educelab_core_MeshExample MeshExample.cpp)
+target_link_libraries(educelab_core_MeshExample educelab::core)

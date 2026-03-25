@@ -23,6 +23,7 @@ set(tests
     src/TestSignals.cpp
     src/TestString.cpp
     src/TestUuid.cpp
+    src/TestUVMap.cpp
     src/TestVec.cpp
     src/TestVersion.cpp
 )
