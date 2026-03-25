@@ -3,7 +3,7 @@
 /** @file */
 
 #include <limits>
-#include <map>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -54,7 +54,16 @@ template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
     // (original_vertex_idx, uv_pool_idx) → new_vertex_idx
     // SIZE_MAX is used as the sentinel "no UV mapping"
     constexpr auto kNoUV = std::numeric_limits<std::size_t>::max();
-    std::map<std::pair<std::size_t, std::size_t>, std::size_t> vertex_map;
+    // Hash for std::pair<size_t,size_t>: combines both halves using a
+    // multiplicative Fibonacci hash to avoid clustering on sequential keys.
+    auto pair_hash = [](const std::pair<std::size_t, std::size_t>& p) noexcept {
+        auto h = std::hash<std::size_t>{};
+        return h(p.first) ^ (h(p.second) * 2654435761ULL);
+    };
+    std::unordered_map<
+        std::pair<std::size_t, std::size_t>,
+        std::size_t,
+        decltype(pair_hash)> vertex_map(0, pair_hash);
 
     for (std::size_t fi = 0; fi < mesh.num_faces(); ++fi) {
         const auto& face = mesh.face(fi);

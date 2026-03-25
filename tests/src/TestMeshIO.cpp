@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 
 #include "educelab/core/io/MeshIO.hpp"
 #include "educelab/core/io/MeshIO_OBJ.hpp"
@@ -107,7 +108,9 @@ protected:
 
     void SetUp() override
     {
-        dir = fs::temp_directory_path() / "educelab_core_meshio_objtest";
+        std::ostringstream ss;
+        ss << std::hex << reinterpret_cast<std::uintptr_t>(this);
+        dir = fs::temp_directory_path() / ("educelab_meshio_" + ss.str());
         fs::create_directories(dir);
     }
 
@@ -182,9 +185,18 @@ TEST_F(OBJTest, PositionsOnly)
 
     ASSERT_EQ(dst.num_vertices(), 3u);
     ASSERT_EQ(dst.num_faces(), 1u);
+    // v0 = (0,0,0)
     EXPECT_NEAR(dst.vertex(0)[0], 0.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(0)[1], 0.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(0)[2], 0.f, 1e-5f);
+    // v1 = (1,0,0)
     EXPECT_NEAR(dst.vertex(1)[0], 1.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(1)[1], 0.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(1)[2], 0.f, 1e-5f);
+    // v2 = (0,1,0)
+    EXPECT_NEAR(dst.vertex(2)[0], 0.f, 1e-5f);
     EXPECT_NEAR(dst.vertex(2)[1], 1.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(2)[2], 0.f, 1e-5f);
     EXPECT_EQ(dst.face(0), (Mesh3f::Face{0, 1, 2}));
 }
 
@@ -248,6 +260,16 @@ TEST_F(OBJTest, PositionsWithColors_InlineRGB)
     EXPECT_NEAR(c0[0], 1.f, 1e-5f);
     EXPECT_NEAR(c0[1], 0.f, 1e-5f);
     EXPECT_NEAR(c0[2], 0.f, 1e-5f);
+    ASSERT_TRUE(dst.vertex(1).color.has_value());
+    const auto c1 = dst.vertex(1).color.value<Color::F32C3>();
+    EXPECT_NEAR(c1[0], 0.f, 1e-5f);
+    EXPECT_NEAR(c1[1], 1.f, 1e-5f);
+    EXPECT_NEAR(c1[2], 0.f, 1e-5f);
+    ASSERT_TRUE(dst.vertex(2).color.has_value());
+    const auto c2 = dst.vertex(2).color.value<Color::F32C3>();
+    EXPECT_NEAR(c2[0], 0.f, 1e-5f);
+    EXPECT_NEAR(c2[1], 0.f, 1e-5f);
+    EXPECT_NEAR(c2[2], 1.f, 1e-5f);
 }
 
 TEST_F(OBJTest, PositionsWithUVs_NoTexture)
@@ -435,6 +457,14 @@ TEST_F(OBJTest, ReadMissingFile_Throws)
         read_obj(dir / "nonexistent.obj", dst), std::runtime_error);
 }
 
+TEST_F(OBJTest, WriteMissingDir_Throws)
+{
+    const auto src  = make_triangle();
+    EXPECT_THROW(
+        write_obj(dir / "nonexistent_subdir" / "out.obj", src),
+        std::runtime_error);
+}
+
 TEST_F(OBJTest, MTLPresent_NoMapKd_EmptyTexturePaths)
 {
     // Write an OBJ that references a MTL but the MTL has no map_Kd
@@ -462,6 +492,89 @@ TEST_F(OBJTest, MTLPresent_NoMapKd_EmptyTexturePaths)
     read_obj(path, dst_mesh, dst_uv, dst_textures);
 
     EXPECT_TRUE(dst_textures.empty());
+}
+
+TEST_F(OBJTest, CombinedNormalsAndUVs_VTVNFormat)
+{
+    // Build a normal-carrying mesh with UVs so write_obj emits v/vt/vn face refs
+    NormalMesh src;
+    (void)src.insert_vertex(0.f, 0.f, 0.f);
+    (void)src.insert_vertex(1.f, 0.f, 0.f);
+    (void)src.insert_vertex(0.f, 1.f, 0.f);
+    src.vertex(0).normal = Vec3f{0, 0, 1};
+    src.vertex(1).normal = Vec3f{0, 0, 1};
+    src.vertex(2).normal = Vec3f{0, 0, 1};
+    (void)src.insert_face(0u, 1u, 2u);
+
+    UVMap2f src_uv;
+    (void)src_uv.insert(0.f, 0.f);
+    (void)src_uv.insert(1.f, 0.f);
+    (void)src_uv.insert(0.f, 1.f);
+    src_uv.map(0, 0, 0); src_uv.map(0, 1, 1); src_uv.map(0, 2, 2);
+
+    const auto path = obj("vtvn");
+    write_obj(path, src, src_uv);
+
+    // Verify file contains v/vt/vn face format
+    std::ifstream f(path);
+    std::string line;
+    bool found_vtvn = false;
+    while (std::getline(f, line)) {
+        if (line.rfind("f ", 0) == 0 && line.find('/') != std::string::npos) {
+            // Check format is v/vt/vn (two slashes per token, no consecutive //)
+            const auto tok = split(std::string_view(line));
+            if (tok.size() >= 2) {
+                const auto ref = std::string(tok[1]);
+                const auto first  = ref.find('/');
+                const auto second = ref.find('/', first + 1);
+                if (first != std::string::npos &&
+                    second != std::string::npos &&
+                    second > first + 1) {
+                    found_vtvn = true;
+                }
+            }
+        }
+    }
+    EXPECT_TRUE(found_vtvn) << "Expected v/vt/vn face reference format";
+
+    // Round-trip UV and normals
+    NormalMesh dst_mesh;
+    UVMap2f dst_uv;
+    read_obj(path, dst_mesh, dst_uv);
+    ASSERT_EQ(dst_mesh.num_vertices(), 3u);
+    ASSERT_EQ(dst_uv.size(), 3u);
+    ASSERT_TRUE(dst_mesh.vertex(0).normal.has_value());
+    EXPECT_NEAR((*dst_mesh.vertex(0).normal)[2], 1.f, 1e-5f);
+}
+
+TEST_F(OBJTest, PositionsWithNormalsAndColors)
+{
+    NCMesh src;
+    (void)src.insert_vertex(0.f, 0.f, 0.f);
+    (void)src.insert_vertex(1.f, 0.f, 0.f);
+    (void)src.insert_vertex(0.f, 1.f, 0.f);
+    src.vertex(0).normal = Vec3f{0, 0, 1};
+    src.vertex(1).normal = Vec3f{0, 0, 1};
+    src.vertex(2).normal = Vec3f{0, 0, 1};
+    src.vertex(0).color = Color::F32C3{1.f, 0.f, 0.f};
+    src.vertex(1).color = Color::F32C3{0.f, 1.f, 0.f};
+    src.vertex(2).color = Color::F32C3{0.f, 0.f, 1.f};
+    (void)src.insert_face(0u, 1u, 2u);
+
+    const auto path = obj("nc_mesh");
+    write_obj(path, src);
+
+    NCMesh dst;
+    read_obj(path, dst);
+
+    ASSERT_EQ(dst.num_vertices(), 3u);
+    ASSERT_TRUE(dst.vertex(0).normal.has_value());
+    EXPECT_NEAR((*dst.vertex(0).normal)[2], 1.f, 1e-5f);
+    ASSERT_TRUE(dst.vertex(0).color.has_value());
+    const auto c0 = dst.vertex(0).color.value<Color::F32C3>();
+    EXPECT_NEAR(c0[0], 1.f, 1e-5f);
+    EXPECT_NEAR(c0[1], 0.f, 1e-5f);
+    EXPECT_NEAR(c0[2], 0.f, 1e-5f);
 }
 
 //------------------------------------------------------------------------------
@@ -598,6 +711,18 @@ TEST(ExpandAtSeams, GeometryIdentical_AllOriginalPositions)
     }
 }
 
+TEST(ExpandAtSeams, EmptyMesh_ReturnsEmptyExpanded)
+{
+    Mesh3f mesh;  // zero vertices, zero faces
+    UVMap2f uv;
+
+    const auto [exp, flat] = expand_at_seams(mesh, uv);
+
+    EXPECT_EQ(exp.num_vertices(), 0u);
+    EXPECT_EQ(exp.num_faces(), 0u);
+    EXPECT_TRUE(flat.empty());
+}
+
 //------------------------------------------------------------------------------
 // PLY Round-Trip Test Fixture
 //------------------------------------------------------------------------------
@@ -609,7 +734,9 @@ protected:
 
     void SetUp() override
     {
-        dir = fs::temp_directory_path() / "educelab_core_meshio_plytest";
+        std::ostringstream ss;
+        ss << std::hex << reinterpret_cast<std::uintptr_t>(this);
+        dir = fs::temp_directory_path() / ("educelab_meshio_" + ss.str());
         fs::create_directories(dir);
     }
 
@@ -636,9 +763,18 @@ TEST_F(PLYTest, ASCIIPositionsOnly)
 
     ASSERT_EQ(dst.num_vertices(), 3u);
     ASSERT_EQ(dst.num_faces(), 1u);
+    // v0 = (0,0,0)
     EXPECT_NEAR(dst.vertex(0)[0], 0.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(0)[1], 0.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(0)[2], 0.f, 1e-5f);
+    // v1 = (1,0,0)
     EXPECT_NEAR(dst.vertex(1)[0], 1.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(1)[1], 0.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(1)[2], 0.f, 1e-5f);
+    // v2 = (0,1,0)
+    EXPECT_NEAR(dst.vertex(2)[0], 0.f, 1e-5f);
     EXPECT_NEAR(dst.vertex(2)[1], 1.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(2)[2], 0.f, 1e-5f);
     EXPECT_EQ(dst.face(0), (Mesh3f::Face{0, 1, 2}));
 }
 
@@ -692,6 +828,11 @@ TEST_F(PLYTest, ASCIIPositionsWithColors)
     EXPECT_EQ(c1[0], 0u);
     EXPECT_EQ(c1[1], 255u);
     EXPECT_EQ(c1[2], 0u);
+    ASSERT_TRUE(dst.vertex(2).color.has_value());
+    const auto c2 = dst.vertex(2).color.value<Color::U8C3>();
+    EXPECT_EQ(c2[0], 0u);
+    EXPECT_EQ(c2[1], 0u);
+    EXPECT_EQ(c2[2], 255u);
 }
 
 TEST_F(PLYTest, NGonFace_Quad)
@@ -742,9 +883,18 @@ TEST_F(PLYTest, BinaryLittleEndian_Read)
 
     ASSERT_EQ(dst.num_vertices(), 3u);
     ASSERT_EQ(dst.num_faces(), 1u);
+    // v0 = (0,0,0)
     EXPECT_NEAR(dst.vertex(0)[0], 0.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(0)[1], 0.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(0)[2], 0.f, 1e-5f);
+    // v1 = (1,0,0)
     EXPECT_NEAR(dst.vertex(1)[0], 1.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(1)[1], 0.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(1)[2], 0.f, 1e-5f);
+    // v2 = (0,1,0)
+    EXPECT_NEAR(dst.vertex(2)[0], 0.f, 1e-5f);
     EXPECT_NEAR(dst.vertex(2)[1], 1.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(2)[2], 0.f, 1e-5f);
     EXPECT_EQ(dst.face(0), (Mesh3f::Face{0, 1, 2}));
 }
 
@@ -781,6 +931,11 @@ TEST_F(PLYTest, WriteWithUVMap_SeamExpansion)
     EXPECT_EQ(dst_mesh.num_faces(), 2u);
     EXPECT_EQ(dst_uv.size(), 5u);  // one UV pool entry per expanded vertex
     EXPECT_TRUE(dst_textures.empty());
+
+    // Verify at least one UV coordinate value:
+    // pool[0] (mapped to v0, corner 0 of face 0) should be (0, 0)
+    EXPECT_NEAR(dst_uv.at(0)[0], 0.f, 1e-5f);
+    EXPECT_NEAR(dst_uv.at(0)[1], 0.f, 1e-5f);
 }
 
 TEST_F(PLYTest, WriteWithUVMap_TexturePath_CommentInHeader)
@@ -854,6 +1009,47 @@ TEST_F(PLYTest, ReadMissingFile_Throws)
         read_ply(dir / "nonexistent.ply", dst), std::runtime_error);
 }
 
+TEST_F(PLYTest, WriteMissingDir_Throws)
+{
+    const auto src  = make_triangle();
+    EXPECT_THROW(
+        write_ply(dir / "nonexistent_subdir" / "out.ply", src),
+        std::runtime_error);
+}
+
+TEST_F(PLYTest, MalformedHeader_Throws)
+{
+    const auto path = ply("bad_header");
+    {
+        std::ofstream f(path);
+        f << "not_a_ply_file\nelement vertex 3\n";
+    }
+    Mesh3f dst;
+    EXPECT_THROW(read_ply(path, dst), std::runtime_error);
+}
+
+TEST_F(PLYTest, BinaryBigEndian_Throws)
+{
+    const auto path = ply("big_endian");
+    {
+        std::ofstream f(path, std::ios::binary);
+        f << "ply\n"
+          << "format binary_big_endian 1.0\n"
+          << "element vertex 3\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "element face 1\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n";
+        // Some placeholder data (will never be read)
+        const float verts[9] = {};
+        f.write(reinterpret_cast<const char*>(verts), sizeof(verts));
+    }
+    Mesh3f dst;
+    EXPECT_THROW(read_ply(path, dst), std::runtime_error);
+}
+
 //------------------------------------------------------------------------------
 // Task 4.1 — read_mesh / write_mesh convenience facade tests
 //------------------------------------------------------------------------------
@@ -865,7 +1061,9 @@ protected:
 
     void SetUp() override
     {
-        dir = fs::temp_directory_path() / "educelab_core_meshio_facadetest";
+        std::ostringstream ss;
+        ss << std::hex << reinterpret_cast<std::uintptr_t>(this);
+        dir = fs::temp_directory_path() / ("educelab_meshio_" + ss.str());
         fs::create_directories(dir);
     }
 
@@ -906,6 +1104,14 @@ TEST_F(MeshIOTest, UnsupportedExtension_Throws)
 
     Mesh3f dst;
     EXPECT_THROW(read_mesh(path, dst), std::runtime_error);
+}
+
+TEST_F(MeshIOTest, WriteMissingDir_Throws)
+{
+    const auto src  = make_triangle();
+    EXPECT_THROW(
+        write_mesh(dir / "nonexistent_subdir" / "out.obj", src),
+        std::runtime_error);
 }
 
 TEST_F(MeshIOTest, OBJ_WithUVMap_DispatchesTier2)

@@ -219,6 +219,10 @@ void read_ply_impl(
     }
 
     const auto hdr = parse_ply_header(file);
+    if (hdr.format == PLYHeader::Format::BinaryBE) {
+        throw std::runtime_error(
+            "read_ply: binary big-endian format is not supported");
+    }
     const bool binary = (hdr.format == PLYHeader::Format::BinaryLE);
 
     // Populate texture paths from header
@@ -341,10 +345,22 @@ void read_ply_impl(
             // Count
             const auto count = read_ply_binary_prop<std::size_t>(
                 file, hdr.face_count_type);
+            if (count > 256) {
+                throw std::runtime_error(
+                    "read_ply: face vertex count " + std::to_string(count) +
+                    " exceeds maximum of 256");
+            }
             face.reserve(count);
             for (std::size_t k = 0; k < count; ++k) {
-                face.push_back(read_ply_binary_prop<std::size_t>(
-                    file, hdr.face_index_type));
+                const auto idx = read_ply_binary_prop<std::size_t>(
+                    file, hdr.face_index_type);
+                if (idx >= hdr.n_vertices) {
+                    throw std::runtime_error(
+                        "read_ply: face vertex index " + std::to_string(idx) +
+                        " out of range (n_vertices=" +
+                        std::to_string(hdr.n_vertices) + ")");
+                }
+                face.push_back(idx);
             }
         } else {
             std::string fline;
@@ -355,9 +371,21 @@ void read_ply_impl(
             const auto toks = split(std::string_view(fline));
             if (toks.empty()) continue;
             const auto count = to_numeric<std::size_t>(toks[0]);
+            if (count > 256) {
+                throw std::runtime_error(
+                    "read_ply: face vertex count " + std::to_string(count) +
+                    " exceeds maximum of 256");
+            }
             face.reserve(count);
             for (std::size_t k = 1; k <= count && k < toks.size(); ++k) {
-                face.push_back(to_numeric<std::size_t>(toks[k]));
+                const auto idx = to_numeric<std::size_t>(toks[k]);
+                if (idx >= hdr.n_vertices) {
+                    throw std::runtime_error(
+                        "read_ply: face vertex index " + std::to_string(idx) +
+                        " out of range (n_vertices=" +
+                        std::to_string(hdr.n_vertices) + ")");
+                }
+                face.push_back(idx);
             }
         }
 
@@ -370,6 +398,105 @@ void read_ply_impl(
                 uvmap->map(new_fi, ci, face[ci]);
             }
         }
+    }
+}
+
+/**
+ * @brief Write the PLY ASCII header to @p file
+ *
+ * Shared by all write_ply tiers. The @p texture_comment parameter may be
+ * empty (no @c comment TextureFile line) or contain a path string.
+ * The @p has_uvs flag controls whether @c s and @c t properties are declared.
+ */
+template <typename T, std::size_t Dims, typename VTraits>
+void write_ply_header(
+    std::ostream& file,
+    const Mesh<T, Dims, VTraits>& mesh,
+    const std::string& texture_comment,
+    bool has_uvs)
+{
+    using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
+
+    file << "ply\n"
+         << "format ascii 1.0\n";
+
+    if (!texture_comment.empty()) {
+        file << "comment TextureFile " << texture_comment << '\n';
+    }
+
+    file << "element vertex " << mesh.num_vertices() << '\n'
+         << "property float x\n"
+         << "property float y\n"
+         << "property float z\n";
+
+    if constexpr (has_normal<Vertex>::value) {
+        static_assert(Dims == 3, "write_ply: normals require Dims == 3");
+        file << "property float nx\n"
+             << "property float ny\n"
+             << "property float nz\n";
+    }
+    if constexpr (has_color<Vertex>::value) {
+        file << "property uchar red\n"
+             << "property uchar green\n"
+             << "property uchar blue\n";
+    }
+
+    if (has_uvs) {
+        file << "property float s\n"
+             << "property float t\n";
+    }
+
+    file << "element face " << mesh.num_faces() << '\n'
+         << "property list uchar int vertex_indices\n"
+         << "end_header\n";
+}
+
+/**
+ * @brief Write PLY ASCII vertex and face data to @p file
+ *
+ * @p flat_uvs may be empty (no UV output) or have one entry per vertex.
+ */
+template <typename T, std::size_t Dims, typename VTraits, typename UVVec>
+void write_ply_data(
+    std::ostream& file,
+    std::array<char, 128>& buf,
+    const Mesh<T, Dims, VTraits>& mesh,
+    const std::vector<UVVec>& flat_uvs)
+{
+    using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
+
+    for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
+        const auto& v = mesh.vertex(vi);
+        file << to_string_view(buf, v[0]) << ' '
+             << to_string_view(buf, v[1]) << ' '
+             << to_string_view(buf, v[2]);
+        if constexpr (has_normal<Vertex>::value) {
+            const auto n = v.normal.value_or(Vec<T, Dims>{});
+            file << ' ' << to_string_view(buf, n[0])
+                 << ' ' << to_string_view(buf, n[1])
+                 << ' ' << to_string_view(buf, n[2]);
+        }
+        if constexpr (has_color<Vertex>::value) {
+            const auto [r, g, b] = detail::color_to_u8c3(v.color);
+            file << ' ' << to_string_view(buf, r)
+                 << ' ' << to_string_view(buf, g)
+                 << ' ' << to_string_view(buf, b);
+        }
+        if (!flat_uvs.empty()) {
+            const auto& uv = flat_uvs[vi];
+            file << ' ' << to_string_view(buf, uv[0])
+                 << ' ' << to_string_view(buf, uv[1]);
+        }
+        file << '\n';
+    }
+
+    for (std::size_t fi = 0; fi < mesh.num_faces(); ++fi) {
+        const auto& face = mesh.face(fi);
+        file << face.size();
+        for (const auto vi : face) {
+            file << ' ' << to_string_view(buf, vi);
+        }
+        file << '\n';
     }
 }
 
@@ -393,7 +520,6 @@ template <typename T, std::size_t Dims, typename VTraits>
 void write_ply(
     const std::filesystem::path& path, const Mesh<T, Dims, VTraits>& mesh)
 {
-    using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
     static_assert(Dims >= 3, "write_ply requires Dims >= 3");
 
     std::ofstream file(path);
@@ -403,61 +529,10 @@ void write_ply(
     }
 
     std::array<char, 128> buf;
-
-    // Header
-    file << "ply\n"
-         << "format ascii 1.0\n"
-         << "element vertex " << mesh.num_vertices() << '\n'
-         << "property float x\n"
-         << "property float y\n"
-         << "property float z\n";
-
-    if constexpr (has_normal<Vertex>::value) {
-        static_assert(Dims == 3, "write_ply: normals require Dims == 3");
-        file << "property float nx\n"
-             << "property float ny\n"
-             << "property float nz\n";
-    }
-    if constexpr (has_color<Vertex>::value) {
-        file << "property uchar red\n"
-             << "property uchar green\n"
-             << "property uchar blue\n";
-    }
-
-    file << "element face " << mesh.num_faces() << '\n'
-         << "property list uchar int vertex_indices\n"
-         << "end_header\n";
-
-    // Vertex data
-    for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
-        const auto& v = mesh.vertex(vi);
-        file << to_string_view(buf, v[0]) << ' '
-             << to_string_view(buf, v[1]) << ' '
-             << to_string_view(buf, v[2]);
-        if constexpr (has_normal<Vertex>::value) {
-            const auto n = v.normal.value_or(Vec<T, Dims>{});
-            file << ' ' << to_string_view(buf, n[0])
-                 << ' ' << to_string_view(buf, n[1])
-                 << ' ' << to_string_view(buf, n[2]);
-        }
-        if constexpr (has_color<Vertex>::value) {
-            const auto [r, g, b] = detail::color_to_u8c3(v.color);
-            file << ' ' << to_string_view(buf, r)
-                 << ' ' << to_string_view(buf, g)
-                 << ' ' << to_string_view(buf, b);
-        }
-        file << '\n';
-    }
-
-    // Face data
-    for (std::size_t fi = 0; fi < mesh.num_faces(); ++fi) {
-        const auto& face = mesh.face(fi);
-        file << face.size();
-        for (const auto vi : face) {
-            file << ' ' << to_string_view(buf, vi);
-        }
-        file << '\n';
-    }
+    using UVVec = Vec<float, 2>;
+    const std::vector<UVVec> no_uvs;
+    detail::write_ply_header(file, mesh, "", false);
+    detail::write_ply_data(file, buf, mesh, no_uvs);
 }
 
 // =============================================================================
@@ -480,7 +555,6 @@ void write_ply(
     const Mesh<T, Dims, VTraits>& mesh,
     const UVMapT& uvmap)
 {
-    using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
     static_assert(Dims >= 3, "write_ply requires Dims >= 3");
 
     const auto [exp_mesh, flat_uvs] = expand_at_seams(mesh, uvmap);
@@ -492,67 +566,8 @@ void write_ply(
     }
 
     std::array<char, 128> buf;
-
-    // Header
-    file << "ply\n"
-         << "format ascii 1.0\n"
-         << "element vertex " << exp_mesh.num_vertices() << '\n'
-         << "property float x\n"
-         << "property float y\n"
-         << "property float z\n";
-
-    if constexpr (has_normal<Vertex>::value) {
-        static_assert(Dims == 3, "write_ply: normals require Dims == 3");
-        file << "property float nx\n"
-             << "property float ny\n"
-             << "property float nz\n";
-    }
-    if constexpr (has_color<Vertex>::value) {
-        file << "property uchar red\n"
-             << "property uchar green\n"
-             << "property uchar blue\n";
-    }
-
-    file << "property float s\n"
-         << "property float t\n"
-         << "element face " << exp_mesh.num_faces() << '\n'
-         << "property list uchar int vertex_indices\n"
-         << "end_header\n";
-
-    // Vertex data
-    for (std::size_t vi = 0; vi < exp_mesh.num_vertices(); ++vi) {
-        const auto& v = exp_mesh.vertex(vi);
-        file << to_string_view(buf, v[0]) << ' '
-             << to_string_view(buf, v[1]) << ' '
-             << to_string_view(buf, v[2]);
-        if constexpr (has_normal<Vertex>::value) {
-            const auto n = v.normal.value_or(Vec<T, Dims>{});
-            file << ' ' << to_string_view(buf, n[0])
-                 << ' ' << to_string_view(buf, n[1])
-                 << ' ' << to_string_view(buf, n[2]);
-        }
-        if constexpr (has_color<Vertex>::value) {
-            const auto [r, g, b] = detail::color_to_u8c3(v.color);
-            file << ' ' << to_string_view(buf, r)
-                 << ' ' << to_string_view(buf, g)
-                 << ' ' << to_string_view(buf, b);
-        }
-        // UV
-        const auto& uv = flat_uvs[vi];
-        file << ' ' << to_string_view(buf, uv[0])
-             << ' ' << to_string_view(buf, uv[1]);
-        file << '\n';
-    }
-
-    // Face data
-    for (std::size_t fi = 0; fi < exp_mesh.num_faces(); ++fi) {
-        const auto& face = exp_mesh.face(fi);
-        file << face.size();
-        for (const auto vi : face) {
-            file << ' ' << to_string_view(buf, vi);
-        }
-        file << '\n';
-    }
+    detail::write_ply_header(file, exp_mesh, "", true);
+    detail::write_ply_data(file, buf, exp_mesh, flat_uvs);
 }
 
 // =============================================================================
@@ -575,7 +590,6 @@ void write_ply(
     const UVMapT& uvmap,
     const std::filesystem::path& texture_path)
 {
-    using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
     static_assert(Dims >= 3, "write_ply requires Dims >= 3");
 
     const auto [exp_mesh, flat_uvs] = expand_at_seams(mesh, uvmap);
@@ -587,67 +601,8 @@ void write_ply(
     }
 
     std::array<char, 128> buf;
-
-    // Header
-    file << "ply\n"
-         << "format ascii 1.0\n"
-         << "comment TextureFile " << texture_path.string() << '\n'
-         << "element vertex " << exp_mesh.num_vertices() << '\n'
-         << "property float x\n"
-         << "property float y\n"
-         << "property float z\n";
-
-    if constexpr (has_normal<Vertex>::value) {
-        static_assert(Dims == 3, "write_ply: normals require Dims == 3");
-        file << "property float nx\n"
-             << "property float ny\n"
-             << "property float nz\n";
-    }
-    if constexpr (has_color<Vertex>::value) {
-        file << "property uchar red\n"
-             << "property uchar green\n"
-             << "property uchar blue\n";
-    }
-
-    file << "property float s\n"
-         << "property float t\n"
-         << "element face " << exp_mesh.num_faces() << '\n'
-         << "property list uchar int vertex_indices\n"
-         << "end_header\n";
-
-    // Vertex data
-    for (std::size_t vi = 0; vi < exp_mesh.num_vertices(); ++vi) {
-        const auto& v = exp_mesh.vertex(vi);
-        file << to_string_view(buf, v[0]) << ' '
-             << to_string_view(buf, v[1]) << ' '
-             << to_string_view(buf, v[2]);
-        if constexpr (has_normal<Vertex>::value) {
-            const auto n = v.normal.value_or(Vec<T, Dims>{});
-            file << ' ' << to_string_view(buf, n[0])
-                 << ' ' << to_string_view(buf, n[1])
-                 << ' ' << to_string_view(buf, n[2]);
-        }
-        if constexpr (has_color<Vertex>::value) {
-            const auto [r, g, b] = detail::color_to_u8c3(v.color);
-            file << ' ' << to_string_view(buf, r)
-                 << ' ' << to_string_view(buf, g)
-                 << ' ' << to_string_view(buf, b);
-        }
-        const auto& uv = flat_uvs[vi];
-        file << ' ' << to_string_view(buf, uv[0])
-             << ' ' << to_string_view(buf, uv[1]);
-        file << '\n';
-    }
-
-    // Face data
-    for (std::size_t fi = 0; fi < exp_mesh.num_faces(); ++fi) {
-        const auto& face = exp_mesh.face(fi);
-        file << face.size();
-        for (const auto vi : face) {
-            file << ' ' << to_string_view(buf, vi);
-        }
-        file << '\n';
-    }
+    detail::write_ply_header(file, exp_mesh, texture_path.string(), true);
+    detail::write_ply_data(file, buf, exp_mesh, flat_uvs);
 }
 
 // =============================================================================
@@ -671,6 +626,21 @@ void read_ply(
     using DummyUV = UVMap<float, 2>;
     DummyUV* no_uvmap = nullptr;
     detail::read_ply_impl(path, mesh, no_uvmap, nullptr);
+}
+
+/**
+ * @brief Read a PLY file into a mesh and UV map (Tier 2 — positions + UVs)
+ *
+ * As @ref read_ply(path,mesh) but also parses @c s and @c t per-vertex UV
+ * properties into @p uvmap. Texture path comments are ignored.
+ */
+template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
+void read_ply(
+    const std::filesystem::path& path,
+    Mesh<T, Dims, VTraits>& mesh,
+    UVMapT& uvmap)
+{
+    detail::read_ply_impl(path, mesh, &uvmap, nullptr);
 }
 
 /**

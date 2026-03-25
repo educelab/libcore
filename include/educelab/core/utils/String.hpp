@@ -213,8 +213,27 @@ static auto split(std::string_view s, Pred&& pred)
  */
 static auto split(std::string_view s) -> std::vector<std::string_view>
 {
-    const auto& loc = std::locale();
-    return split(s, [&loc](char c) { return std::isspace(c, loc); });
+    return split(s, [](char c) {
+        static thread_local std::locale loc;
+        return std::isspace(c, loc);
+    });
+}
+
+/**
+ * @brief Split a string on any whitespace into a caller-provided vector
+ *
+ * Clears @p out and fills it with the same tokens that @ref split(sv) would
+ * return. Reuses the capacity of @p out to avoid repeated heap allocations
+ * when the same vector is used across many parsing iterations (e.g. in a
+ * per-line file-reading loop).
+ */
+inline void split_into(
+    std::string_view sv,
+    std::vector<std::string_view>& out)
+{
+    out.clear();
+    auto tmp = split(sv);
+    out.swap(tmp);
 }
 
 /**
@@ -411,6 +430,21 @@ auto to_string(T val) -> std::string
     std::array<char, 128> buf{};
     return std::string(to_string_view(buf, val));
 }
+
+#ifdef EDUCE_CORE_NEED_TO_CHARS_LONG_DOUBLE_FALLBACK
+/**
+ * @brief Specialisation of @ref to_string_view for @c long double on platforms
+ *        where @c std::to_chars does not support @c long double.
+ *
+ * Casts to @c double before conversion. On Apple platforms @c long double
+ * has the same 64-bit representation as @c double, so no precision is lost.
+ */
+template <std::size_t N>
+auto to_string_view(std::array<char, N>& buf, long double val) -> std::string_view
+{
+    return to_string_view(buf, static_cast<double>(val));
+}
+#endif
 
 #ifdef EDUCE_CORE_NEED_CHARCONV_FP
 /**

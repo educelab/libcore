@@ -65,5 +65,26 @@ else()
     message(WARNING "Float to_chars:   unavailable")
 endif()
 
+# --- to_chars (long double) --------------------------------------------------
+set(_to_chars_ld_code [[
+    #include <charconv>
+    #include <array>
+
+    int main() {
+        std::array<char, 32> buf{};
+        long double val{5.0L};
+        std::to_chars(buf.data(), buf.data() + buf.size(), val);
+        return 0;
+    }
+]])
+check_cxx_source_compiles("${_to_chars_ld_code}" CXX_CHARCONV_FP_TO_CHARS_LONG_DOUBLE)
+
+if(NOT CXX_CHARCONV_FP_TO_CHARS_LONG_DOUBLE)
+    message(STATUS "Long double to_chars: unavailable (will cast to double)")
+    add_compile_definitions(EDUCE_CORE_NEED_TO_CHARS_LONG_DOUBLE_FALLBACK)
+else()
+    message(STATUS "Long double to_chars: std::to_chars (native)")
+endif()
+
 # Restore original CMake state
 cmake_pop_check_state()

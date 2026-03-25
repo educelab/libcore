@@ -70,8 +70,7 @@ void read_mesh(
     if (ext == ".obj") {
         read_obj(path, mesh, uvmap);
     } else if (ext == ".ply") {
-        std::vector<std::filesystem::path> unused;
-        read_ply(path, mesh, uvmap, unused);
+        read_ply(path, mesh, uvmap);
     } else {
         throw std::runtime_error("read_mesh: unsupported extension '" + ext + "'");
     }

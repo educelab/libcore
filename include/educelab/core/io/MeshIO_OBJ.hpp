@@ -63,10 +63,29 @@ inline auto parse_face_ref(std::string_view token)
     // Find first '/'
     const auto p1 = token.find('/');
     if (p1 == std::string_view::npos) {
-        return {to_numeric<std::size_t>(token) - 1, std::nullopt, std::nullopt};
+        if (!token.empty() && token[0] == '-') {
+            throw std::runtime_error(
+                "read_obj: negative (relative) face indices are not supported");
+        }
+        const auto raw = to_numeric<std::size_t>(token);
+        if (raw == 0) {
+            throw std::runtime_error(
+                "read_obj: face index 0 is invalid (OBJ indices are 1-based)");
+        }
+        return {raw - 1, std::nullopt, std::nullopt};
     }
 
-    const auto v = to_numeric<std::size_t>(token.substr(0, p1)) - 1;
+    const auto v_sv = token.substr(0, p1);
+    if (!v_sv.empty() && v_sv[0] == '-') {
+        throw std::runtime_error(
+            "read_obj: negative (relative) face indices are not supported");
+    }
+    const auto raw_v = to_numeric<std::size_t>(v_sv);
+    if (raw_v == 0) {
+        throw std::runtime_error(
+            "read_obj: face index 0 is invalid (OBJ indices are 1-based)");
+    }
+    const auto v = raw_v - 1;
     const auto rest = token.substr(p1 + 1);
 
     // Find second '/'
@@ -76,7 +95,16 @@ inline auto parse_face_ref(std::string_view token)
         if (rest.empty()) {
             return {v, std::nullopt, std::nullopt};
         }
-        return {v, to_numeric<std::size_t>(rest) - 1, std::nullopt};
+        if (!rest.empty() && rest[0] == '-') {
+            throw std::runtime_error(
+                "read_obj: negative (relative) face indices are not supported");
+        }
+        const auto raw_vt = to_numeric<std::size_t>(rest);
+        if (raw_vt == 0) {
+            throw std::runtime_error(
+                "read_obj: face index 0 is invalid (OBJ indices are 1-based)");
+        }
+        return {v, raw_vt - 1, std::nullopt};
     }
 
     // "v/vt/vn" or "v//vn"
@@ -85,12 +113,30 @@ inline auto parse_face_ref(std::string_view token)
 
     std::optional<std::size_t> vt_idx;
     if (!vt_sv.empty()) {
-        vt_idx = to_numeric<std::size_t>(vt_sv) - 1;
+        if (vt_sv[0] == '-') {
+            throw std::runtime_error(
+                "read_obj: negative (relative) face indices are not supported");
+        }
+        const auto raw_vt = to_numeric<std::size_t>(vt_sv);
+        if (raw_vt == 0) {
+            throw std::runtime_error(
+                "read_obj: face index 0 is invalid (OBJ indices are 1-based)");
+        }
+        vt_idx = raw_vt - 1;
     }
 
     std::optional<std::size_t> vn_idx;
     if (!vn_sv.empty()) {
-        vn_idx = to_numeric<std::size_t>(vn_sv) - 1;
+        if (vn_sv[0] == '-') {
+            throw std::runtime_error(
+                "read_obj: negative (relative) face indices are not supported");
+        }
+        const auto raw_vn = to_numeric<std::size_t>(vn_sv);
+        if (raw_vn == 0) {
+            throw std::runtime_error(
+                "read_obj: face index 0 is invalid (OBJ indices are 1-based)");
+        }
+        vn_idx = raw_vn - 1;
     }
 
     return {v, vt_idx, vn_idx};
@@ -130,6 +176,11 @@ void read_obj_impl(
 
     // MTL file path (resolved next to the OBJ)
     std::filesystem::path mtllib_path;
+
+    // Hoisted face-parsing scratch space (avoids per-face heap allocations)
+    typename Mesh<T, Dims, VTraits>::Face face_verts;
+    std::vector<std::optional<std::size_t>> face_vts;
+    std::vector<std::optional<std::size_t>> face_vns;
 
     std::string line;
     while (std::getline(file, line)) {
@@ -223,9 +274,9 @@ void read_obj_impl(
                 continue;  // degenerate
             }
 
-            typename Mesh<T, Dims, VTraits>::Face face_verts;
-            std::vector<std::optional<std::size_t>> face_vts;
-            std::vector<std::optional<std::size_t>> face_vns;
+            face_verts.clear();
+            face_vts.clear();
+            face_vns.clear();
 
             for (std::size_t ti = 1; ti < tokens.size(); ++ti) {
                 auto [vi, vt, vn] = parse_face_ref(tokens[ti]);
@@ -305,6 +356,98 @@ void read_obj_impl(
     }
 }
 
+/**
+ * @brief Write @c v, @c vt, and @c vn lines to an OBJ stream
+ *
+ * Shared helper used by all write_obj tiers to avoid duplicating the
+ * vertex/texture-coord/normal emission code.
+ */
+template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
+void write_obj_vertices(
+    std::ostream& file,
+    std::array<char, 128>& buf,
+    const Mesh<T, Dims, VTraits>& mesh,
+    const UVMapT* uvmap)
+{
+    using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
+
+    // Vertex positions (+ optional inline colors)
+    for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
+        const auto& v = mesh.vertex(vi);
+        file << "v " << to_string_view(buf, v[0]) << ' '
+                     << to_string_view(buf, v[1]) << ' '
+                     << to_string_view(buf, v[2]);
+        if constexpr (has_color<Vertex>::value) {
+            const auto [r, g, b] = detail::color_to_rgb(v.color);
+            file << ' ' << to_string_view(buf, r) << ' '
+                        << to_string_view(buf, g) << ' '
+                        << to_string_view(buf, b);
+        }
+        file << '\n';
+    }
+
+    // Texture coordinates (pool order) — only when uvmap is provided
+    if (uvmap != nullptr) {
+        for (std::size_t ui = 0; ui < uvmap->size(); ++ui) {
+            const auto& uv = uvmap->at(ui);
+            file << "vt " << to_string_view(buf, uv[0]) << ' '
+                          << to_string_view(buf, uv[1]) << '\n';
+        }
+    }
+
+    // Normals — one vn per vertex; vn index equals vertex index (both 1-based)
+    if constexpr (has_normal<Vertex>::value) {
+        static_assert(Dims == 3, "write_obj: normals require Dims == 3");
+        for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
+            const auto& v = mesh.vertex(vi);
+            const auto n = v.normal.value_or(Vec<T, Dims>{});
+            file << "vn " << to_string_view(buf, n[0]) << ' '
+                          << to_string_view(buf, n[1]) << ' '
+                          << to_string_view(buf, n[2]) << '\n';
+        }
+    }
+}
+
+/**
+ * @brief Write face lines to an OBJ stream (Tiers 1–3a)
+ *
+ * Shared helper for Tier 1 (no UVs), Tier 2, and Tier 3a. Faces are written
+ * in mesh order; no @c usemtl grouping is performed here.
+ */
+template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
+void write_obj_faces(
+    std::ostream& file,
+    std::array<char, 128>& buf,
+    const Mesh<T, Dims, VTraits>& mesh,
+    const UVMapT* uvmap)
+{
+    using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
+
+    for (std::size_t fi = 0; fi < mesh.num_faces(); ++fi) {
+        const auto& face = mesh.face(fi);
+        file << 'f';
+        for (std::size_t ci = 0; ci < face.size(); ++ci) {
+            const auto vi = face[ci];
+            file << ' ' << to_string_view(buf, vi + 1);
+            if (uvmap != nullptr) {
+                if (uvmap->has(fi, ci)) {
+                    file << '/' << to_string_view(buf, uvmap->get(fi, ci) + 1);
+                } else {
+                    file << '/';
+                }
+                if constexpr (has_normal<Vertex>::value) {
+                    file << '/' << to_string_view(buf, vi + 1);
+                }
+            } else {
+                if constexpr (has_normal<Vertex>::value) {
+                    file << "//" << to_string_view(buf, vi + 1);
+                }
+            }
+        }
+        file << '\n';
+    }
+}
+
 }  // namespace detail
 
 // =============================================================================
@@ -329,7 +472,6 @@ template <typename T, std::size_t Dims, typename VTraits>
 void write_obj(
     const std::filesystem::path& path, const Mesh<T, Dims, VTraits>& mesh)
 {
-    using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
     static_assert(Dims >= 3, "write_obj requires Dims >= 3");
 
     std::ofstream file(path);
@@ -339,46 +481,10 @@ void write_obj(
     }
 
     std::array<char, 128> buf;
-
-    // Vertices
-    for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
-        const auto& v = mesh.vertex(vi);
-        file << "v " << to_string_view(buf, v[0]) << ' '
-                     << to_string_view(buf, v[1]) << ' '
-                     << to_string_view(buf, v[2]);
-        if constexpr (has_color<Vertex>::value) {
-            const auto [r, g, b] = detail::color_to_rgb(v.color);
-            file << ' ' << to_string_view(buf, r) << ' '
-                        << to_string_view(buf, g) << ' '
-                        << to_string_view(buf, b);
-        }
-        file << '\n';
-    }
-
-    // Normals — one vn per vertex; vn index equals vertex index (both 1-based)
-    if constexpr (has_normal<Vertex>::value) {
-        static_assert(Dims == 3, "write_obj: normals require Dims == 3");
-        for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
-            const auto& v = mesh.vertex(vi);
-            const auto n = v.normal.value_or(Vec<T, Dims>{});
-            file << "vn " << to_string_view(buf, n[0]) << ' '
-                          << to_string_view(buf, n[1]) << ' '
-                          << to_string_view(buf, n[2]) << '\n';
-        }
-    }
-
-    // Faces
-    for (std::size_t fi = 0; fi < mesh.num_faces(); ++fi) {
-        const auto& face = mesh.face(fi);
-        file << 'f';
-        for (const auto vi : face) {
-            file << ' ' << to_string_view(buf, vi + 1);
-            if constexpr (has_normal<Vertex>::value) {
-                file << "//" << to_string_view(buf, vi + 1);
-            }
-        }
-        file << '\n';
-    }
+    using DummyUV = UVMap<float, 2>;
+    DummyUV* no_uvmap = nullptr;
+    detail::write_obj_vertices(file, buf, mesh, no_uvmap);
+    detail::write_obj_faces(file, buf, mesh, no_uvmap);
 }
 
 // =============================================================================
@@ -400,7 +506,6 @@ void write_obj(
     const Mesh<T, Dims, VTraits>& mesh,
     const UVMapT& uvmap)
 {
-    using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
     static_assert(Dims >= 3, "write_obj requires Dims >= 3");
 
     std::ofstream file(path);
@@ -410,59 +515,8 @@ void write_obj(
     }
 
     std::array<char, 128> buf;
-
-    // Vertices
-    for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
-        const auto& v = mesh.vertex(vi);
-        file << "v " << to_string_view(buf, v[0]) << ' '
-                     << to_string_view(buf, v[1]) << ' '
-                     << to_string_view(buf, v[2]);
-        if constexpr (has_color<Vertex>::value) {
-            const auto [r, g, b] = detail::color_to_rgb(v.color);
-            file << ' ' << to_string_view(buf, r) << ' '
-                        << to_string_view(buf, g) << ' '
-                        << to_string_view(buf, b);
-        }
-        file << '\n';
-    }
-
-    // Texture coordinates (pool order)
-    for (std::size_t ui = 0; ui < uvmap.size(); ++ui) {
-        const auto& uv = uvmap.at(ui);
-        file << "vt " << to_string_view(buf, uv[0]) << ' '
-                      << to_string_view(buf, uv[1]) << '\n';
-    }
-
-    // Normals
-    if constexpr (has_normal<Vertex>::value) {
-        static_assert(Dims == 3, "write_obj: normals require Dims == 3");
-        for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
-            const auto& v = mesh.vertex(vi);
-            const auto n = v.normal.value_or(Vec<T, Dims>{});
-            file << "vn " << to_string_view(buf, n[0]) << ' '
-                          << to_string_view(buf, n[1]) << ' '
-                          << to_string_view(buf, n[2]) << '\n';
-        }
-    }
-
-    // Faces
-    for (std::size_t fi = 0; fi < mesh.num_faces(); ++fi) {
-        const auto& face = mesh.face(fi);
-        file << 'f';
-        for (std::size_t ci = 0; ci < face.size(); ++ci) {
-            const auto vi = face[ci];
-            file << ' ' << to_string_view(buf, vi + 1);
-            if (uvmap.has(fi, ci)) {
-                file << '/' << to_string_view(buf, uvmap.get(fi, ci) + 1);
-            } else {
-                file << '/';
-            }
-            if constexpr (has_normal<Vertex>::value) {
-                file << '/' << to_string_view(buf, vi + 1);
-            }
-        }
-        file << '\n';
-    }
+    detail::write_obj_vertices(file, buf, mesh, &uvmap);
+    detail::write_obj_faces(file, buf, mesh, &uvmap);
 }
 
 // =============================================================================
@@ -488,7 +542,6 @@ void write_obj(
     const UVMapT& uvmap,
     const std::filesystem::path& texture_path)
 {
-    using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
     static_assert(Dims >= 3, "write_obj requires Dims >= 3");
 
     // Write MTL
@@ -515,58 +568,8 @@ void write_obj(
     file << "mtllib " << mtl_path.filename().string() << '\n';
     file << "usemtl material0\n";
 
-    // Vertices
-    for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
-        const auto& v = mesh.vertex(vi);
-        file << "v " << to_string_view(buf, v[0]) << ' '
-                     << to_string_view(buf, v[1]) << ' '
-                     << to_string_view(buf, v[2]);
-        if constexpr (has_color<Vertex>::value) {
-            const auto [r, g, b] = detail::color_to_rgb(v.color);
-            file << ' ' << to_string_view(buf, r) << ' '
-                        << to_string_view(buf, g) << ' '
-                        << to_string_view(buf, b);
-        }
-        file << '\n';
-    }
-
-    // Texture coordinates
-    for (std::size_t ui = 0; ui < uvmap.size(); ++ui) {
-        const auto& uv = uvmap.at(ui);
-        file << "vt " << to_string_view(buf, uv[0]) << ' '
-                      << to_string_view(buf, uv[1]) << '\n';
-    }
-
-    // Normals
-    if constexpr (has_normal<Vertex>::value) {
-        static_assert(Dims == 3, "write_obj: normals require Dims == 3");
-        for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
-            const auto& v = mesh.vertex(vi);
-            const auto n = v.normal.value_or(Vec<T, Dims>{});
-            file << "vn " << to_string_view(buf, n[0]) << ' '
-                          << to_string_view(buf, n[1]) << ' '
-                          << to_string_view(buf, n[2]) << '\n';
-        }
-    }
-
-    // Faces (single material — usemtl already written above)
-    for (std::size_t fi = 0; fi < mesh.num_faces(); ++fi) {
-        const auto& face = mesh.face(fi);
-        file << 'f';
-        for (std::size_t ci = 0; ci < face.size(); ++ci) {
-            const auto vi = face[ci];
-            file << ' ' << to_string_view(buf, vi + 1);
-            if (uvmap.has(fi, ci)) {
-                file << '/' << to_string_view(buf, uvmap.get(fi, ci) + 1);
-            } else {
-                file << '/';
-            }
-            if constexpr (has_normal<Vertex>::value) {
-                file << '/' << to_string_view(buf, vi + 1);
-            }
-        }
-        file << '\n';
-    }
+    detail::write_obj_vertices(file, buf, mesh, &uvmap);
+    detail::write_obj_faces(file, buf, mesh, &uvmap);
 }
 
 // =============================================================================
@@ -620,42 +623,11 @@ void write_obj(
     }
 
     std::array<char, 128> buf;
+    using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
 
     file << "mtllib " << mtl_path.filename().string() << '\n';
 
-    // Vertices
-    for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
-        const auto& v = mesh.vertex(vi);
-        file << "v " << to_string_view(buf, v[0]) << ' '
-                     << to_string_view(buf, v[1]) << ' '
-                     << to_string_view(buf, v[2]);
-        if constexpr (has_color<Vertex>::value) {
-            const auto [r, g, b] = detail::color_to_rgb(v.color);
-            file << ' ' << to_string_view(buf, r) << ' '
-                        << to_string_view(buf, g) << ' '
-                        << to_string_view(buf, b);
-        }
-        file << '\n';
-    }
-
-    // Texture coordinates
-    for (std::size_t ui = 0; ui < uvmap.size(); ++ui) {
-        const auto& uv = uvmap.at(ui);
-        file << "vt " << to_string_view(buf, uv[0]) << ' '
-                      << to_string_view(buf, uv[1]) << '\n';
-    }
-
-    // Normals
-    if constexpr (has_normal<Vertex>::value) {
-        static_assert(Dims == 3, "write_obj: normals require Dims == 3");
-        for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
-            const auto& v = mesh.vertex(vi);
-            const auto n = v.normal.value_or(Vec<T, Dims>{});
-            file << "vn " << to_string_view(buf, n[0]) << ' '
-                          << to_string_view(buf, n[1]) << ' '
-                          << to_string_view(buf, n[2]) << '\n';
-        }
-    }
+    detail::write_obj_vertices(file, buf, mesh, &uvmap);
 
     // Group face indices by chart index of corner-0 UV
     std::vector<std::vector<std::size_t>> chart_faces(texture_paths.size());
