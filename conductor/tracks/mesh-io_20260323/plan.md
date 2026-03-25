@@ -4,7 +4,7 @@
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-03-23
 **Updated:** 2026-03-25
-**Status:** [~] In Progress
+**Status:** [x] Complete
 
 ## Overview
 
@@ -28,7 +28,7 @@ unified and split into separate `from_chars` / `to_chars` probes.
 | Phase 1 | e818d3b        | 2026-03-25 | complete |
 | Phase 2 | 0a4efdd        | 2026-03-25 | complete |
 | Phase 3 | ea14fbf        | 2026-03-25 | complete |
-| Phase 4 |                |      | pending |
+| Phase 4 | 1d0e3fc        | 2026-03-25 | complete |
 
 ---
 
@@ -199,13 +199,13 @@ include only this file.
 
 ### Tasks
 
-- [ ] **Task 4.1**: Write tests for `read_mesh` / `write_mesh` in
+- [x] **Task 4.1**: Write tests for `read_mesh` / `write_mesh` in
       `TestMeshIO.cpp` — cover: `.obj` extension dispatches to OBJ functions;
       `.ply` extension dispatches to PLY functions; unsupported extension
       throws; all three tiers (`mesh` only, `mesh + uvmap`,
       `mesh + uvmap + texture_paths` / `texture_path`) compile and dispatch
-      correctly
-- [ ] **Task 4.2**: Implement `include/educelab/core/io/MeshIO.hpp` —
+      correctly `1d0e3fc`
+- [x] **Task 4.2**: Implement `include/educelab/core/io/MeshIO.hpp` —
       includes `MeshIO_OBJ.hpp` and `MeshIO_PLY.hpp`; implements
       `read_mesh(path, mesh)`, `write_mesh(path, mesh)`;
       `read_mesh(path, mesh, uvmap)`, `write_mesh(path, mesh, uvmap)`;
@@ -213,25 +213,25 @@ include only this file.
       `write_mesh(path, mesh, uvmap, texture_path)` (single path);
       dispatches via `path.extension()` comparison; throws
       `std::runtime_error` for unsupported extensions; add `MeshIO.hpp` to
-      installed headers in `CMakeLists.txt`
+      installed headers in `CMakeLists.txt` `1d0e3fc`
 
 ### Verification
 
-- [ ] `ctest` passes with no regressions
-- [ ] All convenience dispatch tests pass
-- [ ] Build succeeds in Debug and Release
+- [x] `ctest` passes with no regressions
+- [x] All convenience dispatch tests pass
+- [x] Build succeeds in Debug and Release
 
 ---
 
 ## Final Verification
 
-- [ ] All acceptance criteria in `spec.md` met
-- [ ] All tests passing (`ctest`)
-- [ ] OBJ and PLY round-trips verified for all supported attribute
+- [x] All acceptance criteria in `spec.md` met
+- [x] All tests passing (`ctest`)
+- [x] OBJ and PLY round-trips verified for all supported attribute
       combinations including single-texture, multi-chart (OBJ only), and
       no-texture cases
 - [ ] Doxygen builds cleanly for all public IO functions and detection traits
-- [ ] Ready for PR review
+- [x] Ready for PR review
 
 ---
 
