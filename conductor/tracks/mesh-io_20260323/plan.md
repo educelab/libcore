@@ -26,7 +26,7 @@ unified and split into separate `from_chars` / `to_chars` probes.
 | Phase   | Checkpoint SHA | Date | Status  |
 | ------- | -------------- | ---- | ------- |
 | Phase 1 | e818d3b        | 2026-03-25 | complete |
-| Phase 2 |                |      | pending |
+| Phase 2 | 0a4efdd        | 2026-03-25 | complete |
 | Phase 3 |                |      | pending |
 | Phase 4 |                |      | pending |
 
@@ -76,7 +76,7 @@ conversion.
 
 ### Tasks
 
-- [ ] **Task 2.1**: Write round-trip tests for OBJ in `TestMeshIO.cpp` —
+- [x] **Task 2.1**: Write round-trip tests for OBJ in `TestMeshIO.cpp` —
       cover: positions only; positions + normals (`WithNormal` mesh);
       positions + colors (`WithColor` mesh, verify inline `v x y z r g b`
       format); positions + UVs (no texture); positions + UVs + single texture
@@ -87,42 +87,42 @@ conversion.
       N-gon faces; mesh type without normals reading a file that has normals
       (normals silently ignored); missing file error; `.mtl` present but no
       `map_Kd` (empty `texture_paths`)
-- [ ] **Task 2.2**: Implement `write_obj(path, mesh)` — writes `v` lines with
+- [x] **Task 2.2**: Implement `write_obj(path, mesh)` — writes `v` lines with
       optional inline RGB (`if constexpr has_color<Vertex>`); writes `vn`
-      lines (`if constexpr has_normal<Vertex>`); writes `f` lines
-- [ ] **Task 2.3**: Implement `write_obj(path, mesh, uvmap)` — adds `vt`
-      lines and per-wedge UV indices in `f` lines; no `.mtl` emitted
-- [ ] **Task 2.4**: Implement `write_obj(path, mesh, uvmap, texture_path)` —
+      lines (`if constexpr has_normal<Vertex>`); writes `f` lines `0a4efdd`
+- [x] **Task 2.3**: Implement `write_obj(path, mesh, uvmap)` — adds `vt`
+      lines and per-wedge UV indices in `f` lines; no `.mtl` emitted `0a4efdd`
+- [x] **Task 2.4**: Implement `write_obj(path, mesh, uvmap, texture_path)` —
       single `std::filesystem::path`; emits a `.mtl` with one material
       (`newmtl material0`, `map_Kd <path>`); all faces prefixed with
-      `usemtl material0`
-- [ ] **Task 2.5**: Implement `write_obj(path, mesh, uvmap, texture_paths)` —
+      `usemtl material0` `0a4efdd`
+- [x] **Task 2.5**: Implement `write_obj(path, mesh, uvmap, texture_paths)` —
       `std::vector<std::filesystem::path>` overload;
       `static_assert(has_chart<UVMapT>::value, "write_obj with multiple
       texture paths requires UVMap with traits::WithChart")`; emits one
       `newmtl materialN` / `map_Kd` entry per path; groups faces by the chart
-      index of corner 0 with `usemtl materialN` directives
-- [ ] **Task 2.6**: Implement `read_obj(path, mesh)` — parses `v` lines with
+      index of corner 0 with `usemtl materialN` directives `0a4efdd`
+- [x] **Task 2.6**: Implement `read_obj(path, mesh)` — parses `v` lines with
       3 or 6+ components (position only vs position + RGB); parses `vn`, `f`;
       populates normals via `if constexpr has_normal<Vertex>`; populates
       colors via `if constexpr has_color<Vertex>`; silently skips
-      unrecognized directives
-- [ ] **Task 2.7**: Implement `read_obj(path, mesh, uvmap)` — also parses
+      unrecognized directives `0a4efdd`
+- [x] **Task 2.7**: Implement `read_obj(path, mesh, uvmap)` — also parses
       `vt` and per-wedge UV indices from `f` lines; populates `uvmap`;
       populates chart indices on `uvmap` coordinates via
-      `if constexpr has_chart<UVMapT>` using material group ordering
-- [ ] **Task 2.8**: Implement `read_obj(path, mesh, uvmap, texture_paths)` —
+      `if constexpr has_chart<UVMapT>` using material group ordering `0a4efdd`
+- [x] **Task 2.8**: Implement `read_obj(path, mesh, uvmap, texture_paths)` —
       parses `.mtl` referenced by `mtllib` directive; extracts `map_Kd` paths
       in material-declaration order into `texture_paths`; no-op if no `.mtl`
-      or no `map_Kd` entries
-- [ ] **Task 2.9**: Register `TestMeshIO` in `tests/CMakeLists.txt`; add
-      `MeshIO_OBJ.hpp` to installed headers in `CMakeLists.txt`
+      or no `map_Kd` entries `0a4efdd`
+- [x] **Task 2.9**: Register `TestMeshIO` in `tests/CMakeLists.txt`; add
+      `MeshIO_OBJ.hpp` to installed headers in `CMakeLists.txt` `0a4efdd`
 
 ### Verification
 
-- [ ] `ctest` passes with no regressions
-- [ ] All OBJ round-trip tests pass (with and without texture paths)
-- [ ] Build succeeds in Debug and Release
+- [x] `ctest` passes with no regressions
+- [x] All OBJ round-trip tests pass (with and without texture paths)
+- [x] Build succeeds in Debug and Release
 
 ---
 
