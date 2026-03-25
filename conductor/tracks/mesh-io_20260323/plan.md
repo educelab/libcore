@@ -3,7 +3,7 @@
 **Track ID:** mesh-io_20260323
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-03-23
-**Updated:** 2026-03-24
+**Updated:** 2026-03-25
 **Status:** [ ] Not Started
 
 ## Overview
@@ -14,6 +14,12 @@ infrastructure shared by all IO headers (`has_normal`, `has_color`,
 multi-chart static_assert), then PLY IO (including `expand_at_seams` and
 `comment TextureFile` texture path handling), then the convenience facade
 (`read_mesh` / `write_mesh`) that dispatches by file extension.
+
+**Preparatory work (complete):** `2f67926` — `String.hpp` extensions: predicate
+`split()` overload (O(n), single-character delimiters), no-arg `split()` for
+whitespace splitting, `to_string_view(buf, val)` for zero-allocation numeric
+serialisation, `to_string(val)` convenience wrapper. `CheckCharconvFP.cmake`
+unified and split into separate `from_chars` / `to_chars` probes.
 
 ## Checkpoints
 
@@ -59,10 +65,14 @@ Implement `include/educelab/core/io/MeshIO_OBJ.hpp` with `read_obj` and
 g b` convention. Multi-chart `write_obj` enforces `has_chart` via
 `static_assert`.
 
-**Parsing utilities:** use `split_ws` (from `String.hpp`) to tokenise each
-line; `to_numeric<T>` for string-to-number conversion; `partition(token,
-"/")` to split OBJ face vertex references (`v/vt/vn`). **Write utilities:**
-use `to_string<T>` (from `String.hpp`) for locale-free numeric output.
+**Parsing utilities:** use `split()` with no arguments (from `String.hpp`)
+to tokenise whitespace-delimited lines; pass a predicate to `split()` for
+single-character delimiters (e.g. `split(token, [](char c){ return c=='/'; })`
+for OBJ face vertex references `v/vt/vn`); use `to_numeric<T>` for
+string-to-number conversion. **Write utilities:** declare one
+`std::array<char, 128> buf` at the top of each write function and pass it to
+`to_string_view(buf, val)` for every coordinate — no heap allocation per
+conversion.
 
 ### Tasks
 
@@ -123,11 +133,12 @@ Implement `include/educelab/core/io/MeshIO_PLY.hpp` with `read_ply` and
 support is single-path only (no vector overload); multi-texture PLY has no
 well-supported ecosystem standard.
 
-**Parsing utilities:** use `split_ws` to tokenise ASCII PLY data lines and
-header lines; `to_numeric<T>` for string-to-number conversion; direct
-`std::memcpy` / host-endian byte reads for binary-little-endian data.
-**Write utilities:** use `to_string<T>` for locale-free numeric output in
-ASCII PLY.
+**Parsing utilities:** use `split()` with no arguments to tokenise ASCII PLY
+header and data lines; `to_numeric<T>` for string-to-number conversion;
+direct `std::memcpy` / host-endian byte reads for binary-little-endian data.
+**Write utilities:** declare one `std::array<char, 128> buf` per write
+function and use `to_string_view(buf, val)` for all numeric output — no heap
+allocation per conversion.
 
 ### Tasks
 
