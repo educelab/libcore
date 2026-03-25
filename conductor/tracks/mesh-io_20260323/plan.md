@@ -27,7 +27,7 @@ unified and split into separate `from_chars` / `to_chars` probes.
 | ------- | -------------- | ---- | ------- |
 | Phase 1 | e818d3b        | 2026-03-25 | complete |
 | Phase 2 | 0a4efdd        | 2026-03-25 | complete |
-| Phase 3 |                |      | pending |
+| Phase 3 | ea14fbf        | 2026-03-25 | complete |
 | Phase 4 |                |      | pending |
 
 ---
@@ -142,51 +142,51 @@ allocation per conversion.
 
 ### Tasks
 
-- [ ] **Task 3.1**: Write tests for `expand_at_seams` in `TestMeshIO.cpp` —
+- [x] **Task 3.1**: Write tests for `expand_at_seams` in `TestMeshIO.cpp` —
       cover: mesh with no seams (no duplication); mesh with one seam edge
       (verify duplicate vertex count); verify face indices updated correctly;
-      verify geometry identical to original at all vertex positions
-- [ ] **Task 3.2**: Implement `expand_at_seams(mesh, uvmap) ->
+      verify geometry identical to original at all vertex positions `ea14fbf`
+- [x] **Task 3.2**: Implement `expand_at_seams(mesh, uvmap) ->
       std::pair<MeshT, std::vector<Vec<T,2>>>` in
       `include/educelab/core/utils/MeshUtils.hpp`; walk each face corner,
       assign UV to vertex if unassigned, duplicate vertex if UV conflicts;
-      return expanded mesh and flat per-vertex UV array
-- [ ] **Task 3.3**: Write round-trip tests for PLY in `TestMeshIO.cpp` —
+      return expanded mesh and flat per-vertex UV array `ea14fbf`
+- [x] **Task 3.3**: Write round-trip tests for PLY in `TestMeshIO.cpp` —
       cover: ASCII PLY positions only; positions + normals; positions +
       colors; N-gon faces; binary-little-endian read; `write_ply` with
       `uvmap` (verify vertex count expansion at seams); `write_ply` with
       `uvmap` + single texture path (verify `comment TextureFile` in header
       and round-trip); `read_ply` parsing of `comment TextureFile` into
-      `texture_paths`; missing file error
-- [ ] **Task 3.4**: Implement `write_ply(path, mesh)` — ASCII PLY; writes
+      `texture_paths`; missing file error `ea14fbf`
+- [x] **Task 3.4**: Implement `write_ply(path, mesh)` — ASCII PLY; writes
       header with `element vertex` / `element face`; conditionally includes
       `nx ny nz` properties (`if constexpr has_normal<Vertex>`) and
       `red green blue` properties (`if constexpr has_color<Vertex>`); writes
-      data section
-- [ ] **Task 3.5**: Implement `write_ply(path, mesh, uvmap)` — calls
+      data section `ea14fbf`
+- [x] **Task 3.5**: Implement `write_ply(path, mesh, uvmap)` — calls
       `expand_at_seams`, writes `s t` UV properties in vertex header and
-      data; no texture comment
-- [ ] **Task 3.6**: Implement `write_ply(path, mesh, uvmap, texture_path)` —
+      data; no texture comment `ea14fbf`
+- [x] **Task 3.6**: Implement `write_ply(path, mesh, uvmap, texture_path)` —
       single `std::filesystem::path`; extends Task 3.5; emits one
       `comment TextureFile <path>` line immediately after the `format` line
-      in the PLY header (MeshLab convention)
-- [ ] **Task 3.7**: Implement `read_ply(path, mesh)` — parses PLY header to
+      in the PLY header (MeshLab convention) `ea14fbf`
+- [x] **Task 3.7**: Implement `read_ply(path, mesh)` — parses PLY header to
       determine present properties; reads ASCII and binary-little-endian data;
-      populates normals/colors via `if constexpr`
-- [ ] **Task 3.8**: Implement `read_ply(path, mesh, uvmap, texture_paths)` —
+      populates normals/colors via `if constexpr` `ea14fbf`
+- [x] **Task 3.8**: Implement `read_ply(path, mesh, uvmap, texture_paths)` —
       extends Task 3.7; parses `s t` per-vertex UV properties into `uvmap`
       (note: seam topology is not recovered); parses `comment TextureFile`
       lines from PLY header into `texture_paths` out-parameter (empty if none
-      present)
-- [ ] **Task 3.9**: Add `MeshIO_PLY.hpp` and updated `MeshUtils.hpp` to
-      installed headers in `CMakeLists.txt`
+      present) `ea14fbf`
+- [x] **Task 3.9**: Add `MeshIO_PLY.hpp` and updated `MeshUtils.hpp` to
+      installed headers in `CMakeLists.txt` `ea14fbf`
 
 ### Verification
 
-- [ ] `ctest` passes with no regressions
-- [ ] All PLY round-trip tests pass (with and without texture path)
-- [ ] `expand_at_seams` tests pass
-- [ ] Build succeeds in Debug and Release
+- [x] `ctest` passes with no regressions
+- [x] All PLY round-trip tests pass (with and without texture path)
+- [x] `expand_at_seams` tests pass
+- [x] Build succeeds in Debug and Release
 
 ---
 
