@@ -8,7 +8,6 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
 # Modules
 include(FetchContent)
-include(CheckCXXSourceCompiles)
 include(CMakeDependentOption)
 
 # Get Git hash
@@ -30,6 +29,7 @@ set(public_hdrs
     include/educelab/core/Version.hpp
     include/educelab/core/io/ImageIO.hpp
     include/educelab/core/types/Color.hpp
+    include/educelab/core/types/detail/MeshTraits.hpp
     include/educelab/core/types/Image.hpp
     include/educelab/core/types/Mat.hpp
     include/educelab/core/types/Mesh.hpp
