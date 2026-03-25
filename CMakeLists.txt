@@ -29,6 +29,7 @@ set(public_hdrs
     include/educelab/core/Version.hpp
     include/educelab/core/io/ImageIO.hpp
     include/educelab/core/io/MeshIO_OBJ.hpp
+    include/educelab/core/io/MeshIO_PLY.hpp
     include/educelab/core/types/Color.hpp
     include/educelab/core/types/detail/MeshTraits.hpp
     include/educelab/core/types/Image.hpp
@@ -39,6 +40,7 @@ set(public_hdrs
     include/educelab/core/types/Uuid.hpp
     include/educelab/core/types/Vec.hpp
     include/educelab/core/utils/Caching.hpp
+    include/educelab/core/utils/MeshUtils.hpp
     include/educelab/core/utils/Filesystem.hpp
     include/educelab/core/utils/Iteration.hpp
     include/educelab/core/utils/LinearAlgebra.hpp

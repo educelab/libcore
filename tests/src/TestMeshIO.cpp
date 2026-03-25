@@ -1,11 +1,14 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <fstream>
 
 #include "educelab/core/io/MeshIO_OBJ.hpp"
+#include "educelab/core/io/MeshIO_PLY.hpp"
 #include "educelab/core/types/Mesh.hpp"
 #include "educelab/core/types/UVMap.hpp"
 #include "educelab/core/types/detail/MeshTraits.hpp"
+#include "educelab/core/utils/MeshUtils.hpp"
 
 namespace fs = std::filesystem;
 using namespace educelab;
@@ -458,4 +461,394 @@ TEST_F(OBJTest, MTLPresent_NoMapKd_EmptyTexturePaths)
     read_obj(path, dst_mesh, dst_uv, dst_textures);
 
     EXPECT_TRUE(dst_textures.empty());
+}
+
+//------------------------------------------------------------------------------
+// Task 3.1 — expand_at_seams tests
+//------------------------------------------------------------------------------
+
+TEST(ExpandAtSeams, NoSeams_NoVertexDuplication)
+{
+    // Single triangle: every (vertex, uv) pair is unique — no expansion
+    const auto mesh = make_triangle();
+    const auto uv   = make_triangle_uvmap(mesh);
+
+    const auto [exp, flat] = expand_at_seams(mesh, uv);
+
+    EXPECT_EQ(exp.num_vertices(), 3u);
+    EXPECT_EQ(exp.num_faces(), 1u);
+    ASSERT_EQ(flat.size(), 3u);
+
+    // Geometry unchanged
+    for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t d = 0; d < 3; ++d) {
+            EXPECT_NEAR(exp.vertex(i)[d], mesh.vertex(i)[d], 1e-6f);
+        }
+    }
+}
+
+TEST(ExpandAtSeams, OneSeamEdge_SplitsSeamVertex)
+{
+    // Two triangles sharing edge (v1, v2): v1 carries different UV in each
+    // face → it must be split; v2 has the same UV in both → not split.
+    //
+    //   v0       v3
+    //    |\      /|
+    //    | \    / |
+    //    |  \  /  |
+    //    | f0\/ f1|
+    //   v2---v1  (v1 is the seam vertex)
+    Mesh3f mesh;
+    (void)mesh.insert_vertex(0.f,  0.f, 0.f);  // v0
+    (void)mesh.insert_vertex(1.f,  0.f, 0.f);  // v1 — on seam
+    (void)mesh.insert_vertex(0.5f, 1.f, 0.f);  // v2 — shared, no seam
+    (void)mesh.insert_vertex(2.f,  0.f, 0.f);  // v3
+    (void)mesh.insert_face(0u, 1u, 2u);  // face 0
+    (void)mesh.insert_face(1u, 2u, 3u);  // face 1
+
+    UVMap2f uv;
+    (void)uv.insert(0.f,  0.f);   // pool[0]: v0/face0
+    (void)uv.insert(1.f,  0.f);   // pool[1]: v1/face0
+    (void)uv.insert(0.5f, 1.f);   // pool[2]: v2 in both faces (same UV)
+    (void)uv.insert(0.f,  0.5f);  // pool[3]: v1/face1 ← different → seam!
+    (void)uv.insert(1.f,  1.f);   // pool[4]: v3/face1
+    uv.map(0, 0, 0);  // face0 corner0 (v0) → pool[0]
+    uv.map(0, 1, 1);  // face0 corner1 (v1) → pool[1]
+    uv.map(0, 2, 2);  // face0 corner2 (v2) → pool[2]
+    uv.map(1, 0, 3);  // face1 corner0 (v1) → pool[3] (seam)
+    uv.map(1, 1, 2);  // face1 corner1 (v2) → pool[2] (same — no split)
+    uv.map(1, 2, 4);  // face1 corner2 (v3) → pool[4]
+
+    const auto [exp, flat] = expand_at_seams(mesh, uv);
+
+    // v1 was split → 4 original + 1 duplicate = 5
+    ASSERT_EQ(exp.num_vertices(), 5u);
+    EXPECT_EQ(exp.num_faces(), 2u);
+    ASSERT_EQ(flat.size(), 5u);
+
+    // Both faces still have 3 corners
+    ASSERT_EQ(exp.face(0).size(), 3u);
+    ASSERT_EQ(exp.face(1).size(), 3u);
+
+    // The seam vertex maps to different new indices in each face
+    const auto f0_v1_new = exp.face(0)[1];  // v1 as seen by face 0
+    const auto f1_v1_new = exp.face(1)[0];  // v1 as seen by face 1
+    EXPECT_NE(f0_v1_new, f1_v1_new) << "seam vertex must be split";
+
+    // v2 is not a seam: both faces reference the same expanded vertex
+    const auto f0_v2_new = exp.face(0)[2];
+    const auto f1_v2_new = exp.face(1)[1];
+    EXPECT_EQ(f0_v2_new, f1_v2_new) << "non-seam vertex must not be split";
+
+    // Geometry of both split copies matches original v1 = (1, 0, 0)
+    EXPECT_NEAR(exp.vertex(f0_v1_new)[0], 1.f, 1e-6f);
+    EXPECT_NEAR(exp.vertex(f0_v1_new)[1], 0.f, 1e-6f);
+    EXPECT_NEAR(exp.vertex(f1_v1_new)[0], 1.f, 1e-6f);
+    EXPECT_NEAR(exp.vertex(f1_v1_new)[1], 0.f, 1e-6f);
+}
+
+TEST(ExpandAtSeams, GeometryIdentical_AllOriginalPositions)
+{
+    // Four-vertex quad with a UV seam across the diagonal: verify every
+    // expanded vertex position is identical to the corresponding original.
+    Mesh3f mesh;
+    (void)mesh.insert_vertex(0.f, 0.f, 0.f);
+    (void)mesh.insert_vertex(1.f, 0.f, 0.f);
+    (void)mesh.insert_vertex(1.f, 1.f, 0.f);
+    (void)mesh.insert_vertex(0.f, 1.f, 0.f);
+    (void)mesh.insert_face(0u, 1u, 2u);
+    (void)mesh.insert_face(0u, 2u, 3u);
+
+    // Give v0 and v2 the same UVs in both faces → no seam
+    // Give v1 and v3 unique UVs → no seam either
+    UVMap2f uv;
+    (void)uv.insert(0.f, 0.f);   // pool[0]: v0 in face0
+    (void)uv.insert(1.f, 0.f);   // pool[1]: v1
+    (void)uv.insert(1.f, 1.f);   // pool[2]: v2 (shared, same pool)
+    (void)uv.insert(0.f, 0.f);   // pool[3]: v0 in face1 (same UV → no seam)
+    (void)uv.insert(0.f, 1.f);   // pool[4]: v3
+    uv.map(0, 0, 0);  uv.map(0, 1, 1);  uv.map(0, 2, 2);
+    uv.map(1, 0, 3);  uv.map(1, 1, 2);  uv.map(1, 2, 4);
+
+    const auto [exp, flat] = expand_at_seams(mesh, uv);
+
+    // pool[0] and pool[3] are different indices but identical UVs, so v0 is
+    // still split here (different pool indices). That is expected behaviour —
+    // expand_at_seams keys on pool index, not UV value.
+    EXPECT_EQ(exp.num_faces(), 2u);
+    EXPECT_EQ(flat.size(), exp.num_vertices());
+
+    // Every expanded vertex position must match the original vertex it was
+    // copied from. We verify by checking face connectivity:
+    // face0 → [new(v0), new(v1), new(v2)]
+    for (std::size_t fi = 0; fi < exp.num_faces(); ++fi) {
+        const auto& orig_face = mesh.face(fi);
+        const auto& new_face  = exp.face(fi);
+        ASSERT_EQ(orig_face.size(), new_face.size());
+        for (std::size_t ci = 0; ci < orig_face.size(); ++ci) {
+            const auto orig_vi = orig_face[ci];
+            const auto new_vi  = new_face[ci];
+            for (std::size_t d = 0; d < 3; ++d) {
+                EXPECT_NEAR(
+                    exp.vertex(new_vi)[d], mesh.vertex(orig_vi)[d], 1e-6f)
+                    << "face " << fi << " corner " << ci << " dim " << d;
+            }
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
+// PLY Round-Trip Test Fixture
+//------------------------------------------------------------------------------
+
+class PLYTest : public ::testing::Test
+{
+protected:
+    fs::path dir;
+
+    void SetUp() override
+    {
+        dir = fs::temp_directory_path() / "educelab_core_meshio_plytest";
+        fs::create_directories(dir);
+    }
+
+    void TearDown() override { fs::remove_all(dir); }
+
+    fs::path ply(const std::string& name) const
+    {
+        return dir / (name + ".ply");
+    }
+};
+
+//------------------------------------------------------------------------------
+// Task 3.3 — PLY Round-Trip Tests
+//------------------------------------------------------------------------------
+
+TEST_F(PLYTest, ASCIIPositionsOnly)
+{
+    const auto src  = make_triangle();
+    const auto path = ply("positions");
+    write_ply(path, src);
+
+    Mesh3f dst;
+    read_ply(path, dst);
+
+    ASSERT_EQ(dst.num_vertices(), 3u);
+    ASSERT_EQ(dst.num_faces(), 1u);
+    EXPECT_NEAR(dst.vertex(0)[0], 0.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(1)[0], 1.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(2)[1], 1.f, 1e-5f);
+    EXPECT_EQ(dst.face(0), (Mesh3f::Face{0, 1, 2}));
+}
+
+TEST_F(PLYTest, ASCIIPositionsWithNormals)
+{
+    NormalMesh src;
+    (void)src.insert_vertex(0.f, 0.f, 0.f);
+    (void)src.insert_vertex(1.f, 0.f, 0.f);
+    (void)src.insert_vertex(0.f, 1.f, 0.f);
+    src.vertex(0).normal = Vec3f{0, 0, 1};
+    src.vertex(1).normal = Vec3f{0, 0, 1};
+    src.vertex(2).normal = Vec3f{0, 0, 1};
+    (void)src.insert_face(0u, 1u, 2u);
+
+    const auto path = ply("normals");
+    write_ply(path, src);
+
+    NormalMesh dst;
+    read_ply(path, dst);
+
+    ASSERT_EQ(dst.num_vertices(), 3u);
+    ASSERT_TRUE(dst.vertex(0).normal.has_value());
+    EXPECT_NEAR((*dst.vertex(0).normal)[2], 1.f, 1e-5f);
+    EXPECT_NEAR((*dst.vertex(2).normal)[2], 1.f, 1e-5f);
+}
+
+TEST_F(PLYTest, ASCIIPositionsWithColors)
+{
+    ColorMesh src;
+    (void)src.insert_vertex(0.f, 0.f, 0.f);
+    (void)src.insert_vertex(1.f, 0.f, 0.f);
+    (void)src.insert_vertex(0.f, 1.f, 0.f);
+    src.vertex(0).color = Color::U8C3{255, 0, 0};
+    src.vertex(1).color = Color::U8C3{0, 255, 0};
+    src.vertex(2).color = Color::U8C3{0, 0, 255};
+    (void)src.insert_face(0u, 1u, 2u);
+
+    const auto path = ply("colors");
+    write_ply(path, src);
+
+    ColorMesh dst;
+    read_ply(path, dst);
+
+    ASSERT_EQ(dst.num_vertices(), 3u);
+    ASSERT_TRUE(dst.vertex(0).color.has_value());
+    const auto c0 = dst.vertex(0).color.value<Color::U8C3>();
+    EXPECT_EQ(c0[0], 255u);
+    EXPECT_EQ(c0[1], 0u);
+    EXPECT_EQ(c0[2], 0u);
+    const auto c1 = dst.vertex(1).color.value<Color::U8C3>();
+    EXPECT_EQ(c1[0], 0u);
+    EXPECT_EQ(c1[1], 255u);
+    EXPECT_EQ(c1[2], 0u);
+}
+
+TEST_F(PLYTest, NGonFace_Quad)
+{
+    const auto src  = make_quad();
+    const auto path = ply("quad");
+    write_ply(path, src);
+
+    Mesh3f dst;
+    read_ply(path, dst);
+
+    ASSERT_EQ(dst.num_vertices(), 4u);
+    ASSERT_EQ(dst.num_faces(), 1u);
+    EXPECT_EQ(dst.face(0).size(), 4u);
+}
+
+TEST_F(PLYTest, BinaryLittleEndian_Read)
+{
+    // Hand-craft a binary-little-endian PLY with one triangle
+    const auto path = ply("binary");
+    {
+        std::ofstream f(path, std::ios::binary);
+        // ASCII header
+        f << "ply\n"
+          << "format binary_little_endian 1.0\n"
+          << "element vertex 3\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "element face 1\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n";
+        // Vertex data (3 × 3 floats, little-endian)
+        const float verts[9] = {
+            0.f, 0.f, 0.f,
+            1.f, 0.f, 0.f,
+            0.f, 1.f, 0.f};
+        f.write(reinterpret_cast<const char*>(verts), sizeof(verts));
+        // Face data: count=3, indices 0 1 2
+        const uint8_t  cnt = 3;
+        const int32_t  idx[3] = {0, 1, 2};
+        f.write(reinterpret_cast<const char*>(&cnt), 1);
+        f.write(reinterpret_cast<const char*>(idx), sizeof(idx));
+    }
+
+    Mesh3f dst;
+    read_ply(path, dst);
+
+    ASSERT_EQ(dst.num_vertices(), 3u);
+    ASSERT_EQ(dst.num_faces(), 1u);
+    EXPECT_NEAR(dst.vertex(0)[0], 0.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(1)[0], 1.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(2)[1], 1.f, 1e-5f);
+    EXPECT_EQ(dst.face(0), (Mesh3f::Face{0, 1, 2}));
+}
+
+TEST_F(PLYTest, WriteWithUVMap_SeamExpansion)
+{
+    // Two triangles sharing an edge with a UV seam → expanded vertex count
+    Mesh3f src_mesh;
+    (void)src_mesh.insert_vertex(0.f,  0.f, 0.f);  // v0
+    (void)src_mesh.insert_vertex(1.f,  0.f, 0.f);  // v1 — seam vertex
+    (void)src_mesh.insert_vertex(0.5f, 1.f, 0.f);  // v2 — shared, no seam
+    (void)src_mesh.insert_vertex(2.f,  0.f, 0.f);  // v3
+    (void)src_mesh.insert_face(0u, 1u, 2u);
+    (void)src_mesh.insert_face(1u, 2u, 3u);
+
+    UVMap2f src_uv;
+    (void)src_uv.insert(0.f,  0.f);   // pool[0]: v0
+    (void)src_uv.insert(1.f,  0.f);   // pool[1]: v1/face0
+    (void)src_uv.insert(0.5f, 1.f);   // pool[2]: v2 (both faces)
+    (void)src_uv.insert(0.f,  0.5f);  // pool[3]: v1/face1 ← seam
+    (void)src_uv.insert(1.f,  1.f);   // pool[4]: v3
+    src_uv.map(0, 0, 0);  src_uv.map(0, 1, 1);  src_uv.map(0, 2, 2);
+    src_uv.map(1, 0, 3);  src_uv.map(1, 1, 2);  src_uv.map(1, 2, 4);
+
+    const auto path = ply("seam_uv");
+    write_ply(path, src_mesh, src_uv);
+
+    // Read back: vertex count must reflect the seam expansion (5, not 4)
+    Mesh3f dst_mesh;
+    UVMap2f dst_uv;
+    std::vector<fs::path> dst_textures;
+    read_ply(path, dst_mesh, dst_uv, dst_textures);
+
+    EXPECT_EQ(dst_mesh.num_vertices(), 5u);
+    EXPECT_EQ(dst_mesh.num_faces(), 2u);
+    EXPECT_EQ(dst_uv.size(), 5u);  // one UV pool entry per expanded vertex
+    EXPECT_TRUE(dst_textures.empty());
+}
+
+TEST_F(PLYTest, WriteWithUVMap_TexturePath_CommentInHeader)
+{
+    const auto src_mesh = make_triangle();
+    const auto src_uv   = make_triangle_uvmap(src_mesh);
+    const auto tex_path = fs::path("texture.png");
+    const auto path     = ply("tex");
+    write_ply(path, src_mesh, src_uv, tex_path);
+
+    // Verify header contains "comment TextureFile texture.png"
+    std::ifstream f(path);
+    std::string line;
+    bool found_comment = false;
+    while (std::getline(f, line)) {
+        if (line == "end_header") break;
+        if (line.rfind("comment TextureFile", 0) == 0) {
+            found_comment = true;
+            EXPECT_NE(line.find("texture.png"), std::string::npos);
+        }
+    }
+    EXPECT_TRUE(found_comment) << "Expected 'comment TextureFile' in PLY header";
+
+    // Round-trip: texture_path recovered
+    Mesh3f dst_mesh;
+    UVMap2f dst_uv;
+    std::vector<fs::path> dst_textures;
+    read_ply(path, dst_mesh, dst_uv, dst_textures);
+
+    ASSERT_EQ(dst_textures.size(), 1u);
+    EXPECT_EQ(dst_textures[0], tex_path);
+}
+
+TEST_F(PLYTest, ReadCommentTextureFile_HandCraftedPLY)
+{
+    // Hand-craft a PLY with two texture comments
+    const auto path = ply("two_textures");
+    {
+        std::ofstream f(path);
+        f << "ply\n"
+          << "format ascii 1.0\n"
+          << "comment TextureFile atlas0.png\n"
+          << "comment TextureFile atlas1.png\n"
+          << "element vertex 3\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "element face 1\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n"
+          << "0 0 0\n"
+          << "1 0 0\n"
+          << "0 1 0\n"
+          << "3 0 1 2\n";
+    }
+
+    Mesh3f dst_mesh;
+    UVMap2f dst_uv;
+    std::vector<fs::path> dst_textures;
+    read_ply(path, dst_mesh, dst_uv, dst_textures);
+
+    ASSERT_EQ(dst_textures.size(), 2u);
+    EXPECT_EQ(dst_textures[0], fs::path("atlas0.png"));
+    EXPECT_EQ(dst_textures[1], fs::path("atlas1.png"));
+}
+
+TEST_F(PLYTest, ReadMissingFile_Throws)
+{
+    Mesh3f dst;
+    EXPECT_THROW(
+        read_ply(dir / "nonexistent.ply", dst), std::runtime_error);
 }
