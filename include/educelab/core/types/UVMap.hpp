@@ -12,6 +12,9 @@
 namespace educelab
 {
 
+namespace traits
+{
+
 /** @brief Default (empty) per-coordinate traits for UVMap */
 struct DefaultUVTraits {
 };
@@ -22,13 +25,15 @@ struct DefaultUVTraits {
  * Compose into a custom traits struct (or use directly) to attach a UV atlas
  * chart index to each coordinate:
  * @code
- * using MyUVMap = UVMap<float, 2, WithChart>;
+ * using MyUVMap = UVMap<float, 2, traits::WithChart>;
  * @endcode
  */
 struct WithChart {
     /** @brief Atlas chart index */
     std::size_t chart{0};
 };
+
+}  // namespace traits
 
 /**
  * @brief Per-wedge UV/UVW coordinate store
@@ -39,16 +44,16 @@ struct WithChart {
  * duplication), and the same vertex can map to different UV coordinates in
  * adjacent faces (UV seam support).
  *
- * @tparam T      Element type (default: @c float)
+ * @tparam T      Floating-point element type (default: @c float)
  * @tparam Dims   Coordinate dimensionality (default: 2 for UV; use 3 for UVW)
  * @tparam Traits Optional per-coordinate metadata mixin (default:
- *                @ref DefaultUVTraits)
+ *                @ref traits::DefaultUVTraits)
  */
 template <
     typename T = float,
     std::size_t Dims = 2,
-    typename Traits = DefaultUVTraits,
-    std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
+    typename Traits = traits::DefaultUVTraits,
+    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 class UVMap
 {
 public:
@@ -150,10 +155,22 @@ public:
      *
      * @return Index of the inserted coordinate
      */
-    auto insert(const Coordinate& c) -> std::size_t
+    [[nodiscard]] auto insert(const Coordinate& c) -> std::size_t
     {
         const auto idx = uvs_.size();
         uvs_.push_back(c);
+        return idx;
+    }
+
+    /**
+     * @brief Insert a coordinate into the pool (move)
+     *
+     * @return Index of the inserted coordinate
+     */
+    [[nodiscard]] auto insert(Coordinate&& c) -> std::size_t
+    {
+        const auto idx = uvs_.size();
+        uvs_.push_back(std::move(c));
         return idx;
     }
 
@@ -163,12 +180,12 @@ public:
      *
      * @return Index of the inserted coordinate
      */
-    auto insert(const Vec<T, Dims>& v) -> std::size_t
+    [[nodiscard]] auto insert(const Vec<T, Dims>& v) -> std::size_t
     {
         const auto idx = uvs_.size();
         Coordinate c;
         static_cast<Vec<T, Dims>&>(c) = v;
-        uvs_.push_back(c);
+        uvs_.push_back(std::move(c));
         return idx;
     }
 
@@ -180,7 +197,7 @@ public:
      * @return Index of the inserted coordinate
      */
     template <typename... Args>
-    auto insert(Args... args) -> std::size_t
+    [[nodiscard]] auto insert(Args... args) -> std::size_t
     {
         static_assert(
             sizeof...(Args) == Dims, "insert: argument count must equal Dims");
@@ -194,14 +211,17 @@ public:
      *
      * @throws std::out_of_range if @p idx >= pool size
      */
-    auto at(std::size_t idx) -> Coordinate& { return uvs_.at(idx); }
+    [[nodiscard]] auto at(std::size_t idx) -> Coordinate&
+    {
+        return uvs_.at(idx);
+    }
 
     /**
      * @brief Bounds-checked access to a pool coordinate (const)
      *
      * @throws std::out_of_range if @p idx >= pool size
      */
-    auto at(std::size_t idx) const -> const Coordinate&
+    [[nodiscard]] auto at(std::size_t idx) const -> const Coordinate&
     {
         return std::as_const(uvs_).at(idx);
     }
@@ -215,6 +235,10 @@ public:
      *        @p corner)
      *
      * Auto-grows storage if @p face or @p corner exceed current bounds.
+     * Overwrites any existing mapping for the wedge.
+     *
+     * @pre @p face and @p corner must not equal @c std::numeric_limits<std::size_t>::max()
+     * @pre @p uvIdx < size()
      */
     void map(std::size_t face, std::size_t corner, std::size_t uvIdx)
     {
@@ -232,7 +256,8 @@ public:
      *
      * @throws std::out_of_range if the wedge is out of range or unmapped
      */
-    auto get(std::size_t face, std::size_t corner) -> std::size_t
+    [[nodiscard]] auto get(std::size_t face, std::size_t corner) const
+        -> std::size_t
     {
         if (face >= face_uvs_.size() || corner >= face_uvs_[face].size() ||
             !face_uvs_[face][corner].has_value()) {
@@ -249,7 +274,8 @@ public:
      *
      * @throws std::out_of_range if the wedge is unmapped
      */
-    auto get_coordinate(std::size_t face, std::size_t corner) -> Coordinate&
+    [[nodiscard]] auto get_coordinate(std::size_t face, std::size_t corner)
+        -> Coordinate&
     {
         return at(get(face, corner));
     }
@@ -260,11 +286,10 @@ public:
      *
      * @throws std::out_of_range if the wedge is unmapped
      */
-    auto get_coordinate(std::size_t face, std::size_t corner) const
-        -> const Coordinate&
+    [[nodiscard]] auto get_coordinate(
+        std::size_t face, std::size_t corner) const -> const Coordinate&
     {
-        return std::as_const(*this).at(
-            const_cast<UVMap*>(this)->get(face, corner));
+        return at(get(face, corner));
     }
 
     /**
@@ -272,7 +297,7 @@ public:
      *
      * Returns @c false for any out-of-range index or unmapped slot.
      */
-    auto has(std::size_t face, std::size_t corner) const -> bool
+    [[nodiscard]] auto has(std::size_t face, std::size_t corner) const -> bool
     {
         if (face >= face_uvs_.size() || corner >= face_uvs_[face].size()) {
             return false;
@@ -285,10 +310,13 @@ public:
     //--------------------------------------------------------------------------
 
     /** @brief Number of coordinates in the pool */
-    auto size() const -> std::size_t { return uvs_.size(); }
+    [[nodiscard]] auto size() const noexcept -> std::size_t
+    {
+        return uvs_.size();
+    }
 
     /** @brief Whether the coordinate pool is empty */
-    auto empty() const -> bool { return uvs_.empty(); }
+    [[nodiscard]] auto empty() const noexcept -> bool { return uvs_.empty(); }
 
     /** @brief Pre-allocate pool capacity */
     void reserve_uvs(std::size_t n) { uvs_.reserve(n); }
@@ -297,7 +325,7 @@ public:
     void reserve_faces(std::size_t n) { face_uvs_.reserve(n); }
 
     /** @brief Reset pool and per-wedge mapping to empty */
-    void clear()
+    void clear() noexcept
     {
         uvs_.clear();
         face_uvs_.clear();
@@ -306,7 +334,14 @@ public:
 private:
     /** UV coordinate pool */
     std::vector<Coordinate> uvs_;
-    /** Per-face, per-corner UV pool index; nullopt if unmapped */
+    /**
+     * Per-face, per-corner UV pool index; nullopt if unmapped.
+     *
+     * @todo The vector-of-vectors layout causes one heap allocation per face
+     *       and pointer-chasing on every access. For large meshes a flat layout
+     *       with an offset table would improve cache locality. A fixed-stride
+     *       triangle-only variant is the right solution for real-time use cases.
+     */
     std::vector<std::vector<std::optional<std::size_t>>> face_uvs_;
 };
 

@@ -49,7 +49,7 @@ TEST(UVMap, InsertVecRoundTrip)
 TEST(UVMap, AtNonConstReturnsMutableRef)
 {
     UVMap2f m;
-    m.insert(0.0f, 0.0f);
+    (void)m.insert(0.0f, 0.0f);
     Coord2f& ref = m.at(0);
     ref[0] = 0.8f;
     ref[1] = 0.2f;
@@ -60,7 +60,7 @@ TEST(UVMap, AtNonConstReturnsMutableRef)
 TEST(UVMap, AtConstReturnsConstRef)
 {
     UVMap2f m;
-    m.insert(0.4f, 0.6f);
+    (void)m.insert(0.4f, 0.6f);
     const UVMap2f& cm = m;
     const Coord2f& ref = cm.at(0);
     // Implicit conversion to Vec verifies inheritance
@@ -72,9 +72,9 @@ TEST(UVMap, AtConstReturnsConstRef)
 TEST(UVMap, AtThrowsOutOfRange)
 {
     UVMap2f m;
-    EXPECT_THROW(m.at(0), std::out_of_range);
-    m.insert(0.0f, 0.0f);
-    EXPECT_THROW(m.at(1), std::out_of_range);
+    EXPECT_THROW((void)m.at(0), std::out_of_range);
+    (void)m.insert(0.0f, 0.0f);
+    EXPECT_THROW((void)m.at(1), std::out_of_range);
 }
 
 //------------------------------------------------------------------------------
@@ -140,13 +140,31 @@ TEST(UVMap, CornersOutOfOrder)
 }
 
 //------------------------------------------------------------------------------
+// Overwrite: remapping an already-mapped wedge updates the index
+//------------------------------------------------------------------------------
+
+TEST(UVMap, RemapWedgeUpdatesIndex)
+{
+    UVMap2f m;
+    const auto idx0 = m.insert(0.1f, 0.2f);
+    const auto idx1 = m.insert(0.8f, 0.9f);
+
+    m.map(0, 0, idx0);
+    EXPECT_EQ(m.get(0, 0), idx0);
+
+    // Remap the same wedge to a different pool entry
+    m.map(0, 0, idx1);
+    EXPECT_EQ(m.get(0, 0), idx1);
+}
+
+//------------------------------------------------------------------------------
 // has()
 //------------------------------------------------------------------------------
 
 TEST(UVMap, HasReturnsFalseForUnmappedCorner)
 {
     UVMap2f m;
-    m.insert(0.0f, 0.0f);
+    (void)m.insert(0.0f, 0.0f);
     m.map(0, 0, 0);
     EXPECT_FALSE(m.has(0, 1));
 }
@@ -160,7 +178,7 @@ TEST(UVMap, HasReturnsFalseForOutOfRangeFace)
 TEST(UVMap, HasReturnsFalseForOutOfRangeCorner)
 {
     UVMap2f m;
-    m.insert(0.0f, 0.0f);
+    (void)m.insert(0.0f, 0.0f);
     m.map(0, 0, 0);
     EXPECT_FALSE(m.has(0, 99));
 }
@@ -168,7 +186,7 @@ TEST(UVMap, HasReturnsFalseForOutOfRangeCorner)
 TEST(UVMap, HasReturnsTrueForMappedWedge)
 {
     UVMap2f m;
-    m.insert(0.0f, 0.0f);
+    (void)m.insert(0.0f, 0.0f);
     m.map(0, 0, 0);
     EXPECT_TRUE(m.has(0, 0));
 }
@@ -180,15 +198,15 @@ TEST(UVMap, HasReturnsTrueForMappedWedge)
 TEST(UVMap, GetThrowsForUnmappedCorner)
 {
     UVMap2f m;
-    m.insert(0.0f, 0.0f);
+    (void)m.insert(0.0f, 0.0f);
     m.map(0, 0, 0);
-    EXPECT_THROW(m.get(0, 1), std::out_of_range);
+    EXPECT_THROW((void)m.get(0, 1), std::out_of_range);
 }
 
 TEST(UVMap, GetThrowsForOutOfRangeFace)
 {
     UVMap2f m;
-    EXPECT_THROW(m.get(99, 0), std::out_of_range);
+    EXPECT_THROW((void)m.get(99, 0), std::out_of_range);
 }
 
 //------------------------------------------------------------------------------
@@ -198,7 +216,7 @@ TEST(UVMap, GetThrowsForOutOfRangeFace)
 TEST(UVMap, GetCoordinateNonConstReturnsMutableRef)
 {
     UVMap2f m;
-    m.insert(0.1f, 0.2f);
+    (void)m.insert(0.1f, 0.2f);
     m.map(0, 0, 0);
 
     Coord2f& ref = m.get_coordinate(0, 0);
@@ -209,7 +227,7 @@ TEST(UVMap, GetCoordinateNonConstReturnsMutableRef)
 TEST(UVMap, GetCoordinateConstReturnsConstRef)
 {
     UVMap2f m;
-    m.insert(0.3f, 0.4f);
+    (void)m.insert(0.3f, 0.4f);
     m.map(0, 0, 0);
 
     const UVMap2f& cm = m;
@@ -221,8 +239,23 @@ TEST(UVMap, GetCoordinateConstReturnsConstRef)
 TEST(UVMap, GetCoordinateThrowsForUnmappedWedge)
 {
     UVMap2f m;
-    m.insert(0.0f, 0.0f);
-    EXPECT_THROW(m.get_coordinate(0, 0), std::out_of_range);
+    (void)m.insert(0.0f, 0.0f);
+    EXPECT_THROW((void)m.get_coordinate(0, 0), std::out_of_range);
+}
+
+// Const get_coordinate preserves trait fields when Traits is non-empty
+TEST(UVMap, GetCoordinateConstPreservesWithChartTrait)
+{
+    UVMap<float, 2, traits::WithChart> m;
+    UVMap<float, 2, traits::WithChart>::Coordinate c;
+    c[0] = 0.5f;
+    c[1] = 0.5f;
+    c.chart = 11;
+    (void)m.insert(c);
+    m.map(0, 0, 0);
+
+    const auto& cm = m;
+    EXPECT_EQ(cm.get_coordinate(0, 0).chart, 11u);
 }
 
 //------------------------------------------------------------------------------
@@ -264,11 +297,11 @@ TEST(UVMap, SizeAndEmpty)
     EXPECT_TRUE(m.empty());
     EXPECT_EQ(m.size(), 0u);
 
-    m.insert(0.0f, 0.0f);
+    (void)m.insert(0.0f, 0.0f);
     EXPECT_FALSE(m.empty());
     EXPECT_EQ(m.size(), 1u);
 
-    m.insert(1.0f, 1.0f);
+    (void)m.insert(1.0f, 1.0f);
     EXPECT_EQ(m.size(), 2u);
 }
 
@@ -287,13 +320,13 @@ TEST(UVMap, ReserveDoesNotChangeLogicalState)
 }
 
 //------------------------------------------------------------------------------
-// clear()
+// clear(): resets state and allows re-use
 //------------------------------------------------------------------------------
 
 TEST(UVMap, ClearResetsPoolAndMapping)
 {
     UVMap2f m;
-    m.insert(0.0f, 0.0f);
+    (void)m.insert(0.0f, 0.0f);
     m.map(0, 0, 0);
 
     m.clear();
@@ -301,6 +334,13 @@ TEST(UVMap, ClearResetsPoolAndMapping)
     EXPECT_TRUE(m.empty());
     EXPECT_EQ(m.size(), 0u);
     EXPECT_FALSE(m.has(0, 0));
+
+    // Map is fully functional after clear
+    const auto idx = m.insert(0.7f, 0.3f);
+    m.map(0, 0, idx);
+    EXPECT_TRUE(m.has(0, 0));
+    EXPECT_EQ(m.get(0, 0), idx);
+    EXPECT_EQ(m.at(idx)[0], 0.7f);
 }
 
 //------------------------------------------------------------------------------
@@ -310,7 +350,7 @@ TEST(UVMap, ClearResetsPoolAndMapping)
 TEST(UVMap, CopyIsIndependent)
 {
     UVMap2f m;
-    m.insert(0.1f, 0.2f);
+    (void)m.insert(0.1f, 0.2f);
     m.map(0, 0, 0);
 
     UVMap2f copy = m;
@@ -324,13 +364,59 @@ TEST(UVMap, CopyIsIndependent)
 }
 
 //------------------------------------------------------------------------------
+// Move semantics
+//------------------------------------------------------------------------------
+
+TEST(UVMap, MoveConstruction)
+{
+    UVMap2f m;
+    (void)m.insert(0.1f, 0.2f);
+    m.map(0, 0, 0);
+
+    UVMap2f moved = std::move(m);
+
+    EXPECT_EQ(moved.size(), 1u);
+    EXPECT_TRUE(moved.has(0, 0));
+    EXPECT_EQ(moved.at(0)[0], 0.1f);
+}
+
+TEST(UVMap, MoveAssignment)
+{
+    UVMap2f m;
+    (void)m.insert(0.3f, 0.4f);
+    m.map(0, 0, 0);
+
+    UVMap2f moved;
+    moved = std::move(m);
+
+    EXPECT_EQ(moved.size(), 1u);
+    EXPECT_TRUE(moved.has(0, 0));
+    EXPECT_EQ(moved.at(0)[0], 0.3f);
+}
+
+//------------------------------------------------------------------------------
+// Default template arguments: UVMap<> is a 2D float UV map
+//------------------------------------------------------------------------------
+
+TEST(UVMap, DefaultTemplateArguments)
+{
+    UVMap<> m;
+    const auto idx = m.insert(0.5f, 0.25f);
+    EXPECT_EQ(m.at(idx)[0], 0.5f);
+    EXPECT_EQ(m.at(idx)[1], 0.25f);
+    m.map(0, 0, idx);
+    EXPECT_EQ(m.get(0, 0), idx);
+}
+
+//------------------------------------------------------------------------------
 // Coordinate arithmetic operators return Coordinate (not Vec)
 //------------------------------------------------------------------------------
 
-TEST(UVMap, CoordinateArithmeticPreservesType)
+TEST(UVMap, CoordinateArithmeticAddPreservesLhsChart)
 {
-    // Verify that operator+ returns Coordinate, not Vec, so trait fields survive
-    using Map = UVMap<float, 2, WithChart>;
+    // operator+ takes lhs by value (copying a's traits); result inherits a's
+    // chart field. b's chart is not propagated.
+    using Map = UVMap<float, 2, traits::WithChart>;
     using Coord = Map::Coordinate;
 
     Coord a;
@@ -341,20 +427,70 @@ TEST(UVMap, CoordinateArithmeticPreservesType)
     Coord b;
     b[0] = 0.4f;
     b[1] = 0.6f;
-    b.chart = 7;  // should be ignored by operator+ (only Vec data added)
+    b.chart = 7;
 
     Coord sum = a + b;
     EXPECT_NEAR(sum[0], 0.5f, 1e-6f);
     EXPECT_NEAR(sum[1], 0.8f, 1e-6f);
+    EXPECT_EQ(sum.chart, 3u);  // lhs chart is preserved in result
+}
+
+TEST(UVMap, CoordinateArithmeticMulPreservesLhsChart)
+{
+    using Map = UVMap<float, 2, traits::WithChart>;
+    using Coord = Map::Coordinate;
+
+    Coord a;
+    a[0] = 0.1f;
+    a[1] = 0.2f;
+    a.chart = 3;
 
     Coord scaled = a * 2.0f;
     EXPECT_NEAR(scaled[0], 0.2f, 1e-6f);
     EXPECT_NEAR(scaled[1], 0.4f, 1e-6f);
+    EXPECT_EQ(scaled.chart, 3u);
+}
+
+TEST(UVMap, CoordinateArithmeticSubPreservesLhsChart)
+{
+    using Map = UVMap<float, 2, traits::WithChart>;
+    using Coord = Map::Coordinate;
+
+    Coord a;
+    a[0] = 0.9f;
+    a[1] = 0.8f;
+    a.chart = 5;
+
+    Coord b;
+    b[0] = 0.4f;
+    b[1] = 0.3f;
+    b.chart = 99;
+
+    Coord diff = a - b;
+    EXPECT_NEAR(diff[0], 0.5f, 1e-6f);
+    EXPECT_NEAR(diff[1], 0.5f, 1e-6f);
+    EXPECT_EQ(diff.chart, 5u);
+}
+
+TEST(UVMap, CoordinateArithmeticDivPreservesLhsChart)
+{
+    using Map = UVMap<float, 2, traits::WithChart>;
+    using Coord = Map::Coordinate;
+
+    Coord a;
+    a[0] = 0.8f;
+    a[1] = 0.4f;
+    a.chart = 2;
+
+    Coord divided = a / 2.0f;
+    EXPECT_NEAR(divided[0], 0.4f, 1e-6f);
+    EXPECT_NEAR(divided[1], 0.2f, 1e-6f);
+    EXPECT_EQ(divided.chart, 2u);
 }
 
 TEST(UVMap, CompoundAssignmentReturnsCoordsRef)
 {
-    using Map = UVMap<float, 2, WithChart>;
+    using Map = UVMap<float, 2, traits::WithChart>;
     using Coord = Map::Coordinate;
 
     Coord a;
@@ -379,8 +515,8 @@ TEST(UVMap, CompoundAssignmentReturnsCoordsRef)
 
 TEST(UVMap, WithChartTraitPreservedByAt)
 {
-    UVMap<float, 2, WithChart> m;
-    UVMap<float, 2, WithChart>::Coordinate c;
+    UVMap<float, 2, traits::WithChart> m;
+    UVMap<float, 2, traits::WithChart>::Coordinate c;
     c[0] = 0.5f;
     c[1] = 0.5f;
     c.chart = 7;
