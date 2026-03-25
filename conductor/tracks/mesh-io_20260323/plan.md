@@ -223,6 +223,76 @@ include only this file.
 
 ---
 
+## Phase 5: Review Fixes and Binary PLY Performance
+
+Address findings from the multi-dimension code review (security, performance,
+architecture, testing) plus deferred binary PLY reader optimisations.
+
+### Tasks
+
+- [x] **Task 5.1**: Fix `to_chars<long double>` linker failure on macOS-26 —
+      add `long double` probe to `CheckCharconvFP.cmake`; add
+      `to_string_view` specialisation for `long double` that casts to
+      `double` when `EDUCE_CORE_NEED_CHARCONV_FP_LONG_DOUBLE` is defined
+- [x] **Task 5.2**: Security fixes —
+      (a) `parse_face_ref`: throw `std::runtime_error` on negative or zero
+      OBJ face index (check for leading `-` before `to_numeric`, check
+      result == 0 before subtract);
+      (b) PLY per-face vertex count: cap at 256, throw if exceeded (both
+      ASCII and binary paths);
+      (c) PLY face indices: validate each index against `hdr.n_vertices`
+      in `read_ply_impl`, throw if out of range;
+      (d) BinaryBE: throw `std::runtime_error` instead of falling through
+      to ASCII path
+- [x] **Task 5.3**: Performance fixes —
+      (a) `split()`: use `thread_local static std::locale` instead of
+      constructing on every call;
+      (b) add `split_into(sv, vec)` overload that clears and reuses a
+      caller-provided vector; update OBJ and PLY ASCII parsers to use it;
+      (c) `read_obj_impl`: hoist `face_vts`, `face_vns`, `face_verts`
+      declarations above the face-parsing loop;
+      (d) `expand_at_seams`: replace `std::map` with `std::unordered_map`
+      using an inline documented hash lambda for
+      `std::pair<std::size_t, std::size_t>`
+- [x] **Task 5.4**: Architecture fixes —
+      (a) `detail::write_obj_impl(file, mesh, uvmap*, texture_path*)`
+      consolidating Tiers 1–3a; Tier 3b reuses vertex-writing sub-helper;
+      (b) `detail::write_ply_impl(file, exp_mesh, flat_uvs*, texture_path*)`
+      consolidating all three PLY write tiers;
+      (c) add `read_ply(path, mesh, uvmap)` Tier 2 overload (delegates to
+      `detail::read_ply_impl` with `nullptr` texture_paths);
+      (d) fix `read_mesh(path, mesh, uvmap)` facade to call the new Tier 2
+      `read_ply` directly instead of constructing a throwaway vector
+- [x] **Task 5.5**: Testing fixes —
+      (a) unique temp dirs: use `this` pointer address as hex suffix in all
+      three fixtures;
+      (b) verify all 9 position components in OBJ/PLY position-only
+      round-trip tests;
+      (c) verify all three vertex colors in `PositionsWithColors` tests;
+      (d) add write-failure tests for `write_obj`, `write_ply`, and
+      `write_mesh` on an unwritable path;
+      (e) add PLY UV coordinate value verification (not just count);
+      (f) add `v/vt/vn` combined face format OBJ test;
+      (g) add PLY malformed/truncated header test;
+      (h) add `NCMesh` (normals + colors combined) OBJ round-trip test;
+      (i) add BinaryBE throw test;
+      (j) add `expand_at_seams` empty-mesh test
+- [ ] **Task 5.6** *(deferred perf)*: Pre-compute vertex property role enum
+      from PLY header; replace per-property-per-vertex string comparison
+      chain with a role-indexed dispatch in the binary reader inner loop
+- [ ] **Task 5.7** *(deferred perf)*: Batch-read full vertex record into a
+      stack buffer per vertex in binary PLY reader; extract fields with
+      `std::memcpy` to reduce `istream::read` calls from
+      O(properties × vertices) to O(vertices)
+
+### Verification
+
+- [x] `ctest` passes with no regressions (17/17)
+- [x] All new tests pass
+- [x] Build succeeds on macOS locally; macOS-26 long double fix in place
+
+---
+
 ## Final Verification
 
 - [x] All acceptance criteria in `spec.md` met
@@ -235,4 +305,4 @@ include only this file.
 
 ---
 
-_Updated 2026-03-24 to reflect interface design review._
+_Updated 2026-03-25 to add Phase 5 review-fix and deferred binary PLY perf tasks._
