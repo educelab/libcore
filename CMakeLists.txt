@@ -22,7 +22,7 @@ else()
 endif()
 
 # Extra compile definitions
-include(CheckToNumericFP)
+include(CheckCharconvFP)
 
 # Build library
 set(public_hdrs

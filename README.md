@@ -258,34 +258,52 @@ std::cout << trim_left("  left") << "\n";      // "left"
 std::cout << trim_right("right  ") << "\n";    // "right"
 std::cout << trim("  center  ") << "\n";       // "center"
 
-// Conversion to numeric types
+// Split on whitespace (any run treated as one delimiter)
+auto tokens = split("  v  1.0\t2.0  3.0  ");  // {"v", "1.0", "2.0", "3.0"}
+
+// Split with a predicate (single-pass, no allocation)
+auto parts = split("1/2/3", [](char c) { return c == '/'; }); // {"1", "2", "3"}
+
+// Conversion from string to numeric types
 std::cout << to_numeric<int>("3.14") << "\n";   // 3
 std::cout << to_numeric<float>("3.14") << "\n"; // 3.14
+
+// Conversion from numeric to string (locale-independent)
+std::cout << to_string(3.14f) << "\n";          // "3.14"
+
+// Buffer-reusing variant for hot paths (no heap allocation)
+std::array<char, 128> buf;
+file << to_string_view(buf, x) << ' ' << to_string_view(buf, y) << '\n';
 ```
 
 See [examples/StringExample.cpp](examples/StringExample.cpp) for more usage
-examples.å
+examples.
 
-#### A note on `to_numeric` compilation
-The default `to_numeric` implementation relies upon `std::from_chars`.
-However, many compilers do not provide implementations for this function for 
-floating point types. In these circumstances, you may fall back to a 
-`std::sto*`-based `to_numeric` implementation by adding the 
-`EDUCE_CORE_NEED_TO_NUMERIC_FP` compiler definition. When using this project 
-with CMake, this definition will automatically be added when you link against 
-the `educelab::core` target. 
+#### A note on `to_numeric` and `to_string` compilation
 
-**(v0.2.1 and later)** If not linking against the target (i.e. when using the 
-library as header-only), you may alternatively check the result of the 
-`EDUCE_CORE_NEED_TO_NUMERIC_FP` CMake cache variable and set the definition 
-manually in your own project.
+`to_numeric` uses `std::from_chars` for string-to-number conversion.
+`to_string` and `to_string_view` use `std::to_chars` for number-to-string
+conversion. Both were introduced in C++17 but floating-point support arrived
+later and is gated on the runtime library version (e.g. macOS 13.3+).
+
+CMake probes for both at configure time and reports the results:
+
+- **`CXX_CHARCONV_FP_FROM_CHARS`** — whether `std::from_chars` supports
+  `float`. If not, `EDUCE_CORE_NEED_CHARCONV_FP` is defined and `to_numeric`
+  falls back to `std::stof` / `std::stod` / `std::stold`.
+- **`CXX_CHARCONV_FP_TO_CHARS`** — whether `std::to_chars` supports `float`.
+  `to_string_view` requires this unconditionally; no fallback is provided.
+
+When linking against the `educelab::core` CMake target, `EDUCE_CORE_NEED_CHARCONV_FP`
+is propagated automatically. If using the library header-only, check the CMake
+cache variable and set the definition manually:
 
 ```cmake
 # Import libcore
 FetchContent_Declare(
     libcore
     GIT_REPOSITORY https://github.com/educelab/libcore.git
-    GIT_TAG v0.2.1
+    GIT_TAG v0.3.0
     EXCLUDE_FROM_ALL
 )
 FetchContent_MakeAvailable(libcore)
@@ -297,9 +315,9 @@ target_include_directories(foo
         $<BUILD_INTERFACE:${libcore_SOURCE_DIR}/include>
 )
 
-# Conditionally add the to_numeric compiler definition
-if(EDUCE_CORE_NEED_TO_NUMERIC_FP)
-    target_compile_definitions(foo PRIVATE EDUCE_CORE_NEED_TO_NUMERIC_FP)
+# Propagate the to_numeric fallback definition if needed
+if(EDUCE_CORE_NEED_CHARCONV_FP)
+    target_compile_definitions(foo PRIVATE EDUCE_CORE_NEED_CHARCONV_FP)
 endif()
 ```
 

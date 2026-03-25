@@ -3,6 +3,7 @@
 /** @file */
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <exception>
 #include <iomanip>
@@ -151,27 +152,104 @@ static auto trim_copy(const std::string_view s) -> std::string
 }
 
 /**
- * @brief Split a string by a delimiter
+ * @brief Split a string wherever a predicate returns true, skipping
+ * consecutive delimiter characters (no empty tokens produced)
  *
- * When provided conflicting delimiters, the largest delimiter will take
+ * Single-pass O(n) core of the split family. Use when the delimiter is
+ * expressible as a per-character predicate — character classes, single
+ * characters, etc. For multi-character delimiters (e.g. @c "->") use the
+ * string-delimiter overload.
+ *
+ * @code
+ * // Split on slash — returns {"1", "2", "3"}
+ * split("1/2/3", [](char c) { return c == '/'; });
+ *
+ * // Split on comma or semicolon
+ * split("a,b;c", [](char c) { return c == ',' || c == ';'; });
+ * @endcode
+ *
+ * @tparam Pred Callable with signature @c bool(char)
+ */
+template <
+    typename Pred,
+    std::enable_if_t<std::is_invocable_r_v<bool, Pred, char>, bool> = true>
+static auto split(std::string_view s, Pred&& pred)
+    -> std::vector<std::string_view>
+{
+    std::vector<std::string_view> tokens;
+    const auto* p = s.data();
+    const auto* const end = p + s.size();
+    while (p != end) {
+        while (p != end && pred(*p)) {
+            ++p;
+        }
+        if (p == end) {
+            break;
+        }
+        const auto* const start = p;
+        while (p != end && !pred(*p)) {
+            ++p;
+        }
+        tokens.emplace_back(start, static_cast<std::size_t>(p - start));
+    }
+    return tokens;
+}
+
+/**
+ * @brief Split a string on any whitespace, skipping consecutive whitespace
+ *
+ * Equivalent to Python's @c str.split() with no argument: any run of
+ * whitespace characters (space, tab, carriage return, etc.) is treated as a
+ * single delimiter, and leading/trailing whitespace produces no empty tokens.
+ *
+ * This is a single O(n) pass with no intermediate allocations for delimiter
+ * positions. Prefer it for whitespace-delimited text such as OBJ/PLY lines.
+ *
+ * @code
+ * // All return {"v", "1.0", "2.0", "3.0"}
+ * split("v 1.0 2.0 3.0");
+ * split("  v  1.0\t2.0  3.0  ");
+ * @endcode
+ */
+static auto split(std::string_view s) -> std::vector<std::string_view>
+{
+    const auto& loc = std::locale();
+    return split(s, [&loc](char c) { return std::isspace(c, loc); });
+}
+
+/**
+ * @brief Split a string by one or more string delimiters
+ *
+ * When provided conflicting delimiters, the largest delimiter takes
  * precedence:
  *
- * ```{.cpp}
+ * @code
  * split("a->b->c", "-", "->");  // returns {"a", "b", "c"}
- * ```
+ * @endcode
+ *
+ * When all delimiters are single characters, dispatches to the O(n) predicate
+ * overload automatically. Multi-character delimiters use the sort-based path.
  */
 template <typename... Ds>
 static auto split(std::string_view s, const Ds&... ds)
     -> std::vector<std::string_view>
 {
-    constexpr std::string_view DEFAULT_DELIM{" "};
-
     // Build delimiters list
-    std::vector<std::string_view> delimiters;
-    if (sizeof...(ds) > 0) {
-        delimiters = {ds...};
-    } else {
-        delimiters.emplace_back(DEFAULT_DELIM);
+    std::vector<std::string_view> delimiters{ds...};
+
+    // Fast path: all delimiters are single characters — build a char set and
+    // dispatch to the O(n) predicate overload
+    if (std::all_of(delimiters.begin(), delimiters.end(), [](const auto& d) {
+            return d.size() == 1;
+        })) {
+        std::vector<char> chars;
+        chars.reserve(delimiters.size());
+        for (const auto& d : delimiters) {
+            chars.push_back(d[0]);
+        }
+        return split(s, [&chars](char c) {
+            return std::find(chars.begin(), chars.end(), c) != chars.end();
+        });
     }
 
     // Get a list of all delimiter start pos and sizes
@@ -282,13 +360,66 @@ auto to_numeric(const std::string_view str, Args... args) -> T
     return val;
 }
 
-#ifdef EDUCE_CORE_NEED_TO_NUMERIC_FP
+/**
+ * @brief Convert a numeric value to a @c std::string_view into a
+ * caller-provided buffer, with no heap allocation
+ *
+ * Wraps @c std::to_chars to eliminate boilerplate. The caller declares one
+ * buffer and reuses it across all conversions in a serialization pass:
+ *
+ * @code
+ * std::array<char, 128> buf;
+ * for (const auto& v : mesh.vertices()) {
+ *     file << to_string_view(buf, v[0]) << ' '
+ *          << to_string_view(buf, v[1]) << ' '
+ *          << to_string_view(buf, v[2]) << '\n';
+ * }
+ * @endcode
+ *
+ * @warning The returned @c std::string_view is only valid until the next call
+ * to @c to_string_view (or any other write) using the same buffer.
+ *
+ * @throws std::runtime_error if @p buf is too small for the converted value
+ * @tparam N Buffer size; 128 is sufficient for any standard arithmetic type
+ * @tparam T Arithmetic type to convert
+ */
+template <
+    std::size_t N,
+    typename T,
+    std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
+auto to_string_view(std::array<char, N>& buf, T val) -> std::string_view
+{
+    const auto [ptr, ec] = std::to_chars(buf.data(), buf.data() + N, val);
+    if (ec != std::errc{}) {
+        throw std::runtime_error("to_string_view: numeric conversion failed");
+    }
+    return std::string_view(buf.data(), static_cast<std::size_t>(ptr - buf.data()));
+}
+/**
+ * @brief Convert a numeric value to a @c std::string without locale dependency
+ *
+ * Convenience wrapper over @ref to_string_view for one-off conversions where
+ * buffer reuse is not needed. Allocates a @c std::string on each call — for
+ * hot paths (e.g. per-vertex coordinate output in a write loop), declare a
+ * buffer and use @ref to_string_view directly.
+ *
+ * @tparam T Arithmetic type to convert
+ */
+template <typename T, std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
+auto to_string(T val) -> std::string
+{
+    std::array<char, 128> buf{};
+    return std::string(to_string_view(buf, val));
+}
+
+#ifdef EDUCE_CORE_NEED_CHARCONV_FP
 /**
  * @copybrief to_numeric
  *
- * Template specialization as fallback when the compiler does not support
- * `std::from_chars` for floating point types. Converts the input to a
- * `std::string` and passes to the appropriate `std::sto` function.
+ * Template specialization active when @c EDUCE_CORE_NEED_CHARCONV_FP is
+ * defined (i.e. @c std::from_chars is unavailable for floating-point types
+ * on this platform). Converts via the appropriate @c std::sto function
+ * instead.
  */
 template <>
 inline auto to_numeric<float>(const std::string_view str) -> float
