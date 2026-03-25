@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cstdio>
 #include <exception>
 #include <iomanip>
 #include <locale>
@@ -431,7 +432,43 @@ auto to_string(T val) -> std::string
     return std::string(to_string_view(buf, val));
 }
 
-#ifdef EDUCE_CORE_NEED_TO_CHARS_LONG_DOUBLE_FALLBACK
+// --- to_string_view fallbacks (when std::to_chars is unavailable per type) ---
+
+#ifdef EDUCE_CORE_NEED_TO_CHARS_FLOAT
+/**
+ * @brief Specialisation of @ref to_string_view for @c float on platforms
+ *        where @c std::to_chars does not support @c float.
+ * Uses @c snprintf as a fallback.
+ */
+template <std::size_t N>
+auto to_string_view(std::array<char, N>& buf, float val) -> std::string_view
+{
+    const int n = std::snprintf(buf.data(), N, "%.9g", static_cast<double>(val));
+    if (n < 0 || static_cast<std::size_t>(n) >= N) {
+        throw std::runtime_error("to_string_view: numeric conversion failed");
+    }
+    return std::string_view(buf.data(), static_cast<std::size_t>(n));
+}
+#endif
+
+#ifdef EDUCE_CORE_NEED_TO_CHARS_DOUBLE
+/**
+ * @brief Specialisation of @ref to_string_view for @c double on platforms
+ *        where @c std::to_chars does not support @c double.
+ * Uses @c snprintf as a fallback.
+ */
+template <std::size_t N>
+auto to_string_view(std::array<char, N>& buf, double val) -> std::string_view
+{
+    const int n = std::snprintf(buf.data(), N, "%.17g", val);
+    if (n < 0 || static_cast<std::size_t>(n) >= N) {
+        throw std::runtime_error("to_string_view: numeric conversion failed");
+    }
+    return std::string_view(buf.data(), static_cast<std::size_t>(n));
+}
+#endif
+
+#ifdef EDUCE_CORE_NEED_TO_CHARS_LONG_DOUBLE
 /**
  * @brief Specialisation of @ref to_string_view for @c long double on platforms
  *        where @c std::to_chars does not support @c long double.
@@ -446,29 +483,44 @@ auto to_string_view(std::array<char, N>& buf, long double val) -> std::string_vi
 }
 #endif
 
-#ifdef EDUCE_CORE_NEED_CHARCONV_FP
+// --- to_numeric fallbacks (when std::from_chars is unavailable per type) ----
+
+#ifdef EDUCE_CORE_NEED_FROM_CHARS_FLOAT
 /**
  * @copybrief to_numeric
  *
- * Template specialization active when @c EDUCE_CORE_NEED_CHARCONV_FP is
- * defined (i.e. @c std::from_chars is unavailable for floating-point types
- * on this platform). Converts via the appropriate @c std::sto function
- * instead.
+ * Template specialization active when @c EDUCE_CORE_NEED_FROM_CHARS_FLOAT is
+ * defined (i.e. @c std::from_chars is unavailable for @c float on this
+ * platform). Converts via @c std::stof instead.
  */
 template <>
 inline auto to_numeric<float>(const std::string_view str) -> float
 {
     return std::stof(std::string(str));
 }
+#endif
 
-/** @copydoc to_numeric<float> */
+#ifdef EDUCE_CORE_NEED_FROM_CHARS_DOUBLE
+/**
+ * @copybrief to_numeric
+ *
+ * Template specialization active when @c EDUCE_CORE_NEED_FROM_CHARS_DOUBLE is
+ * defined. Converts via @c std::stod instead.
+ */
 template <>
 inline auto to_numeric<double>(const std::string_view str) -> double
 {
     return std::stod(std::string(str));
 }
+#endif
 
-/** @copydoc to_numeric<float> */
+#ifdef EDUCE_CORE_NEED_FROM_CHARS_LONG_DOUBLE
+/**
+ * @copybrief to_numeric
+ *
+ * Template specialization active when @c EDUCE_CORE_NEED_FROM_CHARS_LONG_DOUBLE
+ * is defined. Converts via @c std::stold instead.
+ */
 template <>
 inline auto to_numeric<long double>(const std::string_view str) -> long double
 {

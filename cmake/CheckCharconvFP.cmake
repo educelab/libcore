@@ -1,90 +1,89 @@
-# Check floating-point support in std::from_chars and std::to_chars separately.
+# Check floating-point support in std::from_chars and std::to_chars,
+# probed independently for float, double, and long double.
 #
 # Both were added in C++17 but compiler/platform support arrived at different
-# times. Apple Clang and older GCC shipped integer charconv first; floating-
-# point support followed later and is gated on the runtime library version
-# (e.g. macOS 13.3+ for libc++).
+# times and varies per type. Apple Clang / libc++ added float/double support
+# in macOS 13.3; long double availability differs further.
 #
-# Two probes are run and reported independently. Only the from_chars result
-# drives EDUCE_CORE_NEED_CHARCONV_FP because that is the only function with a
-# compile-time fallback in String.hpp (to_numeric). to_string_view uses
-# to_chars unconditionally and requires a platform where it is available.
+# For each (function, type) combination a separate compile-time probe is run.
+# When unavailable, a per-type preprocessor definition is set so String.hpp
+# can activate the appropriate fallback specialisation without over-disabling
+# types that are actually supported.
+#
+# Definitions emitted (only when the corresponding function+type is absent):
+#   EDUCE_CORE_NEED_FROM_CHARS_FLOAT
+#   EDUCE_CORE_NEED_FROM_CHARS_DOUBLE
+#   EDUCE_CORE_NEED_FROM_CHARS_LONG_DOUBLE
+#   EDUCE_CORE_NEED_TO_CHARS_FLOAT
+#   EDUCE_CORE_NEED_TO_CHARS_DOUBLE
+#   EDUCE_CORE_NEED_TO_CHARS_LONG_DOUBLE
 
-# --- from_chars (float) ------------------------------------------------------
 include(CMakePushCheckState)
 include(CheckCXXSourceCompiles)
 
-# Save the original CMake state
 cmake_push_check_state(RESET)
 
-# Require C++17
 if(MSVC)
     set(CMAKE_REQUIRED_FLAGS "/std:c++17")
 else()
     set(CMAKE_REQUIRED_FLAGS "-std=c++17")
 endif()
 
-set(_from_chars_code [[
-    #include <charconv>
+# ---------------------------------------------------------------------------
+# Helper macro: probe one (function, type) combination.
+#
+# Usage:
+#   _charconv_probe(FROM_CHARS float  "float result; std::from_chars(s,s+3,result);"  NEED_FROM_CHARS_FLOAT)
+# ---------------------------------------------------------------------------
+macro(_charconv_probe _direction _typename _snippet _defname)
+    set(_probe_code "
+        #include <charconv>
+        #include <array>
+        int main() {
+            const char src[] = \"5.0\";
+            ${_snippet}
+            return 0;
+        }
+    ")
+    check_cxx_source_compiles("${_probe_code}" _CXX_CHARCONV_${_defname})
+    if(_CXX_CHARCONV_${_defname})
+        message(STATUS "${_direction} (${_typename}): std::${_direction} (native)")
+    else()
+        message(STATUS "${_direction} (${_typename}): unavailable — fallback active")
+        add_compile_definitions(EDUCE_CORE_${_defname})
+    endif()
+endmacro()
 
-    int main() {
-        const char src[] = "5.0";
-        float result;
-        std::from_chars(src, src + 3, result);
-        return 0;
-    }
-]])
-check_cxx_source_compiles("${_from_chars_code}" CXX_CHARCONV_FP_FROM_CHARS)
+# --- from_chars ---------------------------------------------------------------
+_charconv_probe(
+    "from_chars" "float"
+    "float r{}; std::from_chars(src, src+3, r);"
+    NEED_FROM_CHARS_FLOAT)
 
-if(CXX_CHARCONV_FP_FROM_CHARS)
-    message(STATUS "Float from_chars: std::from_chars (native)")
-else()
-    message(STATUS "Float from_chars: std::sto[f|d|ld] (fallback)")
-    set(EDUCE_CORE_NEED_CHARCONV_FP TRUE CACHE BOOL
-        "std::from_chars unavailable for float; to_numeric uses std::sto[f|d|ld] fallbacks")
-    add_compile_definitions(EDUCE_CORE_NEED_CHARCONV_FP)
-endif()
+_charconv_probe(
+    "from_chars" "double"
+    "double r{}; std::from_chars(src, src+3, r);"
+    NEED_FROM_CHARS_DOUBLE)
 
-# --- to_chars (float) --------------------------------------------------------
-set(_to_chars_code [[
-    #include <charconv>
-    #include <array>
+_charconv_probe(
+    "from_chars" "long double"
+    "long double r{}; std::from_chars(src, src+3, r);"
+    NEED_FROM_CHARS_LONG_DOUBLE)
 
-    int main() {
-        std::array<char, 32> buf{};
-        float val{5.0f};
-        std::to_chars(buf.data(), buf.data() + buf.size(), val);
-        return 0;
-    }
-]])
-check_cxx_source_compiles("${_to_chars_code}" CXX_CHARCONV_FP_TO_CHARS)
+# --- to_chars -----------------------------------------------------------------
+_charconv_probe(
+    "to_chars" "float"
+    "std::array<char,32> buf{}; float v{5.f}; std::to_chars(buf.data(), buf.data()+buf.size(), v);"
+    NEED_TO_CHARS_FLOAT)
 
-if(CXX_CHARCONV_FP_TO_CHARS)
-    message(STATUS "Float to_chars:   std::to_chars (native)")
-else()
-    message(WARNING "Float to_chars:   unavailable")
-endif()
+_charconv_probe(
+    "to_chars" "double"
+    "std::array<char,32> buf{}; double v{5.0}; std::to_chars(buf.data(), buf.data()+buf.size(), v);"
+    NEED_TO_CHARS_DOUBLE)
 
-# --- to_chars (long double) --------------------------------------------------
-set(_to_chars_ld_code [[
-    #include <charconv>
-    #include <array>
+_charconv_probe(
+    "to_chars" "long double"
+    "std::array<char,32> buf{}; long double v{5.0L}; std::to_chars(buf.data(), buf.data()+buf.size(), v);"
+    NEED_TO_CHARS_LONG_DOUBLE)
 
-    int main() {
-        std::array<char, 32> buf{};
-        long double val{5.0L};
-        std::to_chars(buf.data(), buf.data() + buf.size(), val);
-        return 0;
-    }
-]])
-check_cxx_source_compiles("${_to_chars_ld_code}" CXX_CHARCONV_FP_TO_CHARS_LONG_DOUBLE)
-
-if(NOT CXX_CHARCONV_FP_TO_CHARS_LONG_DOUBLE)
-    message(STATUS "Long double to_chars: unavailable (will cast to double)")
-    add_compile_definitions(EDUCE_CORE_NEED_TO_CHARS_LONG_DOUBLE_FALLBACK)
-else()
-    message(STATUS "Long double to_chars: std::to_chars (native)")
-endif()
-
-# Restore original CMake state
 cmake_pop_check_state()
