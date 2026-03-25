@@ -4,7 +4,7 @@
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-03-23
 **Updated:** 2026-03-25
-**Status:** [ ] Not Started
+**Status:** [~] In Progress
 
 ## Overview
 
@@ -25,7 +25,7 @@ unified and split into separate `from_chars` / `to_chars` probes.
 
 | Phase   | Checkpoint SHA | Date | Status  |
 | ------- | -------------- | ---- | ------- |
-| Phase 1 |                |      | pending |
+| Phase 1 | e818d3b        | 2026-03-25 | complete |
 | Phase 2 |                |      | pending |
 | Phase 3 |                |      | pending |
 | Phase 4 |                |      | pending |
@@ -40,21 +40,21 @@ All three traits (`has_normal`, `has_color`, `has_chart`) live in
 
 ### Tasks
 
-- [ ] **Task 1.1**: Write tests in `tests/src/TestMeshIO.cpp` that verify
+- [x] **Task 1.1**: Write tests in `tests/src/TestMeshIO.cpp` that verify
       `has_normal<V>`, `has_color<V>`, and `has_chart<UVMapT>` resolve
       correctly for types with and without those traits (compile-time
-      assertions via `static_assert`)
-- [ ] **Task 1.2**: Create `include/educelab/core/types/detail/MeshTraits.hpp`
+      assertions via `static_assert`) `e818d3b`
+- [x] **Task 1.2**: Create `include/educelab/core/types/detail/MeshTraits.hpp`
       with `has_normal<V>`, `has_color<V>`, and `has_chart<UVMapT>` detection
       traits using `std::void_t`; document each trait with a Doxygen comment
       that shows the opt-in pattern and explains that IO functions use them
-      via `if constexpr`
+      via `if constexpr` `e818d3b`
 
 ### Verification
 
-- [ ] `ctest` passes with no regressions
-- [ ] Detection trait `static_assert` tests pass
-- [ ] Build succeeds in Debug and Release
+- [x] `ctest` passes with no regressions
+- [x] Detection trait `static_assert` tests pass
+- [x] Build succeeds in Debug and Release
 
 ---
 
