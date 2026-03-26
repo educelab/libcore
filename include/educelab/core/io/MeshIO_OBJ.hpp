@@ -202,13 +202,14 @@ void read_obj_impl(
     std::vector<std::optional<std::size_t>> face_vns;
 
     std::string line;
+    std::vector<std::string_view> tokens;
     while (std::getline(file, line)) {
         // Strip Windows-style carriage return
         if (!line.empty() && line.back() == '\r') {
             line.pop_back();
         }
 
-        const auto tokens = split(std::string_view(line));
+        split(std::string_view(line), tokens);
         if (tokens.empty() || tokens[0].front() == '#') {
             continue;
         }
@@ -360,11 +361,12 @@ void read_obj_impl(
         std::vector<std::filesystem::path> ordered_paths;
         bool in_material = false;
         std::string mtl_line;
+        std::vector<std::string_view> mt;
         while (std::getline(mtl, mtl_line)) {
             if (!mtl_line.empty() && mtl_line.back() == '\r') {
                 mtl_line.pop_back();
             }
-            const auto mt = split(std::string_view(mtl_line));
+            split(std::string_view(mtl_line), mt);
             if (mt.empty() || mt[0].front() == '#') {
                 continue;
             }

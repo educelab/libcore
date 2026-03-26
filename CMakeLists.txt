@@ -32,7 +32,6 @@ set(public_hdrs
     include/educelab/core/io/MeshIO_OBJ.hpp
     include/educelab/core/io/MeshIO_PLY.hpp
     include/educelab/core/types/Color.hpp
-    include/educelab/core/types/detail/MeshTraits.hpp
     include/educelab/core/types/Image.hpp
     include/educelab/core/types/Mat.hpp
     include/educelab/core/types/Mesh.hpp

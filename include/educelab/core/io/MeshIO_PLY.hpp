@@ -124,39 +124,39 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
     std::string cur_element;
     bool in_vertex = false;
     bool in_face   = false;
-
+    std::vector<std::string_view> tokens;
     while (std::getline(file, line)) {
         if (!line.empty() && line.back() == '\r') {
             line.pop_back();
         }
-        const auto toks = split(std::string_view(line));
-        if (toks.empty()) {
+        split(std::string_view(line), tokens);
+        if (tokens.empty()) {
             continue;
         }
 
-        if (toks[0] == "end_header") {
+        if (tokens[0] == "end_header") {
             break;
         }
-        if (toks[0] == "format") {
-            if (toks.size() >= 2) {
-                if (toks[1] == "binary_little_endian") {
+        if (tokens[0] == "format") {
+            if (tokens.size() >= 2) {
+                if (tokens[1] == "binary_little_endian") {
                     h.format = PLYHeader::Format::BinaryLE;
-                } else if (toks[1] == "binary_big_endian") {
+                } else if (tokens[1] == "binary_big_endian") {
                     h.format = PLYHeader::Format::BinaryBE;
                 }
                 // else ASCII (default)
             }
-        } else if (toks[0] == "comment") {
+        } else if (tokens[0] == "comment") {
             // Look for "comment TextureFile <path>"
-            if (toks.size() >= 3 && toks[1] == "TextureFile") {
-                h.texture_files.emplace_back(std::string(toks[2]));
+            if (tokens.size() >= 3 && tokens[1] == "TextureFile") {
+                h.texture_files.emplace_back(std::string(tokens[2]));
             }
-        } else if (toks[0] == "element") {
-            if (toks.size() >= 3) {
-                cur_element = std::string(toks[1]);
+        } else if (tokens[0] == "element") {
+            if (tokens.size() >= 3) {
+                cur_element = std::string(tokens[1]);
                 in_vertex   = (cur_element == "vertex");
                 in_face     = (cur_element == "face");
-                const auto n = to_numeric<std::size_t>(toks[2]);
+                const auto n = to_numeric<std::size_t>(tokens[2]);
                 constexpr std::size_t kMaxElements = 500'000'000;
                 if (n > kMaxElements) {
                     throw std::runtime_error(
@@ -170,17 +170,17 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
                     h.n_faces = n;
                 }
             }
-        } else if (toks[0] == "property") {
-            if (in_vertex && toks.size() >= 3) {
-                if (toks[1] == "list") {
+        } else if (tokens[0] == "property") {
+            if (in_vertex && tokens.size() >= 3) {
+                if (tokens[1] == "list") {
                     // Ignore list properties on vertex (rare)
                 } else {
                     h.vertex_props.push_back(
-                        {std::string(toks[2]), std::string(toks[1])});
+                        {std::string(tokens[2]), std::string(tokens[1])});
                 }
-            } else if (in_face && toks.size() >= 5 && toks[1] == "list") {
-                h.face_count_type = std::string(toks[2]);
-                h.face_index_type = std::string(toks[3]);
+            } else if (in_face && tokens.size() >= 5 && tokens[1] == "list") {
+                h.face_count_type = std::string(tokens[2]);
+                h.face_index_type = std::string(tokens[3]);
             }
         }
     }
@@ -299,6 +299,7 @@ void read_ply_impl(
     }
 
     // Read vertices
+    std::vector<std::string_view> tokens;
     for (std::size_t vi = 0; vi < hdr.n_vertices; ++vi) {
         T x{}, y{}, z{};
         T nx{}, ny{}, nz{};
@@ -331,21 +332,32 @@ void read_ply_impl(
                 if (!vline.empty() && vline.back() == '\r') vline.pop_back();
                 if (!vline.empty() && vline.front() != '#') break;
             }
-            const auto toks = split(std::string_view(vline));
+            split(std::string_view(vline), tokens);
             for (std::size_t pi = 0;
-                 pi < hdr.vertex_props.size() && pi < toks.size(); ++pi) {
+                 pi < hdr.vertex_props.size() && pi < tokens.size(); ++pi) {
                 const auto& prop = hdr.vertex_props[pi];
-                if (prop.name == "x")       x  = to_numeric<T>(toks[pi]);
-                else if (prop.name == "y")  y  = to_numeric<T>(toks[pi]);
-                else if (prop.name == "z")  z  = to_numeric<T>(toks[pi]);
-                else if (prop.name == "nx") nx = to_numeric<T>(toks[pi]);
-                else if (prop.name == "ny") ny = to_numeric<T>(toks[pi]);
-                else if (prop.name == "nz") nz = to_numeric<T>(toks[pi]);
-                else if (prop.name == "red")   r = to_numeric<float>(toks[pi]);
-                else if (prop.name == "green") g = to_numeric<float>(toks[pi]);
-                else if (prop.name == "blue")  b = to_numeric<float>(toks[pi]);
-                else if (prop.name == "s") s = to_numeric<float>(toks[pi]);
-                else if (prop.name == "t") t = to_numeric<float>(toks[pi]);
+                if (prop.name == "x")
+                    x = to_numeric<T>(tokens[pi]);
+                else if (prop.name == "y")
+                    y = to_numeric<T>(tokens[pi]);
+                else if (prop.name == "z")
+                    z = to_numeric<T>(tokens[pi]);
+                else if (prop.name == "nx")
+                    nx = to_numeric<T>(tokens[pi]);
+                else if (prop.name == "ny")
+                    ny = to_numeric<T>(tokens[pi]);
+                else if (prop.name == "nz")
+                    nz = to_numeric<T>(tokens[pi]);
+                else if (prop.name == "red")
+                    r = to_numeric<float>(tokens[pi]);
+                else if (prop.name == "green")
+                    g = to_numeric<float>(tokens[pi]);
+                else if (prop.name == "blue")
+                    b = to_numeric<float>(tokens[pi]);
+                else if (prop.name == "s")
+                    s = to_numeric<float>(tokens[pi]);
+                else if (prop.name == "t")
+                    t = to_numeric<float>(tokens[pi]);
             }
         }
 
@@ -411,17 +423,18 @@ void read_ply_impl(
                 if (!fline.empty() && fline.back() == '\r') fline.pop_back();
                 if (!fline.empty() && fline.front() != '#') break;
             }
-            const auto toks = split(std::string_view(fline));
-            if (toks.empty()) continue;
-            const auto count = to_numeric<std::size_t>(toks[0]);
+            split(std::string_view(fline), tokens);
+            if (tokens.empty())
+                continue;
+            const auto count = to_numeric<std::size_t>(tokens[0]);
             if (count > 256) {
                 throw std::runtime_error(
                     "read_ply: face vertex count " + std::to_string(count) +
                     " exceeds maximum of 256");
             }
             face.reserve(count);
-            for (std::size_t k = 1; k <= count && k < toks.size(); ++k) {
-                const auto idx = to_numeric<std::size_t>(toks[k]);
+            for (std::size_t k = 1; k <= count && k < tokens.size(); ++k) {
+                const auto idx = to_numeric<std::size_t>(tokens[k]);
                 if (idx >= hdr.n_vertices) {
                     throw std::runtime_error(
                         "read_ply: face vertex index " + std::to_string(idx) +
