@@ -1174,3 +1174,125 @@ TEST_F(MeshIOTest, PLY_WithUVMapAndTexturePath_DispatchesTier3)
     ASSERT_EQ(dst_textures.size(), 1u);
     EXPECT_EQ(dst_textures[0], tex);
 }
+
+//------------------------------------------------------------------------------
+// Edge-case tests — robustness and error handling
+//------------------------------------------------------------------------------
+
+// OBJ: face referencing a vertex index that doesn't exist should throw
+TEST_F(OBJTest, FaceWithOutOfBoundsVertexIndex_Throws)
+{
+    const auto path = obj("bad_face");
+    {
+        std::ofstream f(path);
+        f << "v 0 0 0\n"
+          << "v 1 0 0\n"
+          << "v 0 1 0\n"
+          << "f 1 2 99\n";  // vertex 99 does not exist
+    }
+    Mesh3f dst;
+    EXPECT_THROW(read_obj(path, dst), std::runtime_error);
+}
+
+// PLY: truncated binary data should throw instead of silently producing garbage
+TEST_F(PLYTest, TruncatedBinaryData_Throws)
+{
+    const auto path = ply("truncated");
+    {
+        std::ofstream f(path, std::ios::binary);
+        f << "ply\n"
+          << "format binary_little_endian 1.0\n"
+          << "element vertex 3\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "element face 1\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n";
+        // Only write 1 vertex instead of 3 (truncated)
+        const float verts[3] = {0.f, 0.f, 0.f};
+        f.write(reinterpret_cast<const char*>(verts), sizeof(verts));
+    }
+    Mesh3f dst;
+    EXPECT_THROW(read_ply(path, dst), std::runtime_error);
+}
+
+// PLY: header claiming unreasonably large element count should throw
+TEST_F(PLYTest, ExcessiveElementCount_Throws)
+{
+    const auto path = ply("excessive");
+    {
+        std::ofstream f(path);
+        f << "ply\n"
+          << "format ascii 1.0\n"
+          << "element vertex 999999999999\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "element face 0\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n";
+    }
+    Mesh3f dst;
+    EXPECT_THROW(read_ply(path, dst), std::runtime_error);
+}
+
+// MeshIO: case-insensitive extension dispatch
+TEST_F(MeshIOTest, UppercaseExtension_DispatchesCorrectly)
+{
+    const auto src  = make_triangle();
+    // Write with lowercase, read with uppercase path
+    const auto path_lower = dir / "model.obj";
+    write_mesh(path_lower, src);
+
+    // Rename to uppercase
+    const auto path_upper = dir / "model.OBJ";
+    fs::rename(path_lower, path_upper);
+
+    Mesh3f dst;
+    read_mesh(path_upper, dst);
+    EXPECT_EQ(dst.num_vertices(), 3u);
+    EXPECT_EQ(dst.num_faces(), 1u);
+}
+
+// MeshIO: mixed-case extension dispatch
+TEST_F(MeshIOTest, MixedCaseExtension_DispatchesCorrectly)
+{
+    const auto src  = make_triangle();
+    const auto path_lower = dir / "model.ply";
+    write_mesh(path_lower, src);
+
+    const auto path_mixed = dir / "model.Ply";
+    fs::rename(path_lower, path_mixed);
+
+    Mesh3f dst;
+    read_mesh(path_mixed, dst);
+    EXPECT_EQ(dst.num_vertices(), 3u);
+    EXPECT_EQ(dst.num_faces(), 1u);
+}
+
+// OBJ: empty mesh round-trip
+TEST_F(OBJTest, EmptyMesh_RoundTrip)
+{
+    const auto path = obj("empty");
+    Mesh3f src;
+    write_obj(path, src);
+
+    Mesh3f dst;
+    read_obj(path, dst);
+    EXPECT_EQ(dst.num_vertices(), 0u);
+    EXPECT_EQ(dst.num_faces(), 0u);
+}
+
+// PLY: empty mesh round-trip
+TEST_F(PLYTest, EmptyMesh_RoundTrip)
+{
+    const auto path = ply("empty");
+    Mesh3f src;
+    write_ply(path, src);
+
+    Mesh3f dst;
+    read_ply(path, dst);
+    EXPECT_EQ(dst.num_vertices(), 0u);
+    EXPECT_EQ(dst.num_faces(), 0u);
+}

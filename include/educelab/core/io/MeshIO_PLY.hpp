@@ -158,6 +158,13 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
                 in_vertex   = (cur_element == "vertex");
                 in_face     = (cur_element == "face");
                 const auto n = to_numeric<std::size_t>(toks[2]);
+                constexpr std::size_t kMaxElements = 500'000'000;
+                if (n > kMaxElements) {
+                    throw std::runtime_error(
+                        "read_ply: element count " + std::to_string(n) +
+                        " exceeds safety limit of " +
+                        std::to_string(kMaxElements));
+                }
                 if (in_vertex) {
                     h.n_vertices = n;
                 } else if (in_face) {
@@ -192,36 +199,43 @@ inline auto read_ply_binary_prop(
     if (type == "float") {
         float v{};
         f.read(reinterpret_cast<char*>(&v), 4);
+        if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
         return static_cast<DestT>(v);
     }
     if (type == "double") {
         double v{};
         f.read(reinterpret_cast<char*>(&v), 8);
+        if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
         return static_cast<DestT>(v);
     }
     if (type == "int") {
         int32_t v{};
         f.read(reinterpret_cast<char*>(&v), 4);
+        if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
         return static_cast<DestT>(v);
     }
     if (type == "uint") {
         uint32_t v{};
         f.read(reinterpret_cast<char*>(&v), 4);
+        if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
         return static_cast<DestT>(v);
     }
     if (type == "short") {
         int16_t v{};
         f.read(reinterpret_cast<char*>(&v), 2);
+        if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
         return static_cast<DestT>(v);
     }
     if (type == "ushort") {
         uint16_t v{};
         f.read(reinterpret_cast<char*>(&v), 2);
+        if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
         return static_cast<DestT>(v);
     }
     if (type == "uchar" || type == "char") {
         uint8_t v{};
         f.read(reinterpret_cast<char*>(&v), 1);
+        if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
         return static_cast<DestT>(v);
     }
     // Unknown: skip 4 bytes
@@ -563,6 +577,11 @@ void write_ply(
     const std::vector<UVVec> no_uvs;
     detail::write_ply_header(file, mesh, "", false);
     detail::write_ply_data(file, buf, mesh, no_uvs);
+
+    if (!file) {
+        throw std::runtime_error(
+            "write_ply: I/O error while writing file: " + path.string());
+    }
 }
 
 // =============================================================================
@@ -598,11 +617,12 @@ void write_ply(
     std::array<char, 128> buf;
     detail::write_ply_header(file, exp_mesh, "", true);
     detail::write_ply_data(file, buf, exp_mesh, flat_uvs);
-}
 
-// =============================================================================
-// write_ply — Tier 3: positions + UVMap + single texture path
-// =============================================================================
+    if (!file) {
+        throw std::runtime_error(
+            "write_ply: I/O error while writing file: " + path.string());
+    }
+}
 
 /**
  * @brief Write a mesh, UV map, and texture path to an ASCII PLY file
@@ -633,6 +653,11 @@ void write_ply(
     std::array<char, 128> buf;
     detail::write_ply_header(file, exp_mesh, texture_path.string(), true);
     detail::write_ply_data(file, buf, exp_mesh, flat_uvs);
+
+    if (!file) {
+        throw std::runtime_error(
+            "write_ply: I/O error while writing file: " + path.string());
+    }
 }
 
 // =============================================================================

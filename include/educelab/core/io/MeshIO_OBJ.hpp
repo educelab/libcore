@@ -300,6 +300,13 @@ void read_obj_impl(
 
             for (std::size_t ti = 1; ti < tokens.size(); ++ti) {
                 auto [vi, vt, vn] = parse_face_ref(tokens[ti]);
+                if (vi >= mesh.num_vertices()) {
+                    throw std::runtime_error(
+                        "read_obj: face vertex index " +
+                        std::to_string(vi + 1) +
+                        " out of range (num_vertices=" +
+                        std::to_string(mesh.num_vertices()) + ")");
+                }
                 face_verts.push_back(vi);
                 face_vts.push_back(vt);
                 face_vns.push_back(vn);
@@ -337,6 +344,10 @@ void read_obj_impl(
                 }
             }
         }
+    }
+
+    if (file.bad()) {
+        throw std::runtime_error("read_obj: I/O error while reading file");
     }
 
     // Parse MTL for texture paths (Tier 3 only)
@@ -505,6 +516,11 @@ void write_obj(
     DummyUV* no_uvmap = nullptr;
     detail::write_obj_vertices(file, buf, mesh, no_uvmap);
     detail::write_obj_faces(file, buf, mesh, no_uvmap);
+
+    if (!file) {
+        throw std::runtime_error(
+            "write_obj: I/O error while writing file: " + path.string());
+    }
 }
 
 // =============================================================================
@@ -537,11 +553,12 @@ void write_obj(
     std::array<char, 128> buf;
     detail::write_obj_vertices(file, buf, mesh, &uvmap);
     detail::write_obj_faces(file, buf, mesh, &uvmap);
-}
 
-// =============================================================================
-// write_obj — Tier 3a: positions + UVMap + single texture path
-// =============================================================================
+    if (!file) {
+        throw std::runtime_error(
+            "write_obj: I/O error while writing file: " + path.string());
+    }
+}
 
 /**
  * @brief Write a mesh, UV map, and a single texture reference to OBJ + MTL
@@ -590,6 +607,11 @@ void write_obj(
 
     detail::write_obj_vertices(file, buf, mesh, &uvmap);
     detail::write_obj_faces(file, buf, mesh, &uvmap);
+
+    if (!file) {
+        throw std::runtime_error(
+            "write_obj: I/O error while writing file: " + path.string());
+    }
 }
 
 // =============================================================================
@@ -684,9 +706,12 @@ void write_obj(
             file << '\n';
         }
     }
-}
 
-// =============================================================================
+    if (!file) {
+        throw std::runtime_error(
+            "write_obj: I/O error while writing file: " + path.string());
+    }
+}// =============================================================================
 // read_obj — public overloads
 // =============================================================================
 

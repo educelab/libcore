@@ -2,6 +2,7 @@
 
 /** @file */
 
+#include <algorithm>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
@@ -13,11 +14,26 @@
 namespace educelab
 {
 
+namespace detail
+{
+
+/** @brief Return the file extension in lowercase (e.g. ".OBJ" → ".obj") */
+inline auto lowercase_extension(const std::filesystem::path& path) -> std::string
+{
+    auto ext = path.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return ext;
+}
+
+}  // namespace detail
+
 /**
  * @brief Read a mesh from a file, dispatching by extension
  *
- * Supported extensions: `.obj`, `.ply`.  Throws `std::runtime_error` for
- * any other extension.
+ * Supported extensions: `.obj`, `.ply` (case-insensitive).  Throws
+ * `std::runtime_error` for any other extension.
  *
  * @tparam T     Mesh numeric type
  * @tparam Dims  Mesh dimensionality
@@ -28,7 +44,7 @@ void read_mesh(
     const std::filesystem::path& path,
     Mesh<T, Dims, VT>& mesh)
 {
-    const auto ext = path.extension().string();
+    const auto ext = detail::lowercase_extension(path);
     if (ext == ".obj")
         read_obj(path, mesh);
     else if (ext == ".ply")
@@ -40,15 +56,15 @@ void read_mesh(
 /**
  * @brief Write a mesh to a file, dispatching by extension
  *
- * Supported extensions: `.obj`, `.ply`.  Throws `std::runtime_error` for
- * any other extension.
+ * Supported extensions: `.obj`, `.ply` (case-insensitive).  Throws
+ * `std::runtime_error` for any other extension.
  */
 template <typename T, std::size_t Dims, typename VT>
 void write_mesh(
     const std::filesystem::path& path,
     const Mesh<T, Dims, VT>& mesh)
 {
-    const auto ext = path.extension().string();
+    const auto ext = detail::lowercase_extension(path);
     if (ext == ".obj")
         write_obj(path, mesh);
     else if (ext == ".ply")
@@ -66,7 +82,7 @@ void read_mesh(
     Mesh<T, Dims, VT>& mesh,
     UVMapT& uvmap)
 {
-    const auto ext = path.extension().string();
+    const auto ext = detail::lowercase_extension(path);
     if (ext == ".obj") {
         read_obj(path, mesh, uvmap);
     } else if (ext == ".ply") {
@@ -85,7 +101,7 @@ void write_mesh(
     const Mesh<T, Dims, VT>& mesh,
     const UVMapT& uvmap)
 {
-    const auto ext = path.extension().string();
+    const auto ext = detail::lowercase_extension(path);
     if (ext == ".obj")
         write_obj(path, mesh, uvmap);
     else if (ext == ".ply")
@@ -108,7 +124,7 @@ void read_mesh(
     UVMapT& uvmap,
     std::vector<std::filesystem::path>& texture_paths)
 {
-    const auto ext = path.extension().string();
+    const auto ext = detail::lowercase_extension(path);
     if (ext == ".obj")
         read_obj(path, mesh, uvmap, texture_paths);
     else if (ext == ".ply")
@@ -131,7 +147,7 @@ void write_mesh(
     const UVMapT& uvmap,
     const std::filesystem::path& texture_path)
 {
-    const auto ext = path.extension().string();
+    const auto ext = detail::lowercase_extension(path);
     if (ext == ".obj")
         write_obj(path, mesh, uvmap, texture_path);
     else if (ext == ".ply")
