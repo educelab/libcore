@@ -2,32 +2,16 @@
 
 /** @file */
 
-#include <algorithm>
 #include <filesystem>
 #include <stdexcept>
-#include <string>
 #include <vector>
 
 #include "educelab/core/io/MeshIO_OBJ.hpp"
 #include "educelab/core/io/MeshIO_PLY.hpp"
+#include "educelab/core/utils/String.hpp"
 
 namespace educelab
 {
-
-namespace detail
-{
-
-/** @brief Return the file extension in lowercase (e.g. ".OBJ" → ".obj") */
-inline auto lowercase_extension(const std::filesystem::path& path) -> std::string
-{
-    auto ext = path.extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return ext;
-}
-
-}  // namespace detail
 
 /**
  * @brief Read a mesh from a file, dispatching by extension
@@ -44,7 +28,7 @@ void read_mesh(
     const std::filesystem::path& path,
     Mesh<T, Dims, VT>& mesh)
 {
-    const auto ext = detail::lowercase_extension(path);
+    const auto ext = to_lower(path.extension().string());
     if (ext == ".obj")
         read_obj(path, mesh);
     else if (ext == ".ply")
@@ -64,7 +48,7 @@ void write_mesh(
     const std::filesystem::path& path,
     const Mesh<T, Dims, VT>& mesh)
 {
-    const auto ext = detail::lowercase_extension(path);
+    const auto ext = to_lower(path.extension().string());
     if (ext == ".obj")
         write_obj(path, mesh);
     else if (ext == ".ply")
@@ -82,7 +66,7 @@ void read_mesh(
     Mesh<T, Dims, VT>& mesh,
     UVMapT& uvmap)
 {
-    const auto ext = detail::lowercase_extension(path);
+    const auto ext = to_lower(path.extension().string());
     if (ext == ".obj") {
         read_obj(path, mesh, uvmap);
     } else if (ext == ".ply") {
@@ -101,7 +85,7 @@ void write_mesh(
     const Mesh<T, Dims, VT>& mesh,
     const UVMapT& uvmap)
 {
-    const auto ext = detail::lowercase_extension(path);
+    const auto ext = to_lower(path.extension().string());
     if (ext == ".obj")
         write_obj(path, mesh, uvmap);
     else if (ext == ".ply")
@@ -124,7 +108,7 @@ void read_mesh(
     UVMapT& uvmap,
     std::vector<std::filesystem::path>& texture_paths)
 {
-    const auto ext = detail::lowercase_extension(path);
+    const auto ext = to_lower(path.extension().string());
     if (ext == ".obj")
         read_obj(path, mesh, uvmap, texture_paths);
     else if (ext == ".ply")
@@ -147,7 +131,7 @@ void write_mesh(
     const UVMapT& uvmap,
     const std::filesystem::path& texture_path)
 {
-    const auto ext = detail::lowercase_extension(path);
+    const auto ext = to_lower(path.extension().string());
     if (ext == ".obj")
         write_obj(path, mesh, uvmap, texture_path);
     else if (ext == ".ply")

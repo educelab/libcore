@@ -14,7 +14,6 @@
 #include "educelab/core/types/Color.hpp"
 #include "educelab/core/types/Mesh.hpp"
 #include "educelab/core/types/UVMap.hpp"
-#include "educelab/core/types/detail/MeshTraits.hpp"
 #include "educelab/core/utils/String.hpp"
 
 namespace educelab
@@ -223,7 +222,7 @@ void read_obj_impl(
             T y = to_numeric<T>(tokens[2]);
             T z = to_numeric<T>(tokens[3]);
             const auto vi = mesh.insert_vertex(x, y, z);
-            if constexpr (has_color<Vertex>::value) {
+            if constexpr (traits::has_color<Vertex>::value) {
                 if (tokens.size() >= 7) {
                     Color::F32C3 rgb{
                         to_numeric<float>(tokens[4]),
@@ -239,7 +238,7 @@ void read_obj_impl(
             if (tokens.size() < 4) {
                 continue;
             }
-            if constexpr (has_normal<Vertex>::value) {
+            if constexpr (traits::has_normal<Vertex>::value) {
                 Vec<T, Dims> n{};
                 n[0] = to_numeric<T>(tokens[1]);
                 n[1] = to_numeric<T>(tokens[2]);
@@ -248,7 +247,7 @@ void read_obj_impl(
             }
             // Always bump the temp count even when we don't store,
             // so vn indices remain valid if the mesh gains normals later.
-            // (If has_normal is false we never read normals_tmp, so it
+            // (If traits::has_normal is false we never read normals_tmp, so it
             //  stays empty and we just never push — indices won't be used.)
         }
 
@@ -315,7 +314,7 @@ void read_obj_impl(
             const auto fi = mesh.insert_face(face_verts);
 
             // Populate per-vertex normals
-            if constexpr (has_normal<Vertex>::value) {
+            if constexpr (traits::has_normal<Vertex>::value) {
                 for (std::size_t ci = 0; ci < face_verts.size(); ++ci) {
                     if (face_vns[ci].has_value()) {
                         const auto ni = *face_vns[ci];
@@ -336,7 +335,7 @@ void read_obj_impl(
                             const auto pool_idx = vt_to_pool[oi];
                             uvmap->map(fi, ci, pool_idx);
                             // Populate chart index
-                            if constexpr (has_chart<UVMapT>::value) {
+                            if constexpr (traits::has_chart<UVMapT>::value) {
                                 uvmap->at(pool_idx).chart = cur_material;
                             }
                         }
@@ -408,7 +407,7 @@ void write_obj_vertices(
         file << "v " << to_string_view(buf, v[0]) << ' '
                      << to_string_view(buf, v[1]) << ' '
                      << to_string_view(buf, v[2]);
-        if constexpr (has_color<Vertex>::value) {
+        if constexpr (traits::has_color<Vertex>::value) {
             const auto [r, g, b] = detail::color_to_rgb(v.color);
             file << ' ' << to_string_view(buf, r) << ' '
                         << to_string_view(buf, g) << ' '
@@ -427,7 +426,7 @@ void write_obj_vertices(
     }
 
     // Normals — one vn per vertex; vn index equals vertex index (both 1-based)
-    if constexpr (has_normal<Vertex>::value) {
+    if constexpr (traits::has_normal<Vertex>::value) {
         static_assert(Dims == 3, "write_obj: normals require Dims == 3");
         for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
             const auto& v = mesh.vertex(vi);
@@ -466,11 +465,11 @@ void write_obj_faces(
                 } else {
                     file << '/';
                 }
-                if constexpr (has_normal<Vertex>::value) {
+                if constexpr (traits::has_normal<Vertex>::value) {
                     file << '/' << to_string_view(buf, vi + 1);
                 }
             } else {
-                if constexpr (has_normal<Vertex>::value) {
+                if constexpr (traits::has_normal<Vertex>::value) {
                     file << "//" << to_string_view(buf, vi + 1);
                 }
             }
@@ -641,7 +640,7 @@ void write_obj(
     const std::vector<std::filesystem::path>& texture_paths)
 {
     static_assert(
-        has_chart<UVMapT>::value,
+        traits::has_chart<UVMapT>::value,
         "write_obj with multiple texture paths requires UVMap with "
         "traits::WithChart");
     using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
@@ -703,7 +702,7 @@ void write_obj(
                 } else {
                     file << '/';
                 }
-                if constexpr (has_normal<Vertex>::value) {
+                if constexpr (traits::has_normal<Vertex>::value) {
                     file << '/' << to_string_view(buf, vi + 1);
                 }
             }

@@ -73,7 +73,7 @@ textured meshes without depending on ITK, VTK, or OpenCV.
 - [ ] `write_obj(path, mesh, uvmap, texture_paths)`:
       `std::vector<std::filesystem::path>`; requires `UVMap` with
       `traits::WithChart` — enforced via
-      `static_assert(has_chart<UVMapT>::value, ...)`; emits one
+      `static_assert(traits::has_chart<UVMapT>::value, ...)`; emits one
       `newmtl materialN` / `map_Kd` entry per path; groups faces by the chart
       index of corner 0 with `usemtl materialN` directives
 - [ ] `read_ply(path, mesh)` / `write_ply(path, mesh)`: vertex positions,
@@ -154,13 +154,13 @@ Callers who need only one format can include `MeshIO_OBJ.hpp` or
 
 ### Detection Idiom Infrastructure
 
-`has_normal<V>`, `has_color<V>`, and `has_chart<UVMapT>` live in
-`include/educelab/core/types/detail/MeshTraits.hpp`, shared between
+`has_normal<V>`, `has_color<V>`, and `traits::has_chart<UVMapT>` live in
+their respective type headers (`Mesh.hpp` and `UVMap.hpp`), shared between
 `Mesh.hpp` and all IO headers.
 
 - `has_normal<V>` — true if `V` inherits `traits::WithNormal`
 - `has_color<V>` — true if `V` inherits `traits::WithColor`
-- `has_chart<UVMapT>` — true if `UVMapT::Coordinate` inherits
+- `traits::has_chart<UVMapT>` — true if `UVMapT::Coordinate` inherits
   `traits::WithChart`; used by `read_obj` to conditionally populate chart
   indices and by `write_obj` multi-path overload (`static_assert`)
 
@@ -203,7 +203,7 @@ map_Kd chart1.png
 `write_obj` groups faces by the chart index of their corner 0 vertex and
 emits `usemtl materialN` before each group. `read_obj` maps material
 declaration order to chart index (first material → chart 0); chart indices
-are written to `uvmap` coordinates only if `has_chart<UVMapT>`.
+are written to `uvmap` coordinates only if `traits::has_chart<UVMapT>`.
 
 Only `map_Kd` is read/written; all other MTL directives are ignored on read
 and not emitted on write.

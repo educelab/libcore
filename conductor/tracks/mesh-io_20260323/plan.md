@@ -35,8 +35,8 @@ unified and split into separate `from_chars` / `to_chars` probes.
 ## Phase 1: Trait Detection Infrastructure
 
 Introduce the compile-time detection helpers that OBJ and PLY IO will share.
-All three traits (`has_normal`, `has_color`, `has_chart`) live in
-`detail/MeshTraits.hpp` and must be documented with opt-in examples.
+Mesh traits (`has_normal`, `has_color`) live in `Mesh.hpp`. UVMap traits 
+(`has_chart`) live in `UVMap.hpp` and must be documented with opt-in examples.
 
 ### Tasks
 
@@ -98,7 +98,7 @@ conversion.
       `usemtl material0` `0a4efdd`
 - [x] **Task 2.5**: Implement `write_obj(path, mesh, uvmap, texture_paths)` —
       `std::vector<std::filesystem::path>` overload;
-      `static_assert(has_chart<UVMapT>::value, "write_obj with multiple
+      `static_assert(traits::has_chart<UVMapT>::value, "write_obj with multiple
       texture paths requires UVMap with traits::WithChart")`; emits one
       `newmtl materialN` / `map_Kd` entry per path; groups faces by the chart
       index of corner 0 with `usemtl materialN` directives `0a4efdd`
@@ -110,7 +110,7 @@ conversion.
 - [x] **Task 2.7**: Implement `read_obj(path, mesh, uvmap)` — also parses
       `vt` and per-wedge UV indices from `f` lines; populates `uvmap`;
       populates chart indices on `uvmap` coordinates via
-      `if constexpr has_chart<UVMapT>` using material group ordering `0a4efdd`
+      `if constexpr traits::has_chart<UVMapT>` using material group ordering `0a4efdd`
 - [x] **Task 2.8**: Implement `read_obj(path, mesh, uvmap, texture_paths)` —
       parses `.mtl` referenced by `mtllib` directive; extracts `map_Kd` paths
       in material-declaration order into `texture_paths`; no-op if no `.mtl`

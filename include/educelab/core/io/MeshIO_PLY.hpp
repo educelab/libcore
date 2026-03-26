@@ -14,7 +14,6 @@
 #include "educelab/core/types/Color.hpp"
 #include "educelab/core/types/Mesh.hpp"
 #include "educelab/core/types/UVMap.hpp"
-#include "educelab/core/types/detail/MeshTraits.hpp"
 #include "educelab/core/utils/MeshUtils.hpp"
 #include "educelab/core/utils/String.hpp"
 
@@ -352,14 +351,14 @@ void read_ply_impl(
 
         const auto new_vi = mesh.insert_vertex(x, y, z);
 
-        if constexpr (has_normal<Vertex>::value) {
+        if constexpr (traits::has_normal<Vertex>::value) {
             if (has_nx && has_ny && has_nz) {
                 Vec<T, Dims> n{};
                 n[0] = nx; n[1] = ny; n[2] = nz;
                 mesh.vertex(new_vi).normal = n;
             }
         }
-        if constexpr (has_color<Vertex>::value) {
+        if constexpr (traits::has_color<Vertex>::value) {
             if (has_r && has_g && has_b) {
                 // PLY stores colors as uchar (0-255); read back as such
                 mesh.vertex(new_vi).color = Color::U8C3{
@@ -473,13 +472,13 @@ void write_ply_header(
          << "property float y\n"
          << "property float z\n";
 
-    if constexpr (has_normal<Vertex>::value) {
+    if constexpr (traits::has_normal<Vertex>::value) {
         static_assert(Dims == 3, "write_ply: normals require Dims == 3");
         file << "property float nx\n"
              << "property float ny\n"
              << "property float nz\n";
     }
-    if constexpr (has_color<Vertex>::value) {
+    if constexpr (traits::has_color<Vertex>::value) {
         file << "property uchar red\n"
              << "property uchar green\n"
              << "property uchar blue\n";
@@ -514,13 +513,13 @@ void write_ply_data(
         file << to_string_view(buf, v[0]) << ' '
              << to_string_view(buf, v[1]) << ' '
              << to_string_view(buf, v[2]);
-        if constexpr (has_normal<Vertex>::value) {
+        if constexpr (traits::has_normal<Vertex>::value) {
             const auto n = v.normal.value_or(Vec<T, Dims>{});
             file << ' ' << to_string_view(buf, n[0])
                  << ' ' << to_string_view(buf, n[1])
                  << ' ' << to_string_view(buf, n[2]);
         }
-        if constexpr (has_color<Vertex>::value) {
+        if constexpr (traits::has_color<Vertex>::value) {
             const auto [r, g, b] = detail::color_to_u8c3(v.color);
             file << ' ' << to_string_view(buf, r)
                  << ' ' << to_string_view(buf, g)
