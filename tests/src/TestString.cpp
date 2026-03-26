@@ -233,6 +233,45 @@ TEST(String, Split)
     EXPECT_EQ(split("This is only a test."), expected);
 }
 
+TEST(String, SplitEdgeCases)
+{
+    std::vector<std::string_view> result;
+
+    // Empty string
+    split("", result);
+    EXPECT_TRUE(result.empty());
+    EXPECT_TRUE(split("").empty());
+
+    // No delimiters found
+    split("abc", result, ",");
+    EXPECT_EQ(result, std::vector<std::string_view>{"abc"});
+    EXPECT_EQ(split("abc", ","), std::vector<std::string_view>{"abc"});
+
+    // Leading/trailing/consecutive delimiters (whitespace/predicate)
+    // Should skip all empty tokens
+    std::vector<std::string_view> expected{"a", "b"};
+    split("  a  b  ", result);
+    EXPECT_EQ(result, expected);
+    EXPECT_EQ(split("  a  b  "), expected);
+
+    // Leading/trailing/consecutive delimiters (string)
+    split("--a--b--", result, "-");
+    EXPECT_EQ(result, expected);
+    EXPECT_EQ(split("--a--b--", "-"), expected);
+
+    // Predicate always true
+    split("abc", result, [](char) { return true; });
+    EXPECT_TRUE(result.empty());
+
+    // Predicate always false
+    split("abc", result, [](char) { return false; });
+    EXPECT_EQ(result, std::vector<std::string_view>{"abc"});
+
+    // No delimiters provided to variadic split
+    // (Note: this should compile and return the whole string as one token)
+    EXPECT_EQ(split("abc"), std::vector<std::string_view>{"abc"});
+}
+
 TEST(String, Partition)
 {
     // key=value

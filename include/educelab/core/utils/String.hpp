@@ -165,13 +165,18 @@ static auto trim_copy(const std::string_view s) -> std::string
  * string-delimiter overload.
  *
  * @code
- * // Split on slash — returns {"1", "2", "3"}
+ * // Split on slash — results in {"1", "2", "3"}
  * std::vector<std::string_view> tokens;
  * split("1/2/3", tokens, [](char c) { return c == '/'; });
  *
  * // Split on comma or semicolon
  * split("a,b;c", tokens, [](char c) { return c == ',' || c == ';'; });
  * @endcode
+ *
+ * @param s String to split
+ * @param tokens Vector to be cleared and filled with tokens
+ * @param pred Callable with signature @c bool(char) returning true for
+ * delimiters
  */
 template <
     typename Pred,
@@ -200,11 +205,19 @@ static auto split(
 /**
  * @brief Split a string on any whitespace into a caller-provided vector
  *
- * @copydetails split
+ * Equivalent to Python's @c str.split() with no argument: any run of
+ * whitespace characters (space, tab, carriage return, etc.) is treated as a
+ * single delimiter, and leading/trailing whitespace produces no empty tokens.
+ *
+ * Clears @p tokens and fills with extracted tokens. Reuses the capacity of
+ * @p tokens to avoid repeated heap allocations.
+ *
+ * @param s String to split
+ * @param tokens Vector to be cleared and filled with tokens
  */
-static void split(std::string_view sv, std::vector<std::string_view>& tokens)
+static void split(std::string_view s, std::vector<std::string_view>& tokens)
 {
-    split(sv, tokens, [](char c) {
+    split(s, tokens, [](char c) {
         thread_local std::locale loc;
         return std::isspace(c, loc);
     });
@@ -225,8 +238,12 @@ static void split(std::string_view sv, std::vector<std::string_view>& tokens)
  *
  * @code
  * std::vector<std::string_view> tokens;
- * split("a->b->c", tokens, "-", "->");  // returns {"a", "b", "c"}
+ * split("a->b->c", tokens, "-", "->");  // results in {"a", "b", "c"}
  * @endcode
+ *
+ * @param s String to split
+ * @param tokens Vector to be cleared and filled with tokens
+ * @param ds One or more string delimiters
  */
 template <typename... Ds>
 static auto split(
@@ -299,7 +316,11 @@ static auto split(
  * characters, etc. For multi-character delimiters (e.g. @c "->") use the
  * string-delimiter overload.
  *
- * @tparam Pred Callable with signature @c bool(char)
+ * @tparam Pred Callable with signature @c bool(char) returning true for
+ * delimiters
+ * @param s String to split
+ * @param pred Predicate instance
+ * @return Vector of string fragments
  */
 template <
     typename Pred,
@@ -327,6 +348,9 @@ static auto split(std::string_view s, Pred&& pred)
  * split("v 1.0 2.0 3.0");
  * split("  v  1.0\t2.0  3.0  ");
  * @endcode
+ *
+ * @param s String to split
+ * @return Vector of string fragments
  */
 static auto split(std::string_view s) -> std::vector<std::string_view>
 {
@@ -350,6 +374,10 @@ static auto split(std::string_view s) -> std::vector<std::string_view>
  *
  * When all delimiters are single characters, dispatches to the O(n) predicate
  * overload automatically. Multi-character delimiters use the sort-based path.
+ *
+ * @param s String to split
+ * @param ds One or more string delimiters
+ * @return Vector of string fragments
  */
 template <typename... Ds>
 static auto split(std::string_view s, const Ds&... ds)
