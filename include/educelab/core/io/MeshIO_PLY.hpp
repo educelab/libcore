@@ -624,6 +624,10 @@ void write_ply(
     }
 }
 
+// =============================================================================
+// write_ply — Tier 3: positions + UVMap + single texture path
+// =============================================================================
+
 /**
  * @brief Write a mesh, UV map, and texture path to an ASCII PLY file
  *
