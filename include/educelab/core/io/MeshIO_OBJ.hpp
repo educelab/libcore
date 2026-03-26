@@ -31,9 +31,25 @@ inline auto color_to_rgb(const Color& c) -> std::array<float, 3>
             const auto v = c.value<Color::F32C3>();
             return {v[0], v[1], v[2]};
         }
+        case Color::Type::F32C4: {
+            const auto v = c.value<Color::F32C4>();
+            return {v[0], v[1], v[2]};
+        }
         case Color::Type::U8C3: {
             const auto v = c.value<Color::U8C3>();
             return {v[0] / 255.f, v[1] / 255.f, v[2] / 255.f};
+        }
+        case Color::Type::U8C4: {
+            const auto v = c.value<Color::U8C4>();
+            return {v[0] / 255.f, v[1] / 255.f, v[2] / 255.f};
+        }
+        case Color::Type::U16C3: {
+            const auto v = c.value<Color::U16C3>();
+            return {v[0] / 65535.f, v[1] / 65535.f, v[2] / 65535.f};
+        }
+        case Color::Type::U16C4: {
+            const auto v = c.value<Color::U16C4>();
+            return {v[0] / 65535.f, v[1] / 65535.f, v[2] / 65535.f};
         }
         case Color::Type::F32C1: {
             const auto v = c.value<Color::F32C1>();
@@ -41,6 +57,10 @@ inline auto color_to_rgb(const Color& c) -> std::array<float, 3>
         }
         case Color::Type::U8C1: {
             const float v = c.value<Color::U8C1>() / 255.f;
+            return {v, v, v};
+        }
+        case Color::Type::U16C1: {
+            const float v = c.value<Color::U16C1>() / 65535.f;
             return {v, v, v};
         }
         default:
