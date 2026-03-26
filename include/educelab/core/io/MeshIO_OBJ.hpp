@@ -643,7 +643,6 @@ void write_obj(
     }
 
     std::array<char, 128> buf;
-    using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
 
     file << "mtllib " << mtl_path.filename().string() << '\n';
 
