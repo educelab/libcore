@@ -171,10 +171,6 @@ public:
         {
         }
 
-        // Compound-assignment and binary operators are defined on Vertex so
-        // that both return Vertex / Vertex& rather than Vec / Vec&, preserving
-        // trait fields. Vec's equivalents would silently slice any trait data.
-
         /** Inherit value-assignment operator */
         using Vec<T, Dims>::operator=;
 
@@ -398,6 +394,16 @@ public:
             face_normal_cache_[idx] = normalize((v1 - v0).cross(v2 - v0));
         }
         return *face_normal_cache_[idx];
+    }
+
+    /** @brief Empty the mesh of all vertices and faces */
+    auto clear() -> void
+    {
+        vertices_.clear();
+        faces_.clear();
+        face_normal_cache_.clear();
+        adjacency_.clear();
+        adjacency_valid_ = false;
     }
 
 private:

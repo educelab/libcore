@@ -47,3 +47,5 @@ docs/html/
 
 # CLion
 cmake-build*/
+
+.cache/

@@ -37,6 +37,7 @@ inline auto color_to_u8c3(const Color& c) -> std::array<uint8_t, 3>
         }
         case Color::Type::F32C3: {
             const auto v = c.value<Color::F32C3>();
+            // TODO: Why not use std::round or std::ceil?
             return {
                 static_cast<uint8_t>(v[0] * 255.f + 0.5f),
                 static_cast<uint8_t>(v[1] * 255.f + 0.5f),
@@ -157,13 +158,6 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
                 in_vertex   = (cur_element == "vertex");
                 in_face     = (cur_element == "face");
                 const auto n = to_numeric<std::size_t>(tokens[2]);
-                constexpr std::size_t kMaxElements = 500'000'000;
-                if (n > kMaxElements) {
-                    throw std::runtime_error(
-                        "read_ply: element count " + std::to_string(n) +
-                        " exceeds safety limit of " +
-                        std::to_string(kMaxElements));
-                }
                 if (in_vertex) {
                     h.n_vertices = n;
                 } else if (in_face) {
@@ -192,8 +186,7 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
 // -------------------------------------------------------------------------
 
 template <typename DestT>
-inline auto read_ply_binary_prop(
-    std::istream& f, const std::string& type) -> DestT
+auto read_ply_binary_prop(std::istream& f, const std::string& type) -> DestT
 {
     if (type == "float") {
         float v{};
@@ -261,12 +254,21 @@ void read_ply_impl(
             "read_ply: cannot open file: " + path.string());
     }
 
+    // Clear the outputs before constructing
+    mesh.clear();
+    if (uvmap) {
+        uvmap->clear();
+    }
+    if (texture_paths) {
+        texture_paths->clear();
+    }
+
     const auto hdr = parse_ply_header(file);
     if (hdr.format == PLYHeader::Format::BinaryBE) {
         throw std::runtime_error(
             "read_ply: binary big-endian format is not supported");
     }
-    const bool binary = (hdr.format == PLYHeader::Format::BinaryLE);
+    const bool binary = hdr.format == PLYHeader::Format::BinaryLE;
 
     // Populate texture paths from header
     if (texture_paths != nullptr) {

@@ -81,30 +81,26 @@ inline auto parse_face_ref(std::string_view token)
 {
     // Find first '/'
     const auto p1 = token.find('/');
-    if (p1 == std::string_view::npos) {
-        if (!token.empty() && token[0] == '-') {
-            throw std::runtime_error(
-                "read_obj: negative (relative) face indices are not supported");
-        }
-        const auto raw = to_numeric<std::size_t>(token);
-        if (raw == 0) {
-            throw std::runtime_error(
-                "read_obj: face index 0 is invalid (OBJ indices are 1-based)");
-        }
-        return {raw - 1, std::nullopt, std::nullopt};
-    }
-
+    // No-op if v_sv == token if p1 == string_view::npos
     const auto v_sv = token.substr(0, p1);
-    if (!v_sv.empty() && v_sv[0] == '-') {
+
+    // "v" is always present
+    if (v_sv.empty()) {
+        throw std::runtime_error("read_obj: empty vertex index is invalid ");
+    }
+    if (v_sv[0] == '-') {
         throw std::runtime_error(
             "read_obj: negative (relative) face indices are not supported");
     }
     const auto raw_v = to_numeric<std::size_t>(v_sv);
     if (raw_v == 0) {
         throw std::runtime_error(
-            "read_obj: face index 0 is invalid (OBJ indices are 1-based)");
+            "read_obj: vertex index 0 is invalid (OBJ indices are 1-based)");
     }
     const auto v = raw_v - 1;
+    if (p1 == std::string_view::npos) {
+        return {v, std::nullopt, std::nullopt};
+    }
     const auto rest = token.substr(p1 + 1);
 
     // Find second '/'
@@ -112,9 +108,10 @@ inline auto parse_face_ref(std::string_view token)
     if (p2 == std::string_view::npos) {
         // "v/vt"
         if (rest.empty()) {
+            // "v/"
             return {v, std::nullopt, std::nullopt};
         }
-        if (!rest.empty() && rest[0] == '-') {
+        if (rest[0] == '-') {
             throw std::runtime_error(
                 "read_obj: negative (relative) face indices are not supported");
         }
@@ -164,6 +161,8 @@ inline auto parse_face_ref(std::string_view token)
 /**
  * @brief Core OBJ reader — all three tiers share this implementation
  *
+ * @param path           Input file path
+ * @param mesh           Output mesh
  * @param uvmap          Pointer to the UVMap to populate; null for Tier 1
  * @param texture_paths  Pointer to the texture-path vector to populate; null
  *                       for Tiers 1 and 2
@@ -183,6 +182,15 @@ void read_obj_impl(
             "read_obj: cannot open file: " + path.string());
     }
 
+    // Clear the outputs before constructing
+    mesh.clear();
+    if (uvmap) {
+        uvmap->clear();
+    }
+    if (texture_paths) {
+        texture_paths->clear();
+    }
+
     // Temporary storage for vn and vt entries (OBJ 1-based pool)
     std::vector<Vec<T, 3>> normals_tmp;
     // vt_tmp[i] is the pool index in *uvmap for OBJ vt index i+1
@@ -197,9 +205,13 @@ void read_obj_impl(
     std::filesystem::path mtllib_path;
 
     // Hoisted face-parsing scratch space (avoids per-face heap allocations)
-    typename Mesh<T, Dims, VTraits>::Face face_verts;
-    std::vector<std::optional<std::size_t>> face_vts;
-    std::vector<std::optional<std::size_t>> face_vns;
+    using Face = typename Mesh<T, Dims, VTraits>::Face;
+    struct FaceReference {
+        Face vs;
+        std::vector<std::optional<std::size_t>> vts;
+        std::vector<std::optional<std::size_t>> vns;
+    };
+    std::vector<FaceReference> face_references;
 
     std::string line;
     std::vector<std::string_view> tokens;
@@ -284,8 +296,11 @@ void read_obj_impl(
             if (texture_paths == nullptr || tokens.size() < 2) {
                 continue;
             }
-            // Resolve MTL path relative to the OBJ file
-            mtllib_path = path.parent_path() / std::string(tokens[1]);
+            // Resolve MTL path relative to the OBJ file. Capture everything
+            // starting with the first token in case the filename has spaces.
+            const auto name_pos =
+                std::string_view(line).find_first_of(tokens[1]);
+            mtllib_path = path.parent_path() / line.substr(name_pos);
         }
 
         // ---- Face ----
@@ -294,58 +309,61 @@ void read_obj_impl(
                 continue;  // degenerate
             }
 
-            face_verts.clear();
-            face_vts.clear();
-            face_vns.clear();
-
+            FaceReference face;
             for (std::size_t ti = 1; ti < tokens.size(); ++ti) {
                 auto [vi, vt, vn] = parse_face_ref(tokens[ti]);
-                if (vi >= mesh.num_vertices()) {
-                    throw std::runtime_error(
-                        "read_obj: face vertex index " +
-                        std::to_string(vi + 1) +
-                        " out of range (num_vertices=" +
-                        std::to_string(mesh.num_vertices()) + ")");
-                }
-                face_verts.push_back(vi);
-                face_vts.push_back(vt);
-                face_vns.push_back(vn);
+                face.vs.push_back(vi);
+                face.vts.push_back(vt);
+                face.vns.push_back(vn);
             }
+            face_references.push_back(face);
+        }
+    }
 
-            const auto fi = mesh.insert_face(face_verts);
+    // Build faces and uv map after parsing all vs/vts/vns
+    for (const auto& [face_verts, face_vts, face_vns] : face_references) {
+        // Insert face
+        const auto fi = mesh.insert_face(face_verts);
 
-            // Populate per-vertex normals
-            if constexpr (traits::has_normal<Vertex>::value) {
-                for (std::size_t ci = 0; ci < face_verts.size(); ++ci) {
-                    if (face_vns[ci].has_value()) {
-                        const auto ni = *face_vns[ci];
-                        if (ni < normals_tmp.size()) {
-                            mesh.vertex(face_verts[ci]).normal =
-                                normals_tmp[ni];
-                        }
-                    }
+        // Populate per-vertex normals
+        if constexpr (traits::has_normal<Vertex>::value) {
+            for (std::size_t ci = 0; ci < face_verts.size(); ++ci) {
+                // TODO: Do we need to check if out of bounds?
+                if (!face_vns[ci].has_value()) {
+                    continue;
+                }
+                const auto ni = *face_vns[ci];
+                if (ni < normals_tmp.size()) {
+                    mesh.vertex(face_verts[ci]).normal = normals_tmp[ni];
                 }
             }
+        }
 
-            // Populate per-wedge UVs
-            if (uvmap != nullptr) {
-                for (std::size_t ci = 0; ci < face_verts.size(); ++ci) {
-                    if (face_vts[ci].has_value()) {
-                        const auto oi = *face_vts[ci];
-                        if (oi < vt_to_pool.size()) {
-                            const auto pool_idx = vt_to_pool[oi];
-                            uvmap->map(fi, ci, pool_idx);
-                            // Populate chart index
-                            if constexpr (traits::has_chart<UVMapT>::value) {
-                                uvmap->at(pool_idx).chart = cur_material;
-                            }
-                        }
-                    }
+        // Populate per-wedge UVs
+        if (uvmap != nullptr) {
+            // For each face wedge
+            for (std::size_t ci = 0; ci < face_verts.size(); ++ci) {
+                // Skip edges without UV coordinates
+                if (!face_vts[ci].has_value()) {
+                    continue;
+                }
+                // Get the vt-to-uv pool index
+                const auto oi = *face_vts[ci];
+                if (oi >= vt_to_pool.size()) {
+                    continue;
+                }
+                const auto pool_idx = vt_to_pool[oi];
+                // Add the
+                uvmap->map(fi, ci, pool_idx);
+                // Populate chart index
+                if constexpr (traits::has_chart<UVMapT>::value) {
+                    uvmap->at(pool_idx).chart = cur_material;
                 }
             }
         }
     }
 
+    // Did we close cleanly?
     if (file.bad()) {
         throw std::runtime_error("read_obj: I/O error while reading file");
     }
@@ -363,14 +381,20 @@ void read_obj_impl(
         std::string mtl_line;
         std::vector<std::string_view> mt;
         while (std::getline(mtl, mtl_line)) {
+            // TODO: Why are we doing this? Why only \r? Why not use strip?
             if (!mtl_line.empty() && mtl_line.back() == '\r') {
                 mtl_line.pop_back();
             }
-            split(std::string_view(mtl_line), mt);
+            // Tokenize
+            split(mtl_line, mt);
+            // Skip comments
             if (mt.empty() || mt[0].front() == '#') {
                 continue;
             }
             if (mt[0] == "newmtl") {
+                // TODO: Why do we need this? Always true after the first
+                // material. Is the goal to eventually capture other material
+                // properties?
                 in_material = true;
                 ordered_paths.emplace_back();  // placeholder
             } else if (mt[0] == "map_Kd" && in_material && mt.size() >= 2) {
@@ -465,6 +489,8 @@ void write_obj_faces(
                 if (uvmap->has(fi, ci)) {
                     file << '/' << to_string_view(buf, uvmap->get(fi, ci) + 1);
                 } else {
+                    // TODO: If vt is empty and there isn't a vn, isn't this
+                    // incorrect?
                     file << '/';
                 }
                 if constexpr (traits::has_normal<Vertex>::value) {
@@ -512,8 +538,8 @@ void write_obj(
             "write_obj: cannot open file: " + path.string());
     }
 
-    std::array<char, 128> buf;
-    using DummyUV = UVMap<float, 2>;
+    std::array<char, 128> buf{};
+    using DummyUV = UVMap<T>;
     DummyUV* no_uvmap = nullptr;
     detail::write_obj_vertices(file, buf, mesh, no_uvmap);
     detail::write_obj_faces(file, buf, mesh, no_uvmap);
@@ -551,7 +577,7 @@ void write_obj(
             "write_obj: cannot open file: " + path.string());
     }
 
-    std::array<char, 128> buf;
+    std::array<char, 128> buf{};
     detail::write_obj_vertices(file, buf, mesh, &uvmap);
     detail::write_obj_faces(file, buf, mesh, &uvmap);
 
@@ -605,7 +631,7 @@ void write_obj(
             "write_obj: cannot open file: " + path.string());
     }
 
-    std::array<char, 128> buf;
+    std::array<char, 128> buf{};
 
     file << "mtllib " << mtl_path.filename().string() << '\n';
     file << "usemtl material0\n";
@@ -669,7 +695,7 @@ void write_obj(
             "write_obj: cannot open file: " + path.string());
     }
 
-    std::array<char, 128> buf;
+    std::array<char, 128> buf{};
 
     file << "mtllib " << mtl_path.filename().string() << '\n';
 
@@ -736,7 +762,7 @@ void read_obj(
     const std::filesystem::path& path, Mesh<T, Dims, VTraits>& mesh)
 {
     // Use a dummy UVMap type; uvmap pointer is null so it is never accessed
-    using DummyUV = UVMap<float, 2>;
+    using DummyUV = UVMap<T, 2>;
     DummyUV* no_uvmap = nullptr;
     detail::read_obj_impl(path, mesh, no_uvmap, nullptr);
 }
