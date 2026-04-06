@@ -217,11 +217,6 @@ void read_obj_impl(
     std::string line;
     std::vector<std::string_view> tokens;
     while (std::getline(file, line)) {
-        // Strip Windows-style carriage return
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
-
         split(std::string_view(line), tokens);
         if (tokens.empty() || tokens[0].front() == '#') {
             continue;
@@ -334,17 +329,19 @@ void read_obj_impl(
         }
         const auto fi = mesh.insert_face(face.vs);
 
-        // Populate per-vertex normals
         if constexpr (traits::has_normal<Vertex>::value) {
             for (std::size_t ci = 0; ci < face.vs.size(); ++ci) {
-                // TODO: Do we need to check if out of bounds?
                 if (!face.vns[ci].has_value()) {
                     continue;
                 }
                 const auto ni = *face.vns[ci];
-                if (ni < normals_tmp.size()) {
-                    mesh.vertex(face.vs[ci]).normal = normals_tmp[ni];
+                if (ni >= normals_tmp.size()) {
+                    throw std::runtime_error(
+                        "read_obj: face normal index " +
+                        std::to_string(ni + 1) + " out of range (num_normals=" +
+                        std::to_string(normals_tmp.size()) + ")");
                 }
+                mesh.vertex(face.vs[ci]).normal = normals_tmp[ni];
             }
         }
 
@@ -383,17 +380,10 @@ void read_obj_impl(
         if (!mtl) {
             return;  // MTL missing — no-op per spec
         }
-        // Collect map_Kd entries in material-declaration order
-        // map: material_name -> map_Kd path (in declaration order)
         std::vector<std::filesystem::path> ordered_paths;
-        bool in_material = false;
         std::string mtl_line;
         std::vector<std::string_view> mt;
         while (std::getline(mtl, mtl_line)) {
-            // TODO: Why are we doing this? Why only \r? Why not use strip?
-            if (!mtl_line.empty() && mtl_line.back() == '\r') {
-                mtl_line.pop_back();
-            }
             // Tokenize
             split(mtl_line, mt);
             // Skip comments
@@ -401,15 +391,11 @@ void read_obj_impl(
                 continue;
             }
             if (mt[0] == "newmtl") {
-                // TODO: Why do we need this? Always true after the first
-                // material. Is the goal to eventually capture other material
-                // properties?
-                in_material = true;
                 ordered_paths.emplace_back();  // placeholder
-            } else if (mt[0] == "map_Kd" && in_material && mt.size() >= 2) {
-                if (!ordered_paths.empty()) {
-                    ordered_paths.back() = std::filesystem::path{std::string(mt[1])};
-                }
+            } else if (
+                mt[0] == "map_Kd" && !ordered_paths.empty() && mt.size() >= 2) {
+                ordered_paths.back() =
+                    std::filesystem::path{std::string(mt[1])};
             }
         }
         // Remove placeholder entries that had no map_Kd
@@ -494,21 +480,13 @@ void write_obj_faces(
         for (std::size_t ci = 0; ci < face.size(); ++ci) {
             const auto vi = face[ci];
             file << ' ' << to_string_view(buf, vi + 1);
-            if (uvmap != nullptr) {
-                if (uvmap->has(fi, ci)) {
-                    file << '/' << to_string_view(buf, uvmap->get(fi, ci) + 1);
-                } else {
-                    // TODO: If vt is empty and there isn't a vn, isn't this
-                    // incorrect?
-                    file << '/';
-                }
+            if (uvmap != nullptr && uvmap->has(fi, ci)) {
+                file << '/' << to_string_view(buf, uvmap->get(fi, ci) + 1);
                 if constexpr (traits::has_normal<Vertex>::value) {
                     file << '/' << to_string_view(buf, vi + 1);
                 }
-            } else {
-                if constexpr (traits::has_normal<Vertex>::value) {
-                    file << "//" << to_string_view(buf, vi + 1);
-                }
+            } else if constexpr (traits::has_normal<Vertex>::value) {
+                file << "//" << to_string_view(buf, vi + 1);
             }
         }
         file << '\n';
@@ -736,11 +714,11 @@ void write_obj(
                 if (uvmap.has(fi, corner)) {
                     file << '/'
                          << to_string_view(buf, uvmap.get(fi, corner) + 1);
-                } else {
-                    file << '/';
-                }
-                if constexpr (traits::has_normal<Vertex>::value) {
-                    file << '/' << to_string_view(buf, vi + 1);
+                    if constexpr (traits::has_normal<Vertex>::value) {
+                        file << '/' << to_string_view(buf, vi + 1);
+                    }
+                } else if constexpr (traits::has_normal<Vertex>::value) {
+                    file << "//" << to_string_view(buf, vi + 1);
                 }
             }
             file << '\n';

@@ -109,11 +109,11 @@ protected:
     {
         std::ostringstream ss;
         ss << std::hex << reinterpret_cast<std::uintptr_t>(this);
-        dir = fs::path("educelab_meshio_" + ss.str());
+        dir = fs::temp_directory_path() / ("educelab_meshio_" + ss.str());
         fs::create_directories(dir);
     }
 
-    void TearDown() override { /*fs::remove_all(dir);*/ }
+    void TearDown() override { fs::remove_all(dir); }
 
     [[nodiscard]] auto obj(const std::string& name) const -> fs::path
     {
