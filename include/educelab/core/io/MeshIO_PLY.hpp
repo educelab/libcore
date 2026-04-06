@@ -158,6 +158,13 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
                 in_vertex   = (cur_element == "vertex");
                 in_face     = (cur_element == "face");
                 const auto n = to_numeric<std::size_t>(tokens[2]);
+                constexpr std::size_t kMaxElements = 500'000'000;
+                if (n > kMaxElements) {
+                    throw std::runtime_error(
+                        "read_ply: element count " + std::to_string(n) +
+                        " exceeds safety limit of " +
+                        std::to_string(kMaxElements));
+                }
                 if (in_vertex) {
                     h.n_vertices = n;
                 } else if (in_face) {

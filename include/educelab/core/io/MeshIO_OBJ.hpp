@@ -210,6 +210,7 @@ void read_obj_impl(
         Face vs;
         std::vector<std::optional<std::size_t>> vts;
         std::vector<std::optional<std::size_t>> vns;
+        std::size_t material = 0;
     };
     std::vector<FaceReference> face_references;
 
@@ -298,8 +299,7 @@ void read_obj_impl(
             }
             // Resolve MTL path relative to the OBJ file. Capture everything
             // starting with the first token in case the filename has spaces.
-            const auto name_pos =
-                std::string_view(line).find_first_of(tokens[1]);
+            const auto name_pos = std::string_view(line).find(tokens[1]);
             mtllib_path = path.parent_path() / line.substr(name_pos);
         }
 
@@ -316,25 +316,34 @@ void read_obj_impl(
                 face.vts.push_back(vt);
                 face.vns.push_back(vn);
             }
+            face.material = cur_material;
             face_references.push_back(face);
         }
     }
 
     // Build faces and uv map after parsing all vs/vts/vns
-    for (const auto& [face_verts, face_vts, face_vns] : face_references) {
-        // Insert face
-        const auto fi = mesh.insert_face(face_verts);
+    for (const auto& face : face_references) {
+        // Check the face vertices now that all have been parsed
+        for (const auto& vi : face.vs) {
+            if (vi >= mesh.num_vertices()) {
+                throw std::runtime_error(
+                    "read_obj: face vertex index " + std::to_string(vi + 1) +
+                    " out of range (num_vertices=" +
+                    std::to_string(mesh.num_vertices()) + ")");
+            }
+        }
+        const auto fi = mesh.insert_face(face.vs);
 
         // Populate per-vertex normals
         if constexpr (traits::has_normal<Vertex>::value) {
-            for (std::size_t ci = 0; ci < face_verts.size(); ++ci) {
+            for (std::size_t ci = 0; ci < face.vs.size(); ++ci) {
                 // TODO: Do we need to check if out of bounds?
-                if (!face_vns[ci].has_value()) {
+                if (!face.vns[ci].has_value()) {
                     continue;
                 }
-                const auto ni = *face_vns[ci];
+                const auto ni = *face.vns[ci];
                 if (ni < normals_tmp.size()) {
-                    mesh.vertex(face_verts[ci]).normal = normals_tmp[ni];
+                    mesh.vertex(face.vs[ci]).normal = normals_tmp[ni];
                 }
             }
         }
@@ -342,13 +351,13 @@ void read_obj_impl(
         // Populate per-wedge UVs
         if (uvmap != nullptr) {
             // For each face wedge
-            for (std::size_t ci = 0; ci < face_verts.size(); ++ci) {
+            for (std::size_t ci = 0; ci < face.vs.size(); ++ci) {
                 // Skip edges without UV coordinates
-                if (!face_vts[ci].has_value()) {
+                if (!face.vts[ci].has_value()) {
                     continue;
                 }
                 // Get the vt-to-uv pool index
-                const auto oi = *face_vts[ci];
+                const auto oi = *face.vts[ci];
                 if (oi >= vt_to_pool.size()) {
                     continue;
                 }
@@ -357,7 +366,7 @@ void read_obj_impl(
                 uvmap->map(fi, ci, pool_idx);
                 // Populate chart index
                 if constexpr (traits::has_chart<UVMapT>::value) {
-                    uvmap->at(pool_idx).chart = cur_material;
+                    uvmap->at(pool_idx).chart = face.material;
                 }
             }
         }
