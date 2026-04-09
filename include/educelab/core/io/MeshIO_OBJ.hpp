@@ -22,10 +22,14 @@ namespace educelab
 namespace detail
 {
 
-/** @brief Convert a Color to normalised [0,1] float RGB */
+/** @brief Convert a Color to normalized [0,1] float RGB */
 inline auto color_to_rgb(const Color& c) -> std::array<float, 3>
 {
     switch (c.type()) {
+        case Color::Type::F32C1: {
+            const auto v = c.value<Color::F32C1>();
+            return {v, v, v};
+        }
         case Color::Type::F32C3: {
             const auto v = c.value<Color::F32C3>();
             return {v[0], v[1], v[2]};
@@ -33,6 +37,10 @@ inline auto color_to_rgb(const Color& c) -> std::array<float, 3>
         case Color::Type::F32C4: {
             const auto v = c.value<Color::F32C4>();
             return {v[0], v[1], v[2]};
+        }
+        case Color::Type::U8C1: {
+            const auto v = c.value<Color::U8C1>() / 255.f;
+            return {v, v, v};
         }
         case Color::Type::U8C3: {
             const auto v = c.value<Color::U8C3>();
@@ -42,6 +50,10 @@ inline auto color_to_rgb(const Color& c) -> std::array<float, 3>
             const auto v = c.value<Color::U8C4>();
             return {v[0] / 255.f, v[1] / 255.f, v[2] / 255.f};
         }
+        case Color::Type::U16C1: {
+            const auto v = c.value<Color::U16C1>() / 65535.f;
+            return {v, v, v};
+        }
         case Color::Type::U16C3: {
             const auto v = c.value<Color::U16C3>();
             return {v[0] / 65535.f, v[1] / 65535.f, v[2] / 65535.f};
@@ -49,18 +61,6 @@ inline auto color_to_rgb(const Color& c) -> std::array<float, 3>
         case Color::Type::U16C4: {
             const auto v = c.value<Color::U16C4>();
             return {v[0] / 65535.f, v[1] / 65535.f, v[2] / 65535.f};
-        }
-        case Color::Type::F32C1: {
-            const auto v = c.value<Color::F32C1>();
-            return {v, v, v};
-        }
-        case Color::Type::U8C1: {
-            const float v = c.value<Color::U8C1>() / 255.f;
-            return {v, v, v};
-        }
-        case Color::Type::U16C1: {
-            const float v = c.value<Color::U16C1>() / 65535.f;
-            return {v, v, v};
         }
         default:
             return {0.f, 0.f, 0.f};
@@ -73,11 +73,9 @@ inline auto color_to_rgb(const Color& c) -> std::array<float, 3>
  *
  * @return {v_idx, vt_idx, vn_idx} — all 0-based; vt/vn are nullopt when absent
  */
-inline auto parse_face_ref(std::string_view token)
-    -> std::tuple<
-        std::size_t,
-        std::optional<std::size_t>,
-        std::optional<std::size_t>>
+inline auto parse_face_ref(
+    std::string_view token, const std::size_t line_no) -> std::
+    tuple<std::size_t, std::optional<std::size_t>, std::optional<std::size_t>>
 {
     // Find first '/'
     const auto p1 = token.find('/');
@@ -86,16 +84,20 @@ inline auto parse_face_ref(std::string_view token)
 
     // "v" is always present
     if (v_sv.empty()) {
-        throw std::runtime_error("read_obj: empty vertex index is invalid ");
+        throw std::runtime_error(
+            "read_obj: l." + to_string(line_no - 1) +
+            ": empty vertex index is invalid ");
     }
     if (v_sv[0] == '-') {
         throw std::runtime_error(
-            "read_obj: negative (relative) face indices are not supported");
+            "read_obj: l." + to_string(line_no - 1) +
+            ": negative (relative) face indices are not supported");
     }
     const auto raw_v = to_numeric<std::size_t>(v_sv);
     if (raw_v == 0) {
         throw std::runtime_error(
-            "read_obj: vertex index 0 is invalid (OBJ indices are 1-based)");
+            "read_obj: l." + to_string(line_no - 1) +
+            ": vertex index 0 is invalid (OBJ indices are 1-based)");
     }
     const auto v = raw_v - 1;
     if (p1 == std::string_view::npos) {
@@ -113,12 +115,14 @@ inline auto parse_face_ref(std::string_view token)
         }
         if (rest[0] == '-') {
             throw std::runtime_error(
-                "read_obj: negative (relative) face indices are not supported");
+                "read_obj: l." + to_string(line_no - 1) +
+                ": negative (relative) face indices are not supported");
         }
         const auto raw_vt = to_numeric<std::size_t>(rest);
         if (raw_vt == 0) {
             throw std::runtime_error(
-                "read_obj: face index 0 is invalid (OBJ indices are 1-based)");
+                "read_obj: l." + to_string(line_no - 1) +
+                ": face index 0 is invalid (OBJ indices are 1-based)");
         }
         return {v, raw_vt - 1, std::nullopt};
     }
@@ -131,12 +135,14 @@ inline auto parse_face_ref(std::string_view token)
     if (!vt_sv.empty()) {
         if (vt_sv[0] == '-') {
             throw std::runtime_error(
-                "read_obj: negative (relative) face indices are not supported");
+                "read_obj: l." + to_string(line_no - 1) +
+                ": negative (relative) face indices are not supported");
         }
         const auto raw_vt = to_numeric<std::size_t>(vt_sv);
         if (raw_vt == 0) {
             throw std::runtime_error(
-                "read_obj: face index 0 is invalid (OBJ indices are 1-based)");
+                "read_obj: l." + to_string(line_no - 1) +
+                ": face index 0 is invalid (OBJ indices are 1-based)");
         }
         vt_idx = raw_vt - 1;
     }
@@ -145,12 +151,14 @@ inline auto parse_face_ref(std::string_view token)
     if (!vn_sv.empty()) {
         if (vn_sv[0] == '-') {
             throw std::runtime_error(
-                "read_obj: negative (relative) face indices are not supported");
+                "read_obj: l." + to_string(line_no - 1) +
+                ": negative (relative) face indices are not supported");
         }
         const auto raw_vn = to_numeric<std::size_t>(vn_sv);
         if (raw_vn == 0) {
             throw std::runtime_error(
-                "read_obj: face index 0 is invalid (OBJ indices are 1-based)");
+                "read_obj: l." + to_string(line_no - 1) +
+                ": face index 0 is invalid (OBJ indices are 1-based)");
         }
         vn_idx = raw_vn - 1;
     }
@@ -204,7 +212,7 @@ void read_obj_impl(
     // MTL file path (resolved next to the OBJ)
     std::filesystem::path mtllib_path;
 
-    // Hoisted face-parsing scratch space (avoids per-face heap allocations)
+    // Hoisted face-parsing scratch space
     using Face = typename Mesh<T, Dims, VTraits>::Face;
     struct FaceReference {
         Face vs;
@@ -216,7 +224,9 @@ void read_obj_impl(
 
     std::string line;
     std::vector<std::string_view> tokens;
+    std::size_t line_no{0};
     while (std::getline(file, line)) {
+        line_no++;
         split(std::string_view(line), tokens);
         if (tokens.empty() || tokens[0].front() == '#') {
             continue;
@@ -225,7 +235,9 @@ void read_obj_impl(
         // ---- Vertex position ----
         if (tokens[0] == "v") {
             if (tokens.size() < 4) {
-                continue;
+                throw std::runtime_error(
+                    "read_obj: l." + to_string(line_no - 1) +
+                    ": invalid v declaration");
             }
             T x = to_numeric<T>(tokens[1]);
             T y = to_numeric<T>(tokens[2]);
@@ -245,7 +257,9 @@ void read_obj_impl(
         // ---- Vertex normal ----
         else if (tokens[0] == "vn") {
             if (tokens.size() < 4) {
-                continue;
+                throw std::runtime_error(
+                    "read_obj: l." + to_string(line_no - 1) +
+                    ": invalid vn declaration");
             }
             if constexpr (traits::has_normal<Vertex>::value) {
                 Vec<T, Dims> n{};
@@ -254,16 +268,17 @@ void read_obj_impl(
                 n[2] = to_numeric<T>(tokens[3]);
                 normals_tmp.push_back(n);
             }
-            // Always bump the temp count even when we don't store,
-            // so vn indices remain valid if the mesh gains normals later.
-            // (If traits::has_normal is false we never read normals_tmp, so it
-            //  stays empty and we just never push — indices won't be used.)
         }
 
         // ---- Texture coordinate ----
         else if (tokens[0] == "vt") {
-            if (uvmap == nullptr || tokens.size() < 3) {
+            if (uvmap == nullptr) {
                 continue;
+            }
+            if (tokens.size() < 3) {
+                throw std::runtime_error(
+                    "read_obj: l." + to_string(line_no - 1) +
+                    ": invalid vt declaration");
             }
             const auto u = to_numeric<float>(tokens[1]);
             const auto v = to_numeric<float>(tokens[2]);
@@ -274,7 +289,9 @@ void read_obj_impl(
         // ---- Material reference ----
         else if (tokens[0] == "usemtl") {
             if (tokens.size() < 2) {
-                continue;
+                throw std::runtime_error(
+                    "read_obj: l." + to_string(line_no - 1) +
+                    ": invalid usemtl declaration");
             }
             const std::string name{tokens[1]};
             auto it = material_index.find(name);
@@ -289,8 +306,10 @@ void read_obj_impl(
 
         // ---- MTL library reference ----
         else if (tokens[0] == "mtllib") {
-            if (texture_paths == nullptr || tokens.size() < 2) {
+            if (texture_paths == nullptr) {
                 continue;
+            }
+            if (tokens.size() < 2) {
             }
             // Resolve MTL path relative to the OBJ file. Capture everything
             // starting with the first token in case the filename has spaces.
@@ -301,12 +320,15 @@ void read_obj_impl(
         // ---- Face ----
         else if (tokens[0] == "f") {
             if (tokens.size() < 4) {
+                throw std::runtime_error(
+                    "read_obj: l." + to_string(line_no - 1) +
+                    ": invalid f declaration");
                 continue;  // degenerate
             }
 
             FaceReference face;
             for (std::size_t ti = 1; ti < tokens.size(); ++ti) {
-                auto [vi, vt, vn] = parse_face_ref(tokens[ti]);
+                auto [vi, vt, vn] = parse_face_ref(tokens[ti], line_no);
                 face.vs.push_back(vi);
                 face.vts.push_back(vt);
                 face.vns.push_back(vn);
