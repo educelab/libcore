@@ -2,6 +2,7 @@
 
 /** @file */
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -27,6 +28,10 @@ namespace detail
 inline auto color_to_u8c3(const Color& c) -> std::array<uint8_t, 3>
 {
     switch (c.type()) {
+        case Color::Type::U8C1: {
+            const auto v = c.value<Color::U8C1>();
+            return {v, v, v};
+        }
         case Color::Type::U8C3: {
             const auto v = c.value<Color::U8C3>();
             return {v[0], v[1], v[2]};
@@ -35,47 +40,56 @@ inline auto color_to_u8c3(const Color& c) -> std::array<uint8_t, 3>
             const auto v = c.value<Color::U8C4>();
             return {v[0], v[1], v[2]};
         }
+        case Color::Type::F32C1: {
+            const auto v = static_cast<uint8_t>(std::clamp(
+                std::lround(c.value<Color::F32C1>() * 255.f), 0L, 255L));
+            return {v, v, v};
+        }
         case Color::Type::F32C3: {
             const auto v = c.value<Color::F32C3>();
-            // TODO: Why not use std::round or std::ceil?
             return {
-                static_cast<uint8_t>(v[0] * 255.f + 0.5f),
-                static_cast<uint8_t>(v[1] * 255.f + 0.5f),
-                static_cast<uint8_t>(v[2] * 255.f + 0.5f)};
+                static_cast<uint8_t>(
+                    std::clamp(std::lround(v[0] * 255.f), 0L, 255L)),
+                static_cast<uint8_t>(
+                    std::clamp(std::lround(v[1] * 255.f), 0L, 255L)),
+                static_cast<uint8_t>(
+                    std::clamp(std::lround(v[2] * 255.f), 0L, 255L))};
         }
         case Color::Type::F32C4: {
             const auto v = c.value<Color::F32C4>();
             return {
-                static_cast<uint8_t>(v[0] * 255.f + 0.5f),
-                static_cast<uint8_t>(v[1] * 255.f + 0.5f),
-                static_cast<uint8_t>(v[2] * 255.f + 0.5f)};
+                static_cast<uint8_t>(
+                    std::clamp(std::lround(v[0] * 255.f), 0L, 255L)),
+                static_cast<uint8_t>(
+                    std::clamp(std::lround(v[1] * 255.f), 0L, 255L)),
+                static_cast<uint8_t>(
+                    std::clamp(std::lround(v[2] * 255.f), 0L, 255L))};
+        }
+        case Color::Type::U16C1: {
+            const auto v = static_cast<uint8_t>(std::clamp(
+                std::lround(c.value<Color::U16C1>() / 65535.f * 255.f), 0L,
+                255L));
+            return {v, v, v};
         }
         case Color::Type::U16C3: {
             const auto v = c.value<Color::U16C3>();
             return {
-                static_cast<uint8_t>(v[0] / 65535.f * 255.f + 0.5f),
-                static_cast<uint8_t>(v[1] / 65535.f * 255.f + 0.5f),
-                static_cast<uint8_t>(v[2] / 65535.f * 255.f + 0.5f)};
+                static_cast<uint8_t>(
+                    std::clamp(std::lround(v[0] / 65535.f * 255.f), 0L, 255L)),
+                static_cast<uint8_t>(
+                    std::clamp(std::lround(v[1] / 65535.f * 255.f), 0L, 255L)),
+                static_cast<uint8_t>(
+                    std::clamp(std::lround(v[2] / 65535.f * 255.f), 0L, 255L))};
         }
         case Color::Type::U16C4: {
             const auto v = c.value<Color::U16C4>();
             return {
-                static_cast<uint8_t>(v[0] / 65535.f * 255.f + 0.5f),
-                static_cast<uint8_t>(v[1] / 65535.f * 255.f + 0.5f),
-                static_cast<uint8_t>(v[2] / 65535.f * 255.f + 0.5f)};
-        }
-        case Color::Type::U8C1: {
-            const auto v = c.value<Color::U8C1>();
-            return {v, v, v};
-        }
-        case Color::Type::U16C1: {
-            const auto v =
-                static_cast<uint8_t>(c.value<Color::U16C1>() / 65535.f * 255.f + 0.5f);
-            return {v, v, v};
-        }
-        case Color::Type::F32C1: {
-            const auto v = static_cast<uint8_t>(c.value<Color::F32C1>() * 255.f + 0.5f);
-            return {v, v, v};
+                static_cast<uint8_t>(
+                    std::clamp(std::lround(v[0] / 65535.f * 255.f), 0L, 255L)),
+                static_cast<uint8_t>(
+                    std::clamp(std::lround(v[1] / 65535.f * 255.f), 0L, 255L)),
+                static_cast<uint8_t>(
+                    std::clamp(std::lround(v[2] / 65535.f * 255.f), 0L, 255L))};
         }
         default:
             return {0, 0, 0};
@@ -85,6 +99,15 @@ inline auto color_to_u8c3(const Color& c) -> std::array<uint8_t, 3>
 // -------------------------------------------------------------------------
 // PLY header description
 // -------------------------------------------------------------------------
+
+// TODO: This parsing approach is wrong. This needs to keep a list of all
+// elements, iterate those elements, and only parse the ones we support. This
+// appears to only support meshes which contain vertices and faces and no other
+// elements.
+
+// TODO: This is supposed to support reading and writing textured PLY's, but I
+// don't quite understand how the uv map is getting written. As the s t vertex
+// properties? Why not a separate texcoord element?
 
 struct PLYProp {
     std::string name;
@@ -127,9 +150,6 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
     bool in_face   = false;
     std::vector<std::string_view> tokens;
     while (std::getline(file, line)) {
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
         split(std::string_view(line), tokens);
         if (tokens.empty()) {
             continue;
@@ -231,13 +251,23 @@ auto read_ply_binary_prop(std::istream& f, const std::string& type) -> DestT
         if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
         return static_cast<DestT>(v);
     }
-    if (type == "uchar" || type == "char") {
+    if (type == "char") {
+        int8_t v{};
+        f.read(reinterpret_cast<char*>(&v), 1);
+        if (!f) {
+            throw std::runtime_error("read_ply: unexpected end of binary data");
+        }
+        return static_cast<DestT>(v);
+    }
+    if (type == "uchar") {
         uint8_t v{};
         f.read(reinterpret_cast<char*>(&v), 1);
         if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
         return static_cast<DestT>(v);
     }
     // Unknown: skip 4 bytes
+    // TODO: Why skip 4 bytes? Wouldn't an unrecognized type be a hard error?
+    // And shouldn't we catch that when we parse the header?
     f.ignore(4);
     return DestT{};
 }
