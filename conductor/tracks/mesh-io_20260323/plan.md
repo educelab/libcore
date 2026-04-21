@@ -277,7 +277,7 @@ architecture, testing) plus deferred binary PLY reader optimisations.
       (h) add `NCMesh` (normals + colors combined) OBJ round-trip test;
       (i) add BinaryBE throw test;
       (j) add `expand_at_seams` empty-mesh test
-- [ ] **Task 5.6** *(deferred perf)*: Pre-compute vertex AND face property role
+- [x] **Task 5.6** *(deferred perf)*: Pre-compute vertex AND face property role
       enums from PLY header; replace per-property string comparison in both
       binary AND ASCII reader inner loops with role-indexed dispatch (currently
       `prop.name == "x"` etc. runs for every vertex property on every vertex in
@@ -315,7 +315,7 @@ Completed changes (texcoord implementation):
 
 - [x] **Task 6.1**: Implement texcoord write/read in `MeshIO_PLY.hpp`; update tests
 - [x] **Task 6.2**: Apply quick-fix review findings (section banners, docstrings, `v_coord`→`v`, static_cast, comments)
-- [ ] **Task 5.6** *(carry-forward — see above)*: Role-enum dispatch for binary + ASCII inner loops
+- [x] **Task 5.6** *(carry-forward — see above)*: Role-enum dispatch for binary + ASCII inner loops
 - [ ] **Task 5.7** *(carry-forward — see above)*: Batch vertex-record reads
 - [ ] **Task 5.8** *(carry-forward — see above)*: Extract face-parsing helpers
 
