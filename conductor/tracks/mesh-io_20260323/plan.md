@@ -277,19 +277,61 @@ architecture, testing) plus deferred binary PLY reader optimisations.
       (h) add `NCMesh` (normals + colors combined) OBJ round-trip test;
       (i) add BinaryBE throw test;
       (j) add `expand_at_seams` empty-mesh test
-- [ ] **Task 5.6** *(deferred perf)*: Pre-compute vertex property role enum
-      from PLY header; replace per-property-per-vertex string comparison
-      chain with a role-indexed dispatch in the binary reader inner loop
+- [ ] **Task 5.6** *(deferred perf)*: Pre-compute vertex AND face property role
+      enums from PLY header; replace per-property string comparison in both
+      binary AND ASCII reader inner loops with role-indexed dispatch (currently
+      `prop.name == "x"` etc. runs for every vertex property on every vertex in
+      ASCII too)
 - [ ] **Task 5.7** *(deferred perf)*: Batch-read full vertex record into a
       stack buffer per vertex in binary PLY reader; extract fields with
       `std::memcpy` to reduce `istream::read` calls from
       O(properties × vertices) to O(vertices)
+- [ ] **Task 5.8** *(deferred refactor)*: Extract `read_ply_face_binary` and
+      `read_ply_face_ascii` helpers from `read_ply_impl` to reduce nesting depth
+      and isolate the per-face parsing logic; the face-element branch currently
+      contains ~80 lines of nested binary+ASCII code inside the element loop
 
 ### Verification
 
 - [x] `ctest` passes with no regressions (17/17)
 - [x] All new tests pass
 - [x] Build succeeds on macOS locally; macOS-26 long double fix in place
+
+---
+
+## Phase 6: PLY Texcoord Approach
+
+Replace per-vertex `s`/`t` scalar UV with the per-wedge
+`property list uchar float texcoord` face list. Removes seam expansion from
+write path; adds backward-compat read for legacy `s`/`t` files.
+
+Completed changes (texcoord implementation):
+- `write_ply_header`: `s`/`t` vertex properties → `property list uchar float texcoord` on face element
+- `write_ply_data`: writes `-1 -1` sentinel for unmapped corners; removed `expand_at_seams` call
+- `read_ply_impl`: detects `has_texcoord` flag; `legacy_st_uvs` const bool guards old path; `reserve_faces` before face loop; hoisted `fline`; inlined UV insert into vertex loop (removed `uv_s`/`uv_t` temp vectors + second pass)
+- Tests: `WriteWithUVMap_SeamExpansion` → `WriteWithUVMap_PerWedgeTexcoord` (verifies no expansion, 6 pool entries, per-wedge values); added `ReadLegacyPerVertexUV_BackwardCompat`
+
+### Tasks
+
+- [x] **Task 6.1**: Implement texcoord write/read in `MeshIO_PLY.hpp`; update tests
+- [x] **Task 6.2**: Apply quick-fix review findings (section banners, docstrings, `v_coord`→`v`, static_cast, comments)
+- [ ] **Task 5.6** *(carry-forward — see above)*: Role-enum dispatch for binary + ASCII inner loops
+- [ ] **Task 5.7** *(carry-forward — see above)*: Batch vertex-record reads
+- [ ] **Task 5.8** *(carry-forward — see above)*: Extract face-parsing helpers
+
+- [x] **Task 6.3** *(refactor)*: Replace manual `\r`-strip and empty-check idiom in
+      `MeshIO_PLY.hpp` ASCII read paths with `trim_right_in_place` from
+      `String.hpp`. The pattern `if (!line.empty() && line.back() == '\r') line.pop_back()` (plus the
+      subsequent `if (!line.empty() && line.front() != '#')` guard) appears in
+      three places — `skip_ascii_line`, the vertex ASCII read loop, and the face ASCII
+      read loop — and can each be collapsed to a single `trim_right_in_place(line)`
+      call before the `#`-comment check. No behavior change; `trim_right` already
+      treats `\r` as whitespace via `std::isspace`.
+
+### Verification
+
+- [x] `ctest` 17/17 passes
+- [x] Build succeeds in Debug
 
 ---
 
@@ -306,3 +348,4 @@ architecture, testing) plus deferred binary PLY reader optimisations.
 ---
 
 _Updated 2026-03-25 to add Phase 5 review-fix and deferred binary PLY perf tasks._
+_Updated 2026-04-21 to add Phase 6 PLY texcoord approach (per-wedge UV, backward-compat s/t read); expanded Task 5.6 scope to cover ASCII; added Task 5.8 face-helper refactor._
