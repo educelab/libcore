@@ -110,11 +110,30 @@ inline auto color_to_u8c3(const Color& c) -> std::array<uint8_t, 3>
 // Files written with per-vertex `s`/`t` scalar properties are still readable
 // for backward compatibility.
 
+/** @brief Semantic role of a PLY property, pre-computed from its name and
+ *  element context so the reader inner loops can switch on an integer instead
+ *  of comparing strings for every vertex / face. */
+enum class PropRole {
+    Unknown,
+    // Vertex geometry
+    X, Y, Z,
+    // Vertex normals
+    NX, NY, NZ,
+    // Vertex colors
+    Red, Green, Blue,
+    // Legacy per-vertex UV scalars (backward compat)
+    S, T,
+    // Face list properties
+    VertexIndices,
+    Texcoord,
+};
+
 struct PLYProp {
     std::string name;
     std::string type;  // "float", "double", "int", "uint", "uchar", etc.
     bool is_list{false};
     std::string list_count_type;  // type of the list-length prefix (if is_list)
+    PropRole role{PropRole::Unknown};
 };
 
 /** @brief A single element block from the PLY header */
@@ -205,6 +224,25 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
             } else {
                 p.name = std::string(tokens[2]);
                 p.type = std::string(tokens[1]);
+            }
+            // Assign semantic role once so inner read loops switch on an
+            // integer rather than comparing strings per vertex / face.
+            const auto& ename = h.elements.back().name;
+            if (ename == "vertex") {
+                if      (p.name == "x")     p.role = PropRole::X;
+                else if (p.name == "y")     p.role = PropRole::Y;
+                else if (p.name == "z")     p.role = PropRole::Z;
+                else if (p.name == "nx")    p.role = PropRole::NX;
+                else if (p.name == "ny")    p.role = PropRole::NY;
+                else if (p.name == "nz")    p.role = PropRole::NZ;
+                else if (p.name == "red")   p.role = PropRole::Red;
+                else if (p.name == "green") p.role = PropRole::Green;
+                else if (p.name == "blue")  p.role = PropRole::Blue;
+                else if (p.name == "s")     p.role = PropRole::S;
+                else if (p.name == "t")     p.role = PropRole::T;
+            } else if (ename == "face") {
+                if      (p.name == "vertex_indices") p.role = PropRole::VertexIndices;
+                else if (p.name == "texcoord")       p.role = PropRole::Texcoord;
             }
             h.elements.back().props.push_back(std::move(p));
         }
@@ -328,28 +366,24 @@ void read_ply_impl(
             face_elem = &elem;
     }
 
-    // Identify vertex property roles
+    // Identify which optional vertex attributes the file carries.
+    // Roles were pre-computed by parse_ply_header, so no string comparisons here.
     bool has_nx{false}, has_ny{false}, has_nz{false};
     bool has_r{false}, has_g{false}, has_b{false};
     bool has_s{false}, has_t{false};
     if (vert_elem) {
         for (const auto& p : vert_elem->props) {
-            if (p.name == "nx")
-                has_nx = true;
-            if (p.name == "ny")
-                has_ny = true;
-            if (p.name == "nz")
-                has_nz = true;
-            if (p.name == "red")
-                has_r = true;
-            if (p.name == "green")
-                has_g = true;
-            if (p.name == "blue")
-                has_b = true;
-            if (p.name == "s")
-                has_s = true;
-            if (p.name == "t")
-                has_t = true;
+            switch (p.role) {
+                case PropRole::NX:    has_nx = true; break;
+                case PropRole::NY:    has_ny = true; break;
+                case PropRole::NZ:    has_nz = true; break;
+                case PropRole::Red:   has_r  = true; break;
+                case PropRole::Green: has_g  = true; break;
+                case PropRole::Blue:  has_b  = true; break;
+                case PropRole::S:     has_s  = true; break;
+                case PropRole::T:     has_t  = true; break;
+                default: break;
+            }
         }
     }
 
@@ -361,7 +395,7 @@ void read_ply_impl(
     bool has_texcoord{false};
     if (face_elem) {
         for (const auto& p : face_elem->props) {
-            if (p.is_list && p.name == "texcoord") {
+            if (p.is_list && p.role == PropRole::Texcoord) {
                 has_texcoord = true;
                 break;
             }
@@ -413,32 +447,33 @@ void read_ply_impl(
 
                 if (binary) {
                     for (const auto& prop : elem.props) {
-                        if (prop.name == "x")
-                            x = read_ply_binary_prop<T>(file, prop.type);
-                        else if (prop.name == "y")
-                            y = read_ply_binary_prop<T>(file, prop.type);
-                        else if (prop.name == "z")
-                            z = read_ply_binary_prop<T>(file, prop.type);
-                        else if (prop.name == "nx")
-                            nx = read_ply_binary_prop<T>(file, prop.type);
-                        else if (prop.name == "ny")
-                            ny = read_ply_binary_prop<T>(file, prop.type);
-                        else if (prop.name == "nz")
-                            nz = read_ply_binary_prop<T>(file, prop.type);
-                        else if (prop.name == "red")
-                            r = read_ply_binary_prop<float>(file, prop.type);
-                        else if (prop.name == "green")
-                            g = read_ply_binary_prop<float>(file, prop.type);
-                        else if (prop.name == "blue")
-                            b = read_ply_binary_prop<float>(file, prop.type);
-                        else if (prop.name == "s")
-                            s = read_ply_binary_prop<float>(file, prop.type);
-                        else if (prop.name == "t")
-                            t = read_ply_binary_prop<float>(file, prop.type);
-                        else {
-                            file.ignore(
-                                static_cast<std::streamsize>(
+                        switch (prop.role) {
+                            case PropRole::X:
+                                x = read_ply_binary_prop<T>(file, prop.type); break;
+                            case PropRole::Y:
+                                y = read_ply_binary_prop<T>(file, prop.type); break;
+                            case PropRole::Z:
+                                z = read_ply_binary_prop<T>(file, prop.type); break;
+                            case PropRole::NX:
+                                nx = read_ply_binary_prop<T>(file, prop.type); break;
+                            case PropRole::NY:
+                                ny = read_ply_binary_prop<T>(file, prop.type); break;
+                            case PropRole::NZ:
+                                nz = read_ply_binary_prop<T>(file, prop.type); break;
+                            case PropRole::Red:
+                                r = read_ply_binary_prop<float>(file, prop.type); break;
+                            case PropRole::Green:
+                                g = read_ply_binary_prop<float>(file, prop.type); break;
+                            case PropRole::Blue:
+                                b = read_ply_binary_prop<float>(file, prop.type); break;
+                            case PropRole::S:
+                                s = read_ply_binary_prop<float>(file, prop.type); break;
+                            case PropRole::T:
+                                t = read_ply_binary_prop<float>(file, prop.type); break;
+                            default:
+                                file.ignore(static_cast<std::streamsize>(
                                     ply_type_bytes(prop.type)));
+                                break;
                         }
                     }
                 } else {
@@ -451,29 +486,31 @@ void read_ply_impl(
                     split(std::string_view(line), tokens);
                     for (std::size_t pi = 0;
                          pi < elem.props.size() && pi < tokens.size(); ++pi) {
-                        const auto& prop = elem.props[pi];
-                        if (prop.name == "x")
-                            x = to_numeric<T>(tokens[pi]);
-                        else if (prop.name == "y")
-                            y = to_numeric<T>(tokens[pi]);
-                        else if (prop.name == "z")
-                            z = to_numeric<T>(tokens[pi]);
-                        else if (prop.name == "nx")
-                            nx = to_numeric<T>(tokens[pi]);
-                        else if (prop.name == "ny")
-                            ny = to_numeric<T>(tokens[pi]);
-                        else if (prop.name == "nz")
-                            nz = to_numeric<T>(tokens[pi]);
-                        else if (prop.name == "red")
-                            r = to_numeric<float>(tokens[pi]);
-                        else if (prop.name == "green")
-                            g = to_numeric<float>(tokens[pi]);
-                        else if (prop.name == "blue")
-                            b = to_numeric<float>(tokens[pi]);
-                        else if (prop.name == "s")
-                            s = to_numeric<float>(tokens[pi]);
-                        else if (prop.name == "t")
-                            t = to_numeric<float>(tokens[pi]);
+                        switch (elem.props[pi].role) {
+                            case PropRole::X:
+                                x = to_numeric<T>(tokens[pi]); break;
+                            case PropRole::Y:
+                                y = to_numeric<T>(tokens[pi]); break;
+                            case PropRole::Z:
+                                z = to_numeric<T>(tokens[pi]); break;
+                            case PropRole::NX:
+                                nx = to_numeric<T>(tokens[pi]); break;
+                            case PropRole::NY:
+                                ny = to_numeric<T>(tokens[pi]); break;
+                            case PropRole::NZ:
+                                nz = to_numeric<T>(tokens[pi]); break;
+                            case PropRole::Red:
+                                r = to_numeric<float>(tokens[pi]); break;
+                            case PropRole::Green:
+                                g = to_numeric<float>(tokens[pi]); break;
+                            case PropRole::Blue:
+                                b = to_numeric<float>(tokens[pi]); break;
+                            case PropRole::S:
+                                s = to_numeric<float>(tokens[pi]); break;
+                            case PropRole::T:
+                                t = to_numeric<float>(tokens[pi]); break;
+                            default: break;  // unknown: token already indexed by pi, skip
+                        }
                     }
                 }
 
@@ -519,39 +556,46 @@ void read_ply_impl(
                             const auto count =
                                 read_ply_binary_prop<std::size_t>(
                                     file, prop.list_count_type);
-                            if (prop.name == "vertex_indices") {
-                                if (count > 256) {
-                                    throw std::runtime_error(
-                                        "read_ply: face vertex count " +
-                                        to_string(count) +
-                                        " exceeds maximum of 256");
-                                }
-                                face.reserve(count);
-                                for (std::size_t k = 0; k < count; ++k) {
-                                    const auto idx =
-                                        read_ply_binary_prop<std::size_t>(
-                                            file, prop.type);
-                                    if (idx >= n_vertices) {
+                            switch (prop.role) {
+                                case PropRole::VertexIndices:
+                                    if (count > 256) {
                                         throw std::runtime_error(
-                                            "read_ply: face vertex index " +
-                                            to_string(idx) +
-                                            " out of range (n_vertices=" +
-                                            to_string(n_vertices) + ")");
+                                            "read_ply: face vertex count " +
+                                            to_string(count) +
+                                            " exceeds maximum of 256");
                                     }
-                                    face.push_back(idx);
-                                }
-                            } else if (
-                                prop.name == "texcoord" && uvmap != nullptr &&
-                                has_texcoord) {
-                                texcoords.resize(count);
-                                for (std::size_t k = 0; k < count; ++k) {
-                                    texcoords[k] = read_ply_binary_prop<float>(
-                                        file, prop.type);
-                                }
-                            } else {
-                                file.ignore(
-                                    static_cast<std::streamsize>(
+                                    face.reserve(count);
+                                    for (std::size_t k = 0; k < count; ++k) {
+                                        const auto idx =
+                                            read_ply_binary_prop<std::size_t>(
+                                                file, prop.type);
+                                        if (idx >= n_vertices) {
+                                            throw std::runtime_error(
+                                                "read_ply: face vertex index " +
+                                                to_string(idx) +
+                                                " out of range (n_vertices=" +
+                                                to_string(n_vertices) + ")");
+                                        }
+                                        face.push_back(idx);
+                                    }
+                                    break;
+                                case PropRole::Texcoord:
+                                    if (uvmap != nullptr && has_texcoord) {
+                                        texcoords.resize(count);
+                                        for (std::size_t k = 0; k < count; ++k) {
+                                            texcoords[k] =
+                                                read_ply_binary_prop<float>(
+                                                    file, prop.type);
+                                        }
+                                    } else {
+                                        file.ignore(static_cast<std::streamsize>(
+                                            count * ply_type_bytes(prop.type)));
+                                    }
+                                    break;
+                                default:
+                                    file.ignore(static_cast<std::streamsize>(
                                         count * ply_type_bytes(prop.type)));
+                                    break;
                             }
                         } else {
                             file.ignore(
@@ -579,39 +623,46 @@ void read_ply_impl(
                         if (prop.is_list) {
                             const auto count =
                                 to_numeric<std::size_t>(tokens[ti++]);
-                            if (prop.name == "vertex_indices") {
-                                if (count > 256) {
-                                    throw std::runtime_error(
-                                        "read_ply: face vertex count " +
-                                        to_string(count) +
-                                        " exceeds maximum of 256");
-                                }
-                                face.reserve(count);
-                                for (std::size_t k = 0;
-                                     k < count && ti < tokens.size();
-                                     ++k, ++ti) {
-                                    const auto idx =
-                                        to_numeric<std::size_t>(tokens[ti]);
-                                    if (idx >= n_vertices) {
+                            switch (prop.role) {
+                                case PropRole::VertexIndices:
+                                    if (count > 256) {
                                         throw std::runtime_error(
-                                            "read_ply: face vertex index " +
-                                            to_string(idx) +
-                                            " out of range (n_vertices=" +
-                                            to_string(n_vertices) + ")");
+                                            "read_ply: face vertex count " +
+                                            to_string(count) +
+                                            " exceeds maximum of 256");
                                     }
-                                    face.push_back(idx);
-                                }
-                            } else if (
-                                prop.name == "texcoord" && uvmap != nullptr &&
-                                has_texcoord) {
-                                texcoords.resize(count);
-                                for (std::size_t k = 0;
-                                     k < count && ti < tokens.size();
-                                     ++k, ++ti) {
-                                    texcoords[k] = to_numeric<float>(tokens[ti]);
-                                }
-                            } else {
-                                ti += count;  // skip list entries
+                                    face.reserve(count);
+                                    for (std::size_t k = 0;
+                                         k < count && ti < tokens.size();
+                                         ++k, ++ti) {
+                                        const auto idx =
+                                            to_numeric<std::size_t>(tokens[ti]);
+                                        if (idx >= n_vertices) {
+                                            throw std::runtime_error(
+                                                "read_ply: face vertex index " +
+                                                to_string(idx) +
+                                                " out of range (n_vertices=" +
+                                                to_string(n_vertices) + ")");
+                                        }
+                                        face.push_back(idx);
+                                    }
+                                    break;
+                                case PropRole::Texcoord:
+                                    if (uvmap != nullptr && has_texcoord) {
+                                        texcoords.resize(count);
+                                        for (std::size_t k = 0;
+                                             k < count && ti < tokens.size();
+                                             ++k, ++ti) {
+                                            texcoords[k] =
+                                                to_numeric<float>(tokens[ti]);
+                                        }
+                                    } else {
+                                        ti += count;  // skip list entries
+                                    }
+                                    break;
+                                default:
+                                    ti += count;  // skip list entries
+                                    break;
                             }
                         } else {
                             ++ti;  // skip scalar property
