@@ -100,38 +100,46 @@ inline auto color_to_u8c3(const Color& c) -> std::array<uint8_t, 3>
 // PLY header description
 // -------------------------------------------------------------------------
 
-// TODO: This parsing approach is wrong. This needs to keep a list of all
-// elements, iterate those elements, and only parse the ones we support. This
-// appears to only support meshes which contain vertices and faces and no other
-// elements.
-
-// TODO: This is supposed to support reading and writing textured PLY's, but I
-// don't quite understand how the uv map is getting written. As the s t vertex
-// properties? Why not a separate texcoord element?
+// UV layout note: UVs are stored as a `texcoord` list property on the face
+// element. Each face record appends 2*N floats (u0 v0 u1 v1 …) after the
+// vertex index list — one UV pair per face corner (per-wedge). This mirrors
+// the OBJ approach and avoids the vertex duplication required by the older
+// per-vertex `s`/`t` approach. Corners with no UV assignment are written as
+// (-1, -1); on read, any texcoord pair of exactly (-1, -1) is treated as
+// unmapped and skipped (applies to all files, first and third party).
+// Files written with per-vertex `s`/`t` scalar properties are still readable
+// for backward compatibility.
 
 struct PLYProp {
     std::string name;
     std::string type;  // "float", "double", "int", "uint", "uchar", etc.
+    bool is_list{false};
+    std::string list_count_type;  // type of the list-length prefix (if is_list)
+};
+
+/** @brief A single element block from the PLY header */
+struct PLYElement {
+    std::string name;
+    std::size_t count{0};
+    std::vector<PLYProp> props;
 };
 
 struct PLYHeader {
     enum class Format { ASCII, BinaryLE, BinaryBE };
     Format format{Format::ASCII};
-    std::size_t n_vertices{0};
-    std::size_t n_faces{0};
-    std::vector<PLYProp> vertex_props;
-    std::string face_count_type{"uchar"};
-    std::string face_index_type{"int"};
     std::vector<std::filesystem::path> texture_files;
+    std::vector<PLYElement> elements;
 };
 
 inline auto ply_type_bytes(const std::string& t) -> std::size_t
 {
-    if (t == "float" || t == "int" || t == "uint") return 4;
     if (t == "double") return 8;
+    if (t == "float" || t == "int" || t == "uint")
+        return 4;
     if (t == "short" || t == "ushort") return 2;
     if (t == "char" || t == "uchar") return 1;
-    return 4;  // safe fallback
+    throw std::runtime_error(
+        "read_ply: unrecognized property type '" + t + "'");
 }
 
 /** @brief Parse a PLY header; leaves @p file positioned at first data byte */
@@ -145,11 +153,9 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
         throw std::runtime_error("read_ply: not a PLY file");
     }
 
-    std::string cur_element;
-    bool in_vertex = false;
-    bool in_face   = false;
     std::vector<std::string_view> tokens;
     while (std::getline(file, line)) {
+        // TODO: Add line number tracking to exceptions (see MeshIO_OBJ)
         split(std::string_view(line), tokens);
         if (tokens.empty()) {
             continue;
@@ -173,36 +179,34 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
                 h.texture_files.emplace_back(std::string(tokens[2]));
             }
         } else if (tokens[0] == "element") {
-            if (tokens.size() >= 3) {
-                cur_element = std::string(tokens[1]);
-                in_vertex   = (cur_element == "vertex");
-                in_face     = (cur_element == "face");
-                const auto n = to_numeric<std::size_t>(tokens[2]);
-                constexpr std::size_t kMaxElements = 500'000'000;
-                if (n > kMaxElements) {
-                    throw std::runtime_error(
-                        "read_ply: element count " + std::to_string(n) +
-                        " exceeds safety limit of " +
-                        std::to_string(kMaxElements));
-                }
-                if (in_vertex) {
-                    h.n_vertices = n;
-                } else if (in_face) {
-                    h.n_faces = n;
-                }
+            if (tokens.size() < 3) {
+                // TODO: Error
+                continue;
             }
+            constexpr std::size_t kMaxElements = 500'000'000;
+            const auto n = to_numeric<std::size_t>(tokens[2]);
+            if (n > kMaxElements) {
+                throw std::runtime_error(
+                    "read_ply: element count " + to_string(n) +
+                    " exceeds safety limit of " + to_string(kMaxElements));
+            }
+            h.elements.push_back({std::string(tokens[1]), n, {}});
         } else if (tokens[0] == "property") {
-            if (in_vertex && tokens.size() >= 3) {
-                if (tokens[1] == "list") {
-                    // Ignore list properties on vertex (rare)
-                } else {
-                    h.vertex_props.push_back(
-                        {std::string(tokens[2]), std::string(tokens[1])});
-                }
-            } else if (in_face && tokens.size() >= 5 && tokens[1] == "list") {
-                h.face_count_type = std::string(tokens[2]);
-                h.face_index_type = std::string(tokens[3]);
+            if (h.elements.empty() || tokens.size() < 3) {
+                // TODO: Both are errors
+                continue;
             }
+            PLYProp p;
+            if (tokens[1] == "list" && tokens.size() >= 5) {
+                p.is_list = true;
+                p.list_count_type = std::string(tokens[2]);
+                p.type = std::string(tokens[3]);
+                p.name = std::string(tokens[4]);
+            } else {
+                p.name = std::string(tokens[2]);
+                p.type = std::string(tokens[1]);
+            }
+            h.elements.back().props.push_back(std::move(p));
         }
     }
     return h;
@@ -265,11 +269,10 @@ auto read_ply_binary_prop(std::istream& f, const std::string& type) -> DestT
         if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
         return static_cast<DestT>(v);
     }
-    // Unknown: skip 4 bytes
-    // TODO: Why skip 4 bytes? Wouldn't an unrecognized type be a hard error?
-    // And shouldn't we catch that when we parse the header?
-    f.ignore(4);
-    return DestT{};
+    // The header parser rejects unrecognized types before we reach here,
+    // but guard defensively so the function is correct in isolation.
+    throw std::runtime_error(
+        "read_ply: unrecognized property type '" + type + "'");
 }
 
 // -------------------------------------------------------------------------
@@ -314,183 +317,347 @@ void read_ply_impl(
         }
     }
 
+    // Locate the vertex and face elements so we can inspect their properties
+    // before the main read loop.
+    const PLYElement* vert_elem = nullptr;
+    const PLYElement* face_elem = nullptr;
+    for (const auto& elem : hdr.elements) {
+        if (elem.name == "vertex")
+            vert_elem = &elem;
+        else if (elem.name == "face")
+            face_elem = &elem;
+    }
+
     // Identify vertex property roles
     bool has_nx{false}, has_ny{false}, has_nz{false};
     bool has_r{false}, has_g{false}, has_b{false};
     bool has_s{false}, has_t{false};
-    for (const auto& p : hdr.vertex_props) {
-        if (p.name == "nx") has_nx = true;
-        if (p.name == "ny") has_ny = true;
-        if (p.name == "nz") has_nz = true;
-        if (p.name == "red") has_r = true;
-        if (p.name == "green") has_g = true;
-        if (p.name == "blue") has_b = true;
-        if (p.name == "s") has_s = true;
-        if (p.name == "t") has_t = true;
+    if (vert_elem) {
+        for (const auto& p : vert_elem->props) {
+            if (p.name == "nx")
+                has_nx = true;
+            if (p.name == "ny")
+                has_ny = true;
+            if (p.name == "nz")
+                has_nz = true;
+            if (p.name == "red")
+                has_r = true;
+            if (p.name == "green")
+                has_g = true;
+            if (p.name == "blue")
+                has_b = true;
+            if (p.name == "s")
+                has_s = true;
+            if (p.name == "t")
+                has_t = true;
+        }
     }
 
-    // Temporary per-vertex UV storage (used when uvmap != nullptr)
-    // Indexed by vertex index; populated during vertex reading
-    std::vector<float> uv_s, uv_t;
-    if (uvmap != nullptr && has_s && has_t) {
-        uv_s.resize(hdr.n_vertices, 0.f);
-        uv_t.resize(hdr.n_vertices, 0.f);
+    const std::size_t n_vertices = vert_elem ? vert_elem->count : 0;
+
+    // Detect per-wedge texcoord list property on the face element.
+    // When present, UVs are read from the face texcoord list rather than from
+    // per-vertex s/t scalars.
+    bool has_texcoord{false};
+    if (face_elem) {
+        for (const auto& p : face_elem->props) {
+            if (p.is_list && p.name == "texcoord") {
+                has_texcoord = true;
+                break;
+            }
+        }
     }
 
-    // Read vertices
+    // Precompute the backward-compat condition once; reused in vertex and face
+    // loops to avoid repeating the same four-term expression.
+    const bool legacy_st_uvs =
+        uvmap != nullptr && has_s && has_t && !has_texcoord;
+
+    // Helpers to skip unknown-element data without interpreting it.
+    auto skip_binary_prop = [&](const PLYProp& prop) {
+        if (prop.is_list) {
+            const auto count =
+                read_ply_binary_prop<std::size_t>(file, prop.list_count_type);
+            file.ignore(
+                static_cast<std::streamsize>(
+                    count * ply_type_bytes(prop.type)));
+        } else {
+            file.ignore(
+                static_cast<std::streamsize>(ply_type_bytes(prop.type)));
+        }
+    };
+
+    auto skip_ascii_line = [&]() {
+        std::string skip_line;
+        while (std::getline(file, skip_line)) {
+            // Trim trailing whitespace (incl. '\r' on Windows) then skip
+            // '#'-comment lines; break on the first real data line.
+            trim_right_in_place(skip_line);
+            if (!skip_line.empty() && skip_line.front() != '#')
+                break;
+        }
+    };
+
+    // Iterate all elements in declaration order, processing vertex and face
+    // blocks and skipping any others (e.g. edge, tristrips, or
+    // application-defined elements) to stay positioned in the data stream.
+    std::string line;
     std::vector<std::string_view> tokens;
-    for (std::size_t vi = 0; vi < hdr.n_vertices; ++vi) {
-        T x{}, y{}, z{};
-        T nx{}, ny{}, nz{};
-        float r{}, g{}, b{};
-        float s{}, t{};
+    for (const auto& elem : hdr.elements) {
+        if (elem.name == "vertex") {
+            for (std::size_t vi = 0; vi < elem.count; ++vi) {
+                T x{}, y{}, z{};
+                T nx{}, ny{}, nz{};
+                float r{}, g{}, b{};
+                float s{}, t{};
 
-        if (binary) {
-            for (const auto& prop : hdr.vertex_props) {
-                if (prop.name == "x")       x  = read_ply_binary_prop<T>(file, prop.type);
-                else if (prop.name == "y")  y  = read_ply_binary_prop<T>(file, prop.type);
-                else if (prop.name == "z")  z  = read_ply_binary_prop<T>(file, prop.type);
-                else if (prop.name == "nx") nx = read_ply_binary_prop<T>(file, prop.type);
-                else if (prop.name == "ny") ny = read_ply_binary_prop<T>(file, prop.type);
-                else if (prop.name == "nz") nz = read_ply_binary_prop<T>(file, prop.type);
-                else if (prop.name == "red")   r = read_ply_binary_prop<float>(file, prop.type);
-                else if (prop.name == "green") g = read_ply_binary_prop<float>(file, prop.type);
-                else if (prop.name == "blue")  b = read_ply_binary_prop<float>(file, prop.type);
-                else if (prop.name == "s") s = read_ply_binary_prop<float>(file, prop.type);
-                else if (prop.name == "t") t = read_ply_binary_prop<float>(file, prop.type);
-                else {
-                    // Unknown — skip bytes
-                    file.ignore(static_cast<std::streamsize>(
-                        ply_type_bytes(prop.type)));
+                if (binary) {
+                    for (const auto& prop : elem.props) {
+                        if (prop.name == "x")
+                            x = read_ply_binary_prop<T>(file, prop.type);
+                        else if (prop.name == "y")
+                            y = read_ply_binary_prop<T>(file, prop.type);
+                        else if (prop.name == "z")
+                            z = read_ply_binary_prop<T>(file, prop.type);
+                        else if (prop.name == "nx")
+                            nx = read_ply_binary_prop<T>(file, prop.type);
+                        else if (prop.name == "ny")
+                            ny = read_ply_binary_prop<T>(file, prop.type);
+                        else if (prop.name == "nz")
+                            nz = read_ply_binary_prop<T>(file, prop.type);
+                        else if (prop.name == "red")
+                            r = read_ply_binary_prop<float>(file, prop.type);
+                        else if (prop.name == "green")
+                            g = read_ply_binary_prop<float>(file, prop.type);
+                        else if (prop.name == "blue")
+                            b = read_ply_binary_prop<float>(file, prop.type);
+                        else if (prop.name == "s")
+                            s = read_ply_binary_prop<float>(file, prop.type);
+                        else if (prop.name == "t")
+                            t = read_ply_binary_prop<float>(file, prop.type);
+                        else {
+                            file.ignore(
+                                static_cast<std::streamsize>(
+                                    ply_type_bytes(prop.type)));
+                        }
+                    }
+                } else {
+                    // ASCII: skip '#'-comment lines.
+                    while (std::getline(file, line)) {
+                        trim_right_in_place(line);
+                        if (!line.empty() && line.front() != '#')
+                            break;
+                    }
+                    split(std::string_view(line), tokens);
+                    for (std::size_t pi = 0;
+                         pi < elem.props.size() && pi < tokens.size(); ++pi) {
+                        const auto& prop = elem.props[pi];
+                        if (prop.name == "x")
+                            x = to_numeric<T>(tokens[pi]);
+                        else if (prop.name == "y")
+                            y = to_numeric<T>(tokens[pi]);
+                        else if (prop.name == "z")
+                            z = to_numeric<T>(tokens[pi]);
+                        else if (prop.name == "nx")
+                            nx = to_numeric<T>(tokens[pi]);
+                        else if (prop.name == "ny")
+                            ny = to_numeric<T>(tokens[pi]);
+                        else if (prop.name == "nz")
+                            nz = to_numeric<T>(tokens[pi]);
+                        else if (prop.name == "red")
+                            r = to_numeric<float>(tokens[pi]);
+                        else if (prop.name == "green")
+                            g = to_numeric<float>(tokens[pi]);
+                        else if (prop.name == "blue")
+                            b = to_numeric<float>(tokens[pi]);
+                        else if (prop.name == "s")
+                            s = to_numeric<float>(tokens[pi]);
+                        else if (prop.name == "t")
+                            t = to_numeric<float>(tokens[pi]);
+                    }
+                }
+
+                const auto new_vi = mesh.insert_vertex(x, y, z);
+
+                if constexpr (traits::has_normal<Vertex>::value) {
+                    if (has_nx && has_ny && has_nz) {
+                        Vec<T, Dims> n{nx, ny, nz};
+                        mesh.vertex(new_vi).normal = n;
+                    }
+                }
+                if constexpr (traits::has_color<Vertex>::value) {
+                    if (has_r && has_g && has_b) {
+                        // PLY stores colors as uchar (0-255); read back as such
+                        mesh.vertex(new_vi).color = Color::U8C3{
+                            static_cast<uint8_t>(r), static_cast<uint8_t>(g),
+                            static_cast<uint8_t>(b)};
+                    }
+                }
+                if (legacy_st_uvs) {
+                    // Pool index equals vertex index by construction.
+                    (void)uvmap->insert(s, t);
                 }
             }
+
+        } else if (elem.name == "face") {
+            // Pre-size face→UV index to avoid per-face resizes inside map().
+            if (uvmap != nullptr)
+                uvmap->reserve_faces(elem.count);
+
+            std::vector<float> texcoords;  // reused across face iterations
+            std::string fline;             // reused for ASCII reads
+            for (std::size_t fi = 0; fi < elem.count; ++fi) {
+                typename Mesh<T, Dims, VTraits>::Face face;
+                texcoords.clear();
+
+                if (binary) {
+                    // Iterate all declared face properties in order so that
+                    // both vertex_indices and texcoord are handled correctly
+                    // regardless of which other properties the file contains.
+                    for (const auto& prop : elem.props) {
+                        if (prop.is_list) {
+                            const auto count =
+                                read_ply_binary_prop<std::size_t>(
+                                    file, prop.list_count_type);
+                            if (prop.name == "vertex_indices") {
+                                if (count > 256) {
+                                    throw std::runtime_error(
+                                        "read_ply: face vertex count " +
+                                        to_string(count) +
+                                        " exceeds maximum of 256");
+                                }
+                                face.reserve(count);
+                                for (std::size_t k = 0; k < count; ++k) {
+                                    const auto idx =
+                                        read_ply_binary_prop<std::size_t>(
+                                            file, prop.type);
+                                    if (idx >= n_vertices) {
+                                        throw std::runtime_error(
+                                            "read_ply: face vertex index " +
+                                            to_string(idx) +
+                                            " out of range (n_vertices=" +
+                                            to_string(n_vertices) + ")");
+                                    }
+                                    face.push_back(idx);
+                                }
+                            } else if (
+                                prop.name == "texcoord" && uvmap != nullptr &&
+                                has_texcoord) {
+                                texcoords.resize(count);
+                                for (std::size_t k = 0; k < count; ++k) {
+                                    texcoords[k] = read_ply_binary_prop<float>(
+                                        file, prop.type);
+                                }
+                            } else {
+                                file.ignore(
+                                    static_cast<std::streamsize>(
+                                        count * ply_type_bytes(prop.type)));
+                            }
+                        } else {
+                            file.ignore(
+                                static_cast<std::streamsize>(
+                                    ply_type_bytes(prop.type)));
+                        }
+                    }
+                } else {
+                    while (std::getline(file, fline)) {
+                        trim_right_in_place(fline);
+                        if (!fline.empty() && fline.front() != '#')
+                            break;
+                    }
+                    split(std::string_view(fline), tokens);
+                    if (tokens.empty())
+                        continue;
+
+                    // Walk tokens in property-declaration order so the parser
+                    // handles vertex_indices + texcoord (and any other props)
+                    // regardless of how many there are.
+                    std::size_t ti = 0;
+                    for (const auto& prop : elem.props) {
+                        if (ti >= tokens.size())
+                            break;
+                        if (prop.is_list) {
+                            const auto count =
+                                to_numeric<std::size_t>(tokens[ti++]);
+                            if (prop.name == "vertex_indices") {
+                                if (count > 256) {
+                                    throw std::runtime_error(
+                                        "read_ply: face vertex count " +
+                                        to_string(count) +
+                                        " exceeds maximum of 256");
+                                }
+                                face.reserve(count);
+                                for (std::size_t k = 0;
+                                     k < count && ti < tokens.size();
+                                     ++k, ++ti) {
+                                    const auto idx =
+                                        to_numeric<std::size_t>(tokens[ti]);
+                                    if (idx >= n_vertices) {
+                                        throw std::runtime_error(
+                                            "read_ply: face vertex index " +
+                                            to_string(idx) +
+                                            " out of range (n_vertices=" +
+                                            to_string(n_vertices) + ")");
+                                    }
+                                    face.push_back(idx);
+                                }
+                            } else if (
+                                prop.name == "texcoord" && uvmap != nullptr &&
+                                has_texcoord) {
+                                texcoords.resize(count);
+                                for (std::size_t k = 0;
+                                     k < count && ti < tokens.size();
+                                     ++k, ++ti) {
+                                    texcoords[k] = to_numeric<float>(tokens[ti]);
+                                }
+                            } else {
+                                ti += count;  // skip list entries
+                            }
+                        } else {
+                            ++ti;  // skip scalar property
+                        }
+                    }
+                }
+
+                const auto new_fi = mesh.insert_face(face);
+
+                // Per-wedge UVs from texcoord list.
+                // Any pair that is exactly (-1, -1) is the "no UV" sentinel
+                // and is skipped (applies to all files, first and third party).
+                if (uvmap != nullptr && has_texcoord &&
+                    texcoords.size() == 2 * face.size()) {
+                    for (std::size_t ci = 0; ci < face.size(); ++ci) {
+                        const float u = texcoords[2 * ci];
+                        const float v = texcoords[2 * ci + 1];
+                        if (u == -1.f && v == -1.f)
+                            continue;
+                        const auto uv_idx = uvmap->insert(u, v);
+                        uvmap->map(new_fi, ci, uv_idx);
+                    }
+                }
+
+                // Backward compat: map per-vertex s/t UVs.
+                // Pool entries were inserted in vertex order above, so
+                // pool index == vertex index.
+                if (legacy_st_uvs) {
+                    for (std::size_t ci = 0; ci < face.size(); ++ci) {
+                        uvmap->map(new_fi, ci, face[ci]);
+                    }
+                }
+            }
+
         } else {
-            // ASCII
-            std::string vline;
-            while (std::getline(file, vline)) {
-                if (!vline.empty() && vline.back() == '\r') vline.pop_back();
-                if (!vline.empty() && vline.front() != '#') break;
-            }
-            split(std::string_view(vline), tokens);
-            for (std::size_t pi = 0;
-                 pi < hdr.vertex_props.size() && pi < tokens.size(); ++pi) {
-                const auto& prop = hdr.vertex_props[pi];
-                if (prop.name == "x")
-                    x = to_numeric<T>(tokens[pi]);
-                else if (prop.name == "y")
-                    y = to_numeric<T>(tokens[pi]);
-                else if (prop.name == "z")
-                    z = to_numeric<T>(tokens[pi]);
-                else if (prop.name == "nx")
-                    nx = to_numeric<T>(tokens[pi]);
-                else if (prop.name == "ny")
-                    ny = to_numeric<T>(tokens[pi]);
-                else if (prop.name == "nz")
-                    nz = to_numeric<T>(tokens[pi]);
-                else if (prop.name == "red")
-                    r = to_numeric<float>(tokens[pi]);
-                else if (prop.name == "green")
-                    g = to_numeric<float>(tokens[pi]);
-                else if (prop.name == "blue")
-                    b = to_numeric<float>(tokens[pi]);
-                else if (prop.name == "s")
-                    s = to_numeric<float>(tokens[pi]);
-                else if (prop.name == "t")
-                    t = to_numeric<float>(tokens[pi]);
-            }
-        }
-
-        const auto new_vi = mesh.insert_vertex(x, y, z);
-
-        if constexpr (traits::has_normal<Vertex>::value) {
-            if (has_nx && has_ny && has_nz) {
-                Vec<T, Dims> n{};
-                n[0] = nx; n[1] = ny; n[2] = nz;
-                mesh.vertex(new_vi).normal = n;
-            }
-        }
-        if constexpr (traits::has_color<Vertex>::value) {
-            if (has_r && has_g && has_b) {
-                // PLY stores colors as uchar (0-255); read back as such
-                mesh.vertex(new_vi).color = Color::U8C3{
-                    static_cast<uint8_t>(r),
-                    static_cast<uint8_t>(g),
-                    static_cast<uint8_t>(b)};
-            }
-        }
-        if (uvmap != nullptr && has_s && has_t) {
-            uv_s[vi] = s;
-            uv_t[vi] = t;
-        }
-    }
-
-    // Insert UV pool entries (one per vertex, indexed by vertex index)
-    if (uvmap != nullptr && has_s && has_t) {
-        for (std::size_t vi = 0; vi < hdr.n_vertices; ++vi) {
-            (void)uvmap->insert(uv_s[vi], uv_t[vi]);
-        }
-    }
-
-    // Read faces
-    for (std::size_t fi = 0; fi < hdr.n_faces; ++fi) {
-        typename Mesh<T, Dims, VTraits>::Face face;
-
-        if (binary) {
-            // Count
-            const auto count = read_ply_binary_prop<std::size_t>(
-                file, hdr.face_count_type);
-            if (count > 256) {
-                throw std::runtime_error(
-                    "read_ply: face vertex count " + std::to_string(count) +
-                    " exceeds maximum of 256");
-            }
-            face.reserve(count);
-            for (std::size_t k = 0; k < count; ++k) {
-                const auto idx = read_ply_binary_prop<std::size_t>(
-                    file, hdr.face_index_type);
-                if (idx >= hdr.n_vertices) {
-                    throw std::runtime_error(
-                        "read_ply: face vertex index " + std::to_string(idx) +
-                        " out of range (n_vertices=" +
-                        std::to_string(hdr.n_vertices) + ")");
+            // Unknown element — skip all records to stay positioned correctly
+            if (binary) {
+                for (std::size_t i = 0; i < elem.count; ++i) {
+                    for (const auto& prop : elem.props) {
+                        skip_binary_prop(prop);
+                    }
                 }
-                face.push_back(idx);
-            }
-        } else {
-            std::string fline;
-            while (std::getline(file, fline)) {
-                if (!fline.empty() && fline.back() == '\r') fline.pop_back();
-                if (!fline.empty() && fline.front() != '#') break;
-            }
-            split(std::string_view(fline), tokens);
-            if (tokens.empty())
-                continue;
-            const auto count = to_numeric<std::size_t>(tokens[0]);
-            if (count > 256) {
-                throw std::runtime_error(
-                    "read_ply: face vertex count " + std::to_string(count) +
-                    " exceeds maximum of 256");
-            }
-            face.reserve(count);
-            for (std::size_t k = 1; k <= count && k < tokens.size(); ++k) {
-                const auto idx = to_numeric<std::size_t>(tokens[k]);
-                if (idx >= hdr.n_vertices) {
-                    throw std::runtime_error(
-                        "read_ply: face vertex index " + std::to_string(idx) +
-                        " out of range (n_vertices=" +
-                        std::to_string(hdr.n_vertices) + ")");
+            } else {
+                for (std::size_t i = 0; i < elem.count; ++i) {
+                    skip_ascii_line();
                 }
-                face.push_back(idx);
-            }
-        }
-
-        const auto new_fi = mesh.insert_face(face);
-
-        // Map per-vertex UVs to per-wedge entries
-        if (uvmap != nullptr && has_s && has_t) {
-            for (std::size_t ci = 0; ci < face.size(); ++ci) {
-                // Pool index equals vertex index (inserted in vertex order above)
-                uvmap->map(new_fi, ci, face[ci]);
             }
         }
     }
@@ -501,7 +668,8 @@ void read_ply_impl(
  *
  * Shared by all write_ply tiers. The @p texture_comment parameter may be
  * empty (no @c comment TextureFile line) or contain a path string.
- * The @p has_uvs flag controls whether @c s and @c t properties are declared.
+ * The @p has_uvs flag controls whether a @c texcoord list property is
+ * declared on the face element.
  */
 template <typename T, std::size_t Dims, typename VTraits>
 void write_ply_header(
@@ -536,27 +704,29 @@ void write_ply_header(
              << "property uchar blue\n";
     }
 
+    file << "element face " << mesh.num_faces() << '\n'
+         << "property list uchar int vertex_indices\n";
+
     if (has_uvs) {
-        file << "property float s\n"
-             << "property float t\n";
+        file << "property list uchar float texcoord\n";
     }
 
-    file << "element face " << mesh.num_faces() << '\n'
-         << "property list uchar int vertex_indices\n"
-         << "end_header\n";
+    file << "end_header\n";
 }
 
 /**
  * @brief Write PLY ASCII vertex and face data to @p file
  *
- * @p flat_uvs may be empty (no UV output) or have one entry per vertex.
+ * @p uvmap may be @c nullptr (no UV output). When non-null, each face record
+ * is followed by a @c texcoord list of 2*N floats. Unmapped corners are
+ * written as @c -1,-1 (sentinel for "no UV assignment").
  */
-template <typename T, std::size_t Dims, typename VTraits, typename UVVec>
+template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
 void write_ply_data(
     std::ostream& file,
     std::array<char, 128>& buf,
     const Mesh<T, Dims, VTraits>& mesh,
-    const std::vector<UVVec>& flat_uvs)
+    const UVMapT* uvmap)
 {
     using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
 
@@ -577,11 +747,6 @@ void write_ply_data(
                  << ' ' << to_string_view(buf, g)
                  << ' ' << to_string_view(buf, b);
         }
-        if (!flat_uvs.empty()) {
-            const auto& uv = flat_uvs[vi];
-            file << ' ' << to_string_view(buf, uv[0])
-                 << ' ' << to_string_view(buf, uv[1]);
-        }
         file << '\n';
     }
 
@@ -590,6 +755,21 @@ void write_ply_data(
         file << face.size();
         for (const auto vi : face) {
             file << ' ' << to_string_view(buf, vi);
+        }
+        if (uvmap != nullptr) {
+            // texcoord list: 2*N floats, one UV pair per corner.
+            // Unmapped corners use the (-1, -1) sentinel.
+            file << ' ' << to_string_view(buf, 2 * face.size());
+            for (std::size_t ci = 0; ci < face.size(); ++ci) {
+                float u{-1.f}, v{-1.f};
+                if (uvmap->has(fi, ci)) {
+                    const auto& uv = uvmap->at(uvmap->get(fi, ci));
+                    u = static_cast<float>(uv[0]);
+                    v = static_cast<float>(uv[1]);
+                }
+                file << ' ' << to_string_view(buf, u) << ' '
+                     << to_string_view(buf, v);
+            }
         }
         file << '\n';
     }
@@ -624,10 +804,8 @@ void write_ply(
     }
 
     std::array<char, 128> buf;
-    using UVVec = Vec<float, 2>;
-    const std::vector<UVVec> no_uvs;
     detail::write_ply_header(file, mesh, "", false);
-    detail::write_ply_data(file, buf, mesh, no_uvs);
+    detail::write_ply_data(file, buf, mesh, static_cast<const UVMap<float, 2>*>(nullptr));
 
     if (!file) {
         throw std::runtime_error(
@@ -636,16 +814,17 @@ void write_ply(
 }
 
 // =============================================================================
-// write_ply — Tier 2: positions + UVMap (seam expansion)
+// write_ply — Tier 2: positions + UVMap (per-wedge texcoord)
 // =============================================================================
 
 /**
  * @brief Write a mesh and UV map to an ASCII PLY file
  *
- * Calls @ref expand_at_seams to produce a per-vertex UV array before writing.
- * The expanded vertex count may be larger than the original if UV seams are
- * present. Adds @c s and @c t vertex properties. No @c comment @c TextureFile
- * line is written.
+ * Writes per-wedge UV coordinates as a @c texcoord list property on the face
+ * element. No vertex duplication is performed. Adds
+ * @c "property list uchar float texcoord" to the face element header.
+ * Corners with no UV assignment are written as @c -1,-1.
+ * No @c comment @c TextureFile line is written.
  *
  * @throws std::runtime_error if the file cannot be opened
  */
@@ -657,8 +836,6 @@ void write_ply(
 {
     static_assert(Dims >= 3, "write_ply requires Dims >= 3");
 
-    const auto [exp_mesh, flat_uvs] = expand_at_seams(mesh, uvmap);
-
     std::ofstream file(path);
     if (!file) {
         throw std::runtime_error(
@@ -666,8 +843,8 @@ void write_ply(
     }
 
     std::array<char, 128> buf;
-    detail::write_ply_header(file, exp_mesh, "", true);
-    detail::write_ply_data(file, buf, exp_mesh, flat_uvs);
+    detail::write_ply_header(file, mesh, "", true);
+    detail::write_ply_data(file, buf, mesh, &uvmap);
 
     if (!file) {
         throw std::runtime_error(
@@ -697,8 +874,6 @@ void write_ply(
 {
     static_assert(Dims >= 3, "write_ply requires Dims >= 3");
 
-    const auto [exp_mesh, flat_uvs] = expand_at_seams(mesh, uvmap);
-
     std::ofstream file(path);
     if (!file) {
         throw std::runtime_error(
@@ -706,8 +881,8 @@ void write_ply(
     }
 
     std::array<char, 128> buf;
-    detail::write_ply_header(file, exp_mesh, texture_path.string(), true);
-    detail::write_ply_data(file, buf, exp_mesh, flat_uvs);
+    detail::write_ply_header(file, mesh, texture_path.string(), true);
+    detail::write_ply_data(file, buf, mesh, &uvmap);
 
     if (!file) {
         throw std::runtime_error(
@@ -741,8 +916,10 @@ void read_ply(
 /**
  * @brief Read a PLY file into a mesh and UV map (Tier 2 — positions + UVs)
  *
- * As @ref read_ply(path,mesh) but also parses @c s and @c t per-vertex UV
- * properties into @p uvmap. Texture path comments are ignored.
+ * As @ref read_ply(path,mesh) but also parses per-wedge UV coordinates from a
+ * @c "property list uchar float texcoord" face property into @p uvmap. Falls
+ * back to legacy per-vertex @c s / @c t scalar properties when texcoord is
+ * absent. Texture path comments are ignored.
  */
 template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
 void read_ply(
@@ -756,13 +933,11 @@ void read_ply(
 /**
  * @brief Read a PLY file into a mesh, UV map, and texture path list
  *
- * In addition to Tier 1, parses @c s and @c t per-vertex UV properties into
- * @p uvmap. UV pool indices equal vertex indices; wedge mappings are added for
- * all face corners. @c comment @c TextureFile lines from the header are
- * appended to @p texture_paths (empty vector if none present).
- *
- * Note: seam topology is not recovered — the expanded vertex layout written by
- * @ref write_ply is read back as-is.
+ * In addition to Tier 1, parses per-wedge UV coordinates from a
+ * @c "property list uchar float texcoord" face property into @p uvmap. Falls
+ * back to legacy per-vertex @c s / @c t scalar properties when texcoord is
+ * absent. @c comment @c TextureFile lines from the PLY header are appended to
+ * @p texture_paths (empty vector if none present).
  *
  * @throws std::runtime_error if the file cannot be opened or is not a PLY file
  */

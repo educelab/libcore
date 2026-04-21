@@ -49,3 +49,6 @@ docs/html/
 cmake-build*/
 
 .cache/
+
+# Agents
+.claude/settings.local.json

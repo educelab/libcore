@@ -897,9 +897,11 @@ TEST_F(PLYTest, BinaryLittleEndian_Read)
     EXPECT_EQ(dst.face(0), (Mesh3f::Face{0, 1, 2}));
 }
 
-TEST_F(PLYTest, WriteWithUVMap_SeamExpansion)
+TEST_F(PLYTest, WriteWithUVMap_PerWedgeTexcoord)
 {
-    // Two triangles sharing an edge with a UV seam → expanded vertex count
+    // Two triangles sharing an edge with a UV seam.
+    // The texcoord approach stores per-wedge UVs in the face element, so no
+    // vertex duplication is needed — vertex count stays at 4.
     Mesh3f src_mesh;
     (void)src_mesh.insert_vertex(0.f,  0.f, 0.f);  // v0
     (void)src_mesh.insert_vertex(1.f,  0.f, 0.f);  // v1 — seam vertex
@@ -917,24 +919,78 @@ TEST_F(PLYTest, WriteWithUVMap_SeamExpansion)
     src_uv.map(0, 0, 0);  src_uv.map(0, 1, 1);  src_uv.map(0, 2, 2);
     src_uv.map(1, 0, 3);  src_uv.map(1, 1, 2);  src_uv.map(1, 2, 4);
 
-    const auto path = ply("seam_uv");
+    const auto path = ply("wedge_uv");
     write_ply(path, src_mesh, src_uv);
 
-    // Read back: vertex count must reflect the seam expansion (5, not 4)
+    // Read back: no seam expansion — geometry is unchanged
     Mesh3f dst_mesh;
     UVMap2f dst_uv;
     std::vector<fs::path> dst_textures;
     read_ply(path, dst_mesh, dst_uv, dst_textures);
 
-    EXPECT_EQ(dst_mesh.num_vertices(), 5u);
+    EXPECT_EQ(dst_mesh.num_vertices(), 4u);
     EXPECT_EQ(dst_mesh.num_faces(), 2u);
-    EXPECT_EQ(dst_uv.size(), 5u);  // one UV pool entry per expanded vertex
+    // 6 pool entries: one per face-corner (3 corners × 2 faces)
+    EXPECT_EQ(dst_uv.size(), 6u);
     EXPECT_TRUE(dst_textures.empty());
 
-    // Verify at least one UV coordinate value:
-    // pool[0] (mapped to v0, corner 0 of face 0) should be (0, 0)
+    // Verify per-wedge UV values round-trip correctly
+    EXPECT_NEAR(
+        dst_uv.get_coordinate(0, 0)[0], 0.f, 1e-5f);  // face0 corner0 → (0,0)
+    EXPECT_NEAR(dst_uv.get_coordinate(0, 0)[1], 0.f, 1e-5f);
+    EXPECT_NEAR(
+        dst_uv.get_coordinate(0, 1)[0], 1.f, 1e-5f);  // face0 corner1 → (1,0)
+    EXPECT_NEAR(dst_uv.get_coordinate(0, 1)[1], 0.f, 1e-5f);
+    // face1 corner0 maps to pool[3]=(0,0.5) — seam: same vertex as
+    // face0-corner1 but different UV
+    EXPECT_NEAR(dst_uv.get_coordinate(1, 0)[0], 0.f, 1e-5f);
+    EXPECT_NEAR(dst_uv.get_coordinate(1, 0)[1], 0.5f, 1e-5f);
+}
+
+TEST_F(PLYTest, ReadLegacyPerVertexUV_BackwardCompat)
+{
+    // Hand-craft a PLY that uses the old per-vertex s/t scalar approach.
+    // read_ply should fall back to the s/t path and populate the uvmap.
+    const auto path = ply("legacy_st");
+    {
+        std::ofstream f(path);
+        f << "ply\n"
+          << "format ascii 1.0\n"
+          << "element vertex 3\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "property float s\n"
+          << "property float t\n"
+          << "element face 1\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n"
+          << "0 0 0 0.0 0.0\n"
+          << "1 0 0 1.0 0.0\n"
+          << "0 1 0 0.0 1.0\n"
+          << "3 0 1 2\n";
+    }
+
+    Mesh3f dst_mesh;
+    UVMap2f dst_uv;
+    read_ply(path, dst_mesh, dst_uv);
+
+    ASSERT_EQ(dst_mesh.num_vertices(), 3u);
+    ASSERT_EQ(dst_mesh.num_faces(), 1u);
+    // One pool entry per vertex; pool index == vertex index
+    ASSERT_EQ(dst_uv.size(), 3u);
+
+    // Verify UV values and wedge mappings
     EXPECT_NEAR(dst_uv.at(0)[0], 0.f, 1e-5f);
     EXPECT_NEAR(dst_uv.at(0)[1], 0.f, 1e-5f);
+    EXPECT_NEAR(dst_uv.at(1)[0], 1.f, 1e-5f);
+    EXPECT_NEAR(dst_uv.at(1)[1], 0.f, 1e-5f);
+    EXPECT_NEAR(dst_uv.at(2)[0], 0.f, 1e-5f);
+    EXPECT_NEAR(dst_uv.at(2)[1], 1.f, 1e-5f);
+    // Face 0 corners map to pool entries 0, 1, 2 respectively
+    EXPECT_EQ(dst_uv.get(0, 0), 0u);
+    EXPECT_EQ(dst_uv.get(0, 1), 1u);
+    EXPECT_EQ(dst_uv.get(0, 2), 2u);
 }
 
 TEST_F(PLYTest, WriteWithUVMap_TexturePath_CommentInHeader)
