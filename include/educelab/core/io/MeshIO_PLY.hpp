@@ -313,6 +313,44 @@ auto read_ply_binary_prop(std::istream& f, const std::string& type) -> DestT
         "read_ply: unrecognized property type '" + type + "'");
 }
 
+/** @brief Extract a typed value from a raw byte buffer using memcpy.
+ *
+ *  Companion to read_ply_binary_prop for use when the full vertex record has
+ *  been read in one istream::read call. Each field is extracted by its
+ *  pre-computed byte offset within the buffer rather than via individual
+ *  istream::read calls.
+ */
+template <typename DestT>
+auto read_ply_prop_from_buf(const char* buf, const std::string& type) -> DestT
+{
+    if (type == "float") {
+        float v; std::memcpy(&v, buf, 4); return static_cast<DestT>(v);
+    }
+    if (type == "double") {
+        double v; std::memcpy(&v, buf, 8); return static_cast<DestT>(v);
+    }
+    if (type == "int") {
+        int32_t v; std::memcpy(&v, buf, 4); return static_cast<DestT>(v);
+    }
+    if (type == "uint") {
+        uint32_t v; std::memcpy(&v, buf, 4); return static_cast<DestT>(v);
+    }
+    if (type == "short") {
+        int16_t v; std::memcpy(&v, buf, 2); return static_cast<DestT>(v);
+    }
+    if (type == "ushort") {
+        uint16_t v; std::memcpy(&v, buf, 2); return static_cast<DestT>(v);
+    }
+    if (type == "char") {
+        int8_t v; std::memcpy(&v, buf, 1); return static_cast<DestT>(v);
+    }
+    if (type == "uchar") {
+        uint8_t v; std::memcpy(&v, buf, 1); return static_cast<DestT>(v);
+    }
+    throw std::runtime_error(
+        "read_ply: unrecognized property type '" + type + "'");
+}
+
 // -------------------------------------------------------------------------
 // Core PLY reader
 // -------------------------------------------------------------------------
@@ -439,6 +477,28 @@ void read_ply_impl(
     std::vector<std::string_view> tokens;
     for (const auto& elem : hdr.elements) {
         if (elem.name == "vertex") {
+            // Pre-compute binary vertex record layout so the inner loop makes
+            // one file.read() per vertex (O(vertices)) instead of one read
+            // per property per vertex (O(properties × vertices)).
+            constexpr std::size_t kMaxVertBufBytes = 256;
+            std::size_t vert_rec_size = 0;
+            std::vector<std::size_t> vert_offsets;
+            if (binary) {
+                vert_offsets.reserve(elem.props.size());
+                for (const auto& p : elem.props) {
+                    vert_offsets.push_back(vert_rec_size);
+                    vert_rec_size += ply_type_bytes(p.type);
+                }
+                if (vert_rec_size > kMaxVertBufBytes) {
+                    throw std::runtime_error(
+                        "read_ply: vertex record size " +
+                        to_string(vert_rec_size) +
+                        " bytes exceeds buffer limit of " +
+                        to_string(kMaxVertBufBytes));
+                }
+            }
+            std::array<char, kMaxVertBufBytes> vbuf{};
+
             for (std::size_t vi = 0; vi < elem.count; ++vi) {
                 T x{}, y{}, z{};
                 T nx{}, ny{}, nz{};
@@ -446,34 +506,41 @@ void read_ply_impl(
                 float s{}, t{};
 
                 if (binary) {
-                    for (const auto& prop : elem.props) {
+                    file.read(
+                        vbuf.data(),
+                        static_cast<std::streamsize>(vert_rec_size));
+                    if (!file) {
+                        throw std::runtime_error(
+                            "read_ply: unexpected end of binary vertex data");
+                    }
+                    for (std::size_t pi = 0; pi < elem.props.size(); ++pi) {
+                        const auto& prop = elem.props[pi];
+                        const char* pb = vbuf.data() + vert_offsets[pi];
                         switch (prop.role) {
                             case PropRole::X:
-                                x = read_ply_binary_prop<T>(file, prop.type); break;
+                                x = read_ply_prop_from_buf<T>(pb, prop.type); break;
                             case PropRole::Y:
-                                y = read_ply_binary_prop<T>(file, prop.type); break;
+                                y = read_ply_prop_from_buf<T>(pb, prop.type); break;
                             case PropRole::Z:
-                                z = read_ply_binary_prop<T>(file, prop.type); break;
+                                z = read_ply_prop_from_buf<T>(pb, prop.type); break;
                             case PropRole::NX:
-                                nx = read_ply_binary_prop<T>(file, prop.type); break;
+                                nx = read_ply_prop_from_buf<T>(pb, prop.type); break;
                             case PropRole::NY:
-                                ny = read_ply_binary_prop<T>(file, prop.type); break;
+                                ny = read_ply_prop_from_buf<T>(pb, prop.type); break;
                             case PropRole::NZ:
-                                nz = read_ply_binary_prop<T>(file, prop.type); break;
+                                nz = read_ply_prop_from_buf<T>(pb, prop.type); break;
                             case PropRole::Red:
-                                r = read_ply_binary_prop<float>(file, prop.type); break;
+                                r = read_ply_prop_from_buf<float>(pb, prop.type); break;
                             case PropRole::Green:
-                                g = read_ply_binary_prop<float>(file, prop.type); break;
+                                g = read_ply_prop_from_buf<float>(pb, prop.type); break;
                             case PropRole::Blue:
-                                b = read_ply_binary_prop<float>(file, prop.type); break;
+                                b = read_ply_prop_from_buf<float>(pb, prop.type); break;
                             case PropRole::S:
-                                s = read_ply_binary_prop<float>(file, prop.type); break;
+                                s = read_ply_prop_from_buf<float>(pb, prop.type); break;
                             case PropRole::T:
-                                t = read_ply_binary_prop<float>(file, prop.type); break;
+                                t = read_ply_prop_from_buf<float>(pb, prop.type); break;
                             default:
-                                file.ignore(static_cast<std::streamsize>(
-                                    ply_type_bytes(prop.type)));
-                                break;
+                                break;  // unknown: in buffer, role ignored
                         }
                     }
                 } else {
