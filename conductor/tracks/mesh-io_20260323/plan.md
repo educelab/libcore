@@ -286,7 +286,7 @@ architecture, testing) plus deferred binary PLY reader optimisations.
       stack buffer per vertex in binary PLY reader; extract fields with
       `std::memcpy` to reduce `istream::read` calls from
       O(properties × vertices) to O(vertices)
-- [ ] **Task 5.8** *(deferred refactor)*: Extract `read_ply_face_binary` and
+- [x] **Task 5.8** *(deferred refactor)*: Extract `read_ply_face_binary` and
       `read_ply_face_ascii` helpers from `read_ply_impl` to reduce nesting depth
       and isolate the per-face parsing logic; the face-element branch currently
       contains ~80 lines of nested binary+ASCII code inside the element loop
