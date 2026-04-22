@@ -64,6 +64,22 @@ following files can be installed in this way:
 - `types/UVMap.hpp`
     - Requires:
       - `types/Vec.hpp`
+- `utils/MeshUtils.hpp`
+    - Requires:
+      - `types/Mesh.hpp`
+      - `types/UVMap.hpp`
+- `io/MeshIO_OBJ.hpp`
+    - Requires:
+      - `types/Mesh.hpp`
+      - `types/UVMap.hpp`
+      - `utils/String.hpp`
+- `io/MeshIO_PLY.hpp`
+    - Requires:
+      - `types/Mesh.hpp`
+      - `types/UVMap.hpp`
+      - `utils/String.hpp`
+- `io/MeshIO.hpp`
+    - Convenience facade; includes `MeshIO_OBJ.hpp` and `MeshIO_PLY.hpp`
 
 
 ## Usage
@@ -198,6 +214,50 @@ std::cout << charted.get_coordinate(0, 0).chart << "\n";  // 1
 ```
 
 See [examples/MeshExample.cpp](examples/MeshExample.cpp) for more usage examples.
+
+### Mesh IO
+
+Read and write OBJ and PLY files using the convenience facade:
+
+```c++
+#include "educelab/core/io/MeshIO.hpp"
+
+Mesh<float, 3> mesh;
+
+// Read — format detected from file extension (.obj or .ply)
+read_mesh("model.obj", mesh);
+
+// Write
+write_mesh("output.ply", mesh);
+```
+
+Read and write with UV maps and texture paths:
+
+```c++
+#include "educelab/core/io/MeshIO.hpp"
+
+Mesh<float, 3> mesh;
+UVMap<float, 2> uvmap;
+std::vector<std::filesystem::path> texture_paths;
+
+// Read UV coords and texture path references
+read_mesh("model.obj", mesh, uvmap, texture_paths);
+
+// Write with a single texture path (OBJ emits .mtl; PLY emits comment TextureFile)
+write_mesh("output.obj", mesh, uvmap, texture_paths[0]);
+```
+
+Vertex traits are detected at compile time — normals and colors are read/written
+automatically when the vertex type includes them:
+
+```c++
+struct MyTraits : traits::WithNormal<float, 3>, traits::WithColor {};
+using RichMesh = Mesh<float, 3, MyTraits>;
+
+RichMesh mesh;
+read_mesh("model.ply", mesh);  // normals and colors populated if present in file
+write_mesh("output.ply", mesh); // normals and colors included in output
+```
 
 ### Image class
 

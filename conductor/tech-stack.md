@@ -27,6 +27,7 @@
 | Mat | `types/Mat.hpp` |
 | Image | `types/Image.hpp` |
 | Mesh | `types/Mesh.hpp` |
+| UVMap | `types/UVMap.hpp` |
 | Color | `types/Color.hpp` |
 | Signals | `types/Signals.hpp` |
 | Uuid | `types/Uuid.hpp` |
@@ -36,7 +37,11 @@
 | Filesystem | `utils/Filesystem.hpp` |
 | Caching | `utils/Caching.hpp` |
 | Iteration | `utils/Iteration.hpp` |
+| MeshUtils | `utils/MeshUtils.hpp` |
 | ImageIO | `io/ImageIO.hpp` |
+| MeshIO | `io/MeshIO.hpp` |
+| MeshIO_OBJ | `io/MeshIO_OBJ.hpp` |
+| MeshIO_PLY | `io/MeshIO_PLY.hpp` |
 
 ## Distribution
 

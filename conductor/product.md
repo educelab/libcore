@@ -19,8 +19,10 @@ EduceLab developers building C++ applications and libraries.
 ## Key Goals
 
 1. Provide a stable, reusable foundation for all EduceLab C++ projects
-2. Offer well-tested, header-friendly types (Vec, Mat, Image, Mesh, etc.)
+2. Offer well-tested, header-friendly types (Vec, Mat, Image, Mesh, UVMap, etc.)
 3. Minimize external dependencies while maximizing utility
+4. Provide standard Mesh IO (OBJ and PLY read/write) including UV maps, texture
+   paths, and compile-time vertex trait detection (`has_normal`, `has_color`)
 
 ## Current Version
 
