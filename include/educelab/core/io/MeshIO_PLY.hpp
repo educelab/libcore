@@ -128,28 +128,36 @@ enum class PropRole {
     Texcoord,
 };
 
+/** @brief Parsed representation of a single PLY property declaration */
 struct PLYProp {
-    std::string name;
-    std::string type;  // "float", "double", "int", "uint", "uchar", etc.
-    bool is_list{false};
-    std::string list_count_type;  // type of the list-length prefix (if is_list)
-    PropRole role{PropRole::Unknown};
+    std::string name;                  ///< Property name (e.g., "x", "nx", "red")
+    std::string type;                  ///< PLY scalar type string (e.g., "float", "uchar")
+    bool is_list{false};               ///< True when this is a list property
+    std::string list_count_type;       ///< Type of the list-length prefix (when @c is_list)
+    PropRole role{PropRole::Unknown};  ///< Pre-computed semantic role for dispatch
 };
 
 /** @brief A single element block from the PLY header */
 struct PLYElement {
-    std::string name;
-    std::size_t count{0};
-    std::vector<PLYProp> props;
+    std::string name;               ///< Element name (e.g., "vertex", "face")
+    std::size_t count{0};           ///< Number of instances
+    std::vector<PLYProp> props;     ///< Ordered list of property declarations
 };
 
+/** @brief Parsed PLY file header */
 struct PLYHeader {
-    enum class Format { ASCII, BinaryLE, BinaryBE };
-    Format format{Format::ASCII};
-    std::vector<std::filesystem::path> texture_files;
-    std::vector<PLYElement> elements;
+    /** @brief PLY data-section encoding */
+    enum class Format {
+        ASCII,     ///< ASCII text encoding
+        BinaryLE,  ///< Binary little-endian
+        BinaryBE   ///< Binary big-endian
+    };
+    Format format{Format::ASCII};                      ///< Encoding of the data section
+    std::vector<std::filesystem::path> texture_files;  ///< Paths from @c "comment TextureFile" lines
+    std::vector<PLYElement> elements;                  ///< Element blocks in declaration order
 };
 
+/** @brief Return the byte width of a named PLY scalar type */
 inline auto ply_type_bytes(const std::string& t) -> std::size_t
 {
     if (t == "double") return 8;
@@ -254,6 +262,7 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
 // Binary property reading (little-endian)
 // -------------------------------------------------------------------------
 
+/** @brief Read a single binary little-endian PLY scalar property from @p f */
 template <typename DestT>
 auto read_ply_binary_prop(std::istream& f, const std::string& type) -> DestT
 {
@@ -492,6 +501,7 @@ inline void read_ply_face_ascii(
 // Core PLY reader
 // -------------------------------------------------------------------------
 
+/** @brief Internal PLY reader shared by all public @ref read_ply overloads */
 template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
 void read_ply_impl(
     const std::filesystem::path& path,
@@ -1071,7 +1081,7 @@ void read_ply(
 /**
  * @brief Read a PLY file into a mesh and UV map (Tier 2 — positions + UVs)
  *
- * As @ref read_ply(path,mesh) but also parses per-wedge UV coordinates from a
+ * As the two-argument @ref read_ply overload but also parses per-wedge UV coordinates from a
  * @c "property list uchar float texcoord" face property into @p uvmap. Falls
  * back to legacy per-vertex @c s / @c t scalar properties when texcoord is
  * absent. Texture path comments are ignored.

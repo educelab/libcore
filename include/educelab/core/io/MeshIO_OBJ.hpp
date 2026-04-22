@@ -603,7 +603,7 @@ void write_obj(
 /**
  * @brief Write a mesh, UV map, and a single texture reference to OBJ + MTL
  *
- * Writes @c mtllib <stem>.mtl in the OBJ header, @c usemtl material0 before
+ * Writes @c mtllib &lt;stem&gt;.mtl in the OBJ header, @c usemtl material0 before
  * all face lines, and a companion @c .mtl file containing:
  * @code
  * newmtl material0
