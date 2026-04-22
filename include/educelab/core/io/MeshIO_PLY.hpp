@@ -352,6 +352,143 @@ auto read_ply_prop_from_buf(const char* buf, const std::string& type) -> DestT
 }
 
 // -------------------------------------------------------------------------
+// Face record parsing helpers
+// -------------------------------------------------------------------------
+
+/** @brief Parse one binary face record from @p file.
+ *
+ *  Populates @p face with vertex indices and, when @p load_texcoords is
+ *  true, @p texcoords with raw float values. Both containers are cleared
+ *  before filling. Skips any list or scalar face properties that are not
+ *  vertex_indices or texcoord.
+ */
+inline void read_ply_face_binary(
+    std::istream& file,
+    const PLYElement& elem,
+    std::size_t n_vertices,
+    bool load_texcoords,
+    std::vector<std::size_t>& face,
+    std::vector<float>& texcoords)
+{
+    face.clear();
+    texcoords.clear();
+    for (const auto& prop : elem.props) {
+        if (prop.is_list) {
+            const auto count =
+                read_ply_binary_prop<std::size_t>(file, prop.list_count_type);
+            switch (prop.role) {
+                case PropRole::VertexIndices:
+                    if (count > 256) {
+                        throw std::runtime_error(
+                            "read_ply: face vertex count " +
+                            to_string(count) + " exceeds maximum of 256");
+                    }
+                    face.reserve(count);
+                    for (std::size_t k = 0; k < count; ++k) {
+                        const auto idx =
+                            read_ply_binary_prop<std::size_t>(file, prop.type);
+                        if (idx >= n_vertices) {
+                            throw std::runtime_error(
+                                "read_ply: face vertex index " +
+                                to_string(idx) +
+                                " out of range (n_vertices=" +
+                                to_string(n_vertices) + ")");
+                        }
+                        face.push_back(idx);
+                    }
+                    break;
+                case PropRole::Texcoord:
+                    if (load_texcoords) {
+                        texcoords.resize(count);
+                        for (std::size_t k = 0; k < count; ++k) {
+                            texcoords[k] =
+                                read_ply_binary_prop<float>(file, prop.type);
+                        }
+                    } else {
+                        file.ignore(static_cast<std::streamsize>(
+                            count * ply_type_bytes(prop.type)));
+                    }
+                    break;
+                default:
+                    file.ignore(static_cast<std::streamsize>(
+                        count * ply_type_bytes(prop.type)));
+                    break;
+            }
+        } else {
+            file.ignore(
+                static_cast<std::streamsize>(ply_type_bytes(prop.type)));
+        }
+    }
+}
+
+/** @brief Parse one ASCII face record from @p tokens.
+ *
+ *  @p tokens must already be split from the data line. Populates @p face
+ *  with vertex indices and, when @p load_texcoords is true, @p texcoords
+ *  with raw float values. Both containers are cleared before filling.
+ *  Walks tokens in property-declaration order, skipping unknown properties.
+ */
+inline void read_ply_face_ascii(
+    const std::vector<std::string_view>& tokens,
+    const PLYElement& elem,
+    std::size_t n_vertices,
+    bool load_texcoords,
+    std::vector<std::size_t>& face,
+    std::vector<float>& texcoords)
+{
+    face.clear();
+    texcoords.clear();
+    std::size_t ti = 0;
+    for (const auto& prop : elem.props) {
+        if (ti >= tokens.size())
+            break;
+        if (prop.is_list) {
+            const auto count = to_numeric<std::size_t>(tokens[ti++]);
+            switch (prop.role) {
+                case PropRole::VertexIndices:
+                    if (count > 256) {
+                        throw std::runtime_error(
+                            "read_ply: face vertex count " +
+                            to_string(count) + " exceeds maximum of 256");
+                    }
+                    face.reserve(count);
+                    for (std::size_t k = 0;
+                         k < count && ti < tokens.size();
+                         ++k, ++ti) {
+                        const auto idx = to_numeric<std::size_t>(tokens[ti]);
+                        if (idx >= n_vertices) {
+                            throw std::runtime_error(
+                                "read_ply: face vertex index " +
+                                to_string(idx) +
+                                " out of range (n_vertices=" +
+                                to_string(n_vertices) + ")");
+                        }
+                        face.push_back(idx);
+                    }
+                    break;
+                case PropRole::Texcoord:
+                    if (load_texcoords) {
+                        texcoords.resize(count);
+                        for (std::size_t k = 0;
+                             k < count && ti < tokens.size();
+                             ++k, ++ti) {
+                            texcoords[k] = to_numeric<float>(tokens[ti]);
+                        }
+                    } else {
+                        ti += count;
+                    }
+                    break;
+                default:
+                    ti += count;
+                    break;
+            }
+        } else {
+            ++ti;
+        }
+    }
+}
+
+// -------------------------------------------------------------------------
 // Core PLY reader
 // -------------------------------------------------------------------------
 
@@ -608,68 +745,18 @@ void read_ply_impl(
             if (uvmap != nullptr)
                 uvmap->reserve_faces(elem.count);
 
-            std::vector<float> texcoords;  // reused across face iterations
-            std::string fline;             // reused for ASCII reads
-            for (std::size_t fi = 0; fi < elem.count; ++fi) {
-                typename Mesh<T, Dims, VTraits>::Face face;
-                texcoords.clear();
+            // Pre-compute once: texcoords are only loaded when both a uvmap
+            // is provided and the face element has a texcoord list property.
+            const bool load_texcoords = uvmap != nullptr && has_texcoord;
 
+            std::vector<float> texcoords;          // reused across face iterations
+            std::vector<std::size_t> face_indices; // reused buffer for helpers
+            std::string fline;                     // reused for ASCII reads
+            for (std::size_t fi = 0; fi < elem.count; ++fi) {
                 if (binary) {
-                    // Iterate all declared face properties in order so that
-                    // both vertex_indices and texcoord are handled correctly
-                    // regardless of which other properties the file contains.
-                    for (const auto& prop : elem.props) {
-                        if (prop.is_list) {
-                            const auto count =
-                                read_ply_binary_prop<std::size_t>(
-                                    file, prop.list_count_type);
-                            switch (prop.role) {
-                                case PropRole::VertexIndices:
-                                    if (count > 256) {
-                                        throw std::runtime_error(
-                                            "read_ply: face vertex count " +
-                                            to_string(count) +
-                                            " exceeds maximum of 256");
-                                    }
-                                    face.reserve(count);
-                                    for (std::size_t k = 0; k < count; ++k) {
-                                        const auto idx =
-                                            read_ply_binary_prop<std::size_t>(
-                                                file, prop.type);
-                                        if (idx >= n_vertices) {
-                                            throw std::runtime_error(
-                                                "read_ply: face vertex index " +
-                                                to_string(idx) +
-                                                " out of range (n_vertices=" +
-                                                to_string(n_vertices) + ")");
-                                        }
-                                        face.push_back(idx);
-                                    }
-                                    break;
-                                case PropRole::Texcoord:
-                                    if (uvmap != nullptr && has_texcoord) {
-                                        texcoords.resize(count);
-                                        for (std::size_t k = 0; k < count; ++k) {
-                                            texcoords[k] =
-                                                read_ply_binary_prop<float>(
-                                                    file, prop.type);
-                                        }
-                                    } else {
-                                        file.ignore(static_cast<std::streamsize>(
-                                            count * ply_type_bytes(prop.type)));
-                                    }
-                                    break;
-                                default:
-                                    file.ignore(static_cast<std::streamsize>(
-                                        count * ply_type_bytes(prop.type)));
-                                    break;
-                            }
-                        } else {
-                            file.ignore(
-                                static_cast<std::streamsize>(
-                                    ply_type_bytes(prop.type)));
-                        }
-                    }
+                    read_ply_face_binary(
+                        file, elem, n_vertices, load_texcoords,
+                        face_indices, texcoords);
                 } else {
                     while (std::getline(file, fline)) {
                         trim_right_in_place(fline);
@@ -679,63 +766,13 @@ void read_ply_impl(
                     split(std::string_view(fline), tokens);
                     if (tokens.empty())
                         continue;
-
-                    // Walk tokens in property-declaration order so the parser
-                    // handles vertex_indices + texcoord (and any other props)
-                    // regardless of how many there are.
-                    std::size_t ti = 0;
-                    for (const auto& prop : elem.props) {
-                        if (ti >= tokens.size())
-                            break;
-                        if (prop.is_list) {
-                            const auto count =
-                                to_numeric<std::size_t>(tokens[ti++]);
-                            switch (prop.role) {
-                                case PropRole::VertexIndices:
-                                    if (count > 256) {
-                                        throw std::runtime_error(
-                                            "read_ply: face vertex count " +
-                                            to_string(count) +
-                                            " exceeds maximum of 256");
-                                    }
-                                    face.reserve(count);
-                                    for (std::size_t k = 0;
-                                         k < count && ti < tokens.size();
-                                         ++k, ++ti) {
-                                        const auto idx =
-                                            to_numeric<std::size_t>(tokens[ti]);
-                                        if (idx >= n_vertices) {
-                                            throw std::runtime_error(
-                                                "read_ply: face vertex index " +
-                                                to_string(idx) +
-                                                " out of range (n_vertices=" +
-                                                to_string(n_vertices) + ")");
-                                        }
-                                        face.push_back(idx);
-                                    }
-                                    break;
-                                case PropRole::Texcoord:
-                                    if (uvmap != nullptr && has_texcoord) {
-                                        texcoords.resize(count);
-                                        for (std::size_t k = 0;
-                                             k < count && ti < tokens.size();
-                                             ++k, ++ti) {
-                                            texcoords[k] =
-                                                to_numeric<float>(tokens[ti]);
-                                        }
-                                    } else {
-                                        ti += count;  // skip list entries
-                                    }
-                                    break;
-                                default:
-                                    ti += count;  // skip list entries
-                                    break;
-                            }
-                        } else {
-                            ++ti;  // skip scalar property
-                        }
-                    }
+                    read_ply_face_ascii(
+                        tokens, elem, n_vertices, load_texcoords,
+                        face_indices, texcoords);
                 }
+
+                typename Mesh<T, Dims, VTraits>::Face face(
+                    face_indices.begin(), face_indices.end());
 
                 const auto new_fi = mesh.insert_face(face);
 
