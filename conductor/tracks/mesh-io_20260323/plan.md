@@ -342,7 +342,7 @@ Completed changes (texcoord implementation):
 - [x] OBJ and PLY round-trips verified for all supported attribute
       combinations including single-texture, multi-chart (OBJ only), and
       no-texture cases
-- [ ] Doxygen builds cleanly for all public IO functions and detection traits
+- [x] Doxygen builds cleanly for all public IO functions and detection traits
 - [x] Ready for PR review
 
 ---
