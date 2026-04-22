@@ -316,8 +316,8 @@ Completed changes (texcoord implementation):
 - [x] **Task 6.1**: Implement texcoord write/read in `MeshIO_PLY.hpp`; update tests
 - [x] **Task 6.2**: Apply quick-fix review findings (section banners, docstrings, `v_coord`→`v`, static_cast, comments)
 - [x] **Task 5.6** *(carry-forward — see above)*: Role-enum dispatch for binary + ASCII inner loops
-- [ ] **Task 5.7** *(carry-forward — see above)*: Batch vertex-record reads
-- [ ] **Task 5.8** *(carry-forward — see above)*: Extract face-parsing helpers
+- [x] **Task 5.7** *(carry-forward — see above)*: Batch vertex-record reads
+- [x] **Task 5.8** *(carry-forward — see above)*: Extract face-parsing helpers
 
 - [x] **Task 6.3** *(refactor)*: Replace manual `\r`-strip and empty-check idiom in
       `MeshIO_PLY.hpp` ASCII read paths with `trim_right_in_place` from
