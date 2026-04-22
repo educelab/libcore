@@ -282,7 +282,7 @@ architecture, testing) plus deferred binary PLY reader optimisations.
       binary AND ASCII reader inner loops with role-indexed dispatch (currently
       `prop.name == "x"` etc. runs for every vertex property on every vertex in
       ASCII too)
-- [ ] **Task 5.7** *(deferred perf)*: Batch-read full vertex record into a
+- [x] **Task 5.7** *(deferred perf)*: Batch-read full vertex record into a
       stack buffer per vertex in binary PLY reader; extract fields with
       `std::memcpy` to reduce `istream::read` calls from
       O(properties × vertices) to O(vertices)
