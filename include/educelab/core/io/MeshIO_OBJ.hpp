@@ -399,34 +399,35 @@ void read_obj_impl(
     }
 
     // Parse MTL for texture paths (Tier 3 only)
-    if (texture_paths != nullptr && !mtllib_path.empty()) {
-        std::ifstream mtl(mtllib_path);
-        if (!mtl) {
-            return;  // MTL missing — no-op per spec
+    if (texture_paths == nullptr || mtllib_path.empty()) {
+        return;
+    }
+    std::ifstream mtl(mtllib_path);
+    if (!mtl) {
+        return;  // MTL missing — no-op per spec
+    }
+    std::vector<std::filesystem::path> ordered_paths;
+    std::string mtl_line;
+    std::vector<std::string_view> mt;
+    while (std::getline(mtl, mtl_line)) {
+        // Tokenize
+        split(mtl_line, mt);
+        // Skip comments
+        if (mt.empty() || mt[0].front() == '#') {
+            continue;
         }
-        std::vector<std::filesystem::path> ordered_paths;
-        std::string mtl_line;
-        std::vector<std::string_view> mt;
-        while (std::getline(mtl, mtl_line)) {
-            // Tokenize
-            split(mtl_line, mt);
-            // Skip comments
-            if (mt.empty() || mt[0].front() == '#') {
-                continue;
-            }
-            if (mt[0] == "newmtl") {
-                ordered_paths.emplace_back();  // placeholder
-            } else if (
-                mt[0] == "map_Kd" && !ordered_paths.empty() && mt.size() >= 2) {
-                ordered_paths.back() =
-                    std::filesystem::path{std::string(mt[1])};
-            }
+        if (mt[0] == "newmtl") {
+            ordered_paths.emplace_back();  // placeholder
+        } else if (
+            mt[0] == "map_Kd" && !ordered_paths.empty() && mt.size() >= 2) {
+            ordered_paths.back() =
+                std::filesystem::path{std::string(mt[1])};
         }
-        // Remove placeholder entries that had no map_Kd
-        for (const auto& p : ordered_paths) {
-            if (!p.empty()) {
-                texture_paths->push_back(p);
-            }
+    }
+    // Remove placeholder entries that had no map_Kd
+    for (const auto& p : ordered_paths) {
+        if (!p.empty()) {
+            texture_paths->push_back(p);
         }
     }
 }
@@ -715,12 +716,14 @@ void write_obj(
     // Group face indices by chart index of corner-0 UV
     std::vector<std::vector<std::size_t>> chart_faces(texture_paths.size());
     for (std::size_t fi = 0; fi < mesh.num_faces(); ++fi) {
-        if (uvmap.has(fi, 0)) {
-            const auto chart = uvmap.at(uvmap.get(fi, 0)).chart;
-            if (chart < chart_faces.size()) {
-                chart_faces[chart].push_back(fi);
-            }
+        if (not uvmap.has(fi, 0)) {
+            continue;
         }
+        const auto chart = uvmap.at(uvmap.get(fi, 0)).chart;
+        if (chart >= chart_faces.size()) {
+            continue;
+        }
+        chart_faces[chart].push_back(fi);
     }
 
     // Write faces grouped by chart

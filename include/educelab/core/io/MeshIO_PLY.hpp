@@ -449,63 +449,63 @@ inline void read_ply_face_binary(
     face.clear();
     texcoords.clear();
     for (const auto& prop : elem.props) {
-        if (prop.is_list) {
-            const auto count =
-                read_ply_binary_prop<std::size_t>(file, prop.list_count_type);
-            switch (prop.role) {
-                case PropRole::VertexIndices:
-                    if (count > kMaxFaceVertices) {
-                        throw std::runtime_error(
-                            "read_ply: face vertex count " + to_string(count) +
-                            " exceeds maximum of " +
-                            to_string(kMaxFaceVertices));
-                    }
-                    face.reserve(count);
-                    for (std::size_t k = 0; k < count; ++k) {
-                        const auto idx =
-                            read_ply_binary_prop<std::size_t>(file, prop.type);
-                        if (idx >= n_vertices) {
-                            throw std::runtime_error(
-                                "read_ply: face vertex index " +
-                                to_string(idx) +
-                                " out of range (n_vertices=" +
-                                to_string(n_vertices) + ")");
-                        }
-                        face.push_back(idx);
-                    }
-                    break;
-                case PropRole::Texcoord:
-                    if (count > kMaxFaceListLength) {
-                        throw std::runtime_error(
-                            "read_ply: face texcoord count " +
-                            to_string(count) + " exceeds maximum of " +
-                            to_string(kMaxFaceListLength));
-                    }
-                    if (load_texcoords) {
-                        texcoords.resize(count);
-                        for (std::size_t k = 0; k < count; ++k) {
-                            texcoords[k] =
-                                read_ply_binary_prop<float>(file, prop.type);
-                        }
-                    } else {
-                        file.ignore(static_cast<std::streamsize>(
-                            count * ply_type_bytes(prop.type)));
-                    }
-                    break;
-                default:
-                    if (count > kMaxFaceListLength) {
-                        throw std::runtime_error(
-                            "read_ply: face list property count " +
-                            to_string(count) + " exceeds maximum of " +
-                            to_string(kMaxFaceListLength));
-                    }
-                    file.ignore(static_cast<std::streamsize>(
-                        count * ply_type_bytes(prop.type)));
-                    break;
-            }
-        } else {
+        if (not prop.is_list) {
             file.ignore(
                 static_cast<std::streamsize>(ply_type_bytes(prop.type)));
+            continue;
+        }
+        const auto count =
+            read_ply_binary_prop<std::size_t>(file, prop.list_count_type);
+        switch (prop.role) {
+            case PropRole::VertexIndices:
+                if (count > kMaxFaceVertices) {
+                    throw std::runtime_error(
+                        "read_ply: face vertex count " + to_string(count) +
+                        " exceeds maximum of " +
+                        to_string(kMaxFaceVertices));
+                }
+                face.reserve(count);
+                for (std::size_t k = 0; k < count; ++k) {
+                    const auto idx =
+                        read_ply_binary_prop<std::size_t>(file, prop.type);
+                    if (idx >= n_vertices) {
+                        throw std::runtime_error(
+                            "read_ply: face vertex index " +
+                            to_string(idx) +
+                            " out of range (n_vertices=" +
+                            to_string(n_vertices) + ")");
+                    }
+                    face.push_back(idx);
+                }
+                break;
+            case PropRole::Texcoord:
+                if (count > kMaxFaceListLength) {
+                    throw std::runtime_error(
+                        "read_ply: face texcoord count " +
+                        to_string(count) + " exceeds maximum of " +
+                        to_string(kMaxFaceListLength));
+                }
+                if (load_texcoords) {
+                    texcoords.resize(count);
+                    for (std::size_t k = 0; k < count; ++k) {
+                        texcoords[k] =
+                            read_ply_binary_prop<float>(file, prop.type);
+                    }
+                } else {
+                    file.ignore(static_cast<std::streamsize>(
+                        count * ply_type_bytes(prop.type)));
+                }
+                break;
+            default:
+                if (count > kMaxFaceListLength) {
+                    throw std::runtime_error(
+                        "read_ply: face list property count " +
+                        to_string(count) + " exceeds maximum of " +
+                        to_string(kMaxFaceListLength));
+                }
+                file.ignore(static_cast<std::streamsize>(
+                    count * ply_type_bytes(prop.type)));
+                break;
         }
     }
 }
@@ -533,61 +533,61 @@ inline void read_ply_face_ascii(
     for (const auto& prop : elem.props) {
         if (ti >= tokens.size())
             break;
-        if (prop.is_list) {
-            const auto count = to_numeric<std::size_t>(tokens[ti++]);
-            switch (prop.role) {
-                case PropRole::VertexIndices:
-                    if (count > kMaxFaceVertices) {
+        if (not prop.is_list) {
+            ++ti;
+            continue;
+        }
+        const auto count = to_numeric<std::size_t>(tokens[ti++]);
+        switch (prop.role) {
+            case PropRole::VertexIndices:
+                if (count > kMaxFaceVertices) {
+                    throw std::runtime_error(
+                        "read_ply: face vertex count " + to_string(count) +
+                        " exceeds maximum of " +
+                        to_string(kMaxFaceVertices));
+                }
+                face.reserve(count);
+                for (std::size_t k = 0;
+                     k < count && ti < tokens.size();
+                     ++k, ++ti) {
+                    const auto idx = to_numeric<std::size_t>(tokens[ti]);
+                    if (idx >= n_vertices) {
                         throw std::runtime_error(
-                            "read_ply: face vertex count " + to_string(count) +
-                            " exceeds maximum of " +
-                            to_string(kMaxFaceVertices));
+                            "read_ply: face vertex index " +
+                            to_string(idx) +
+                            " out of range (n_vertices=" +
+                            to_string(n_vertices) + ")");
                     }
-                    face.reserve(count);
+                    face.push_back(idx);
+                }
+                break;
+            case PropRole::Texcoord:
+                if (count > kMaxFaceListLength) {
+                    throw std::runtime_error(
+                        "read_ply: face texcoord count " +
+                        to_string(count) + " exceeds maximum of " +
+                        to_string(kMaxFaceListLength));
+                }
+                if (load_texcoords) {
+                    texcoords.resize(count);
                     for (std::size_t k = 0;
                          k < count && ti < tokens.size();
                          ++k, ++ti) {
-                        const auto idx = to_numeric<std::size_t>(tokens[ti]);
-                        if (idx >= n_vertices) {
-                            throw std::runtime_error(
-                                "read_ply: face vertex index " +
-                                to_string(idx) +
-                                " out of range (n_vertices=" +
-                                to_string(n_vertices) + ")");
-                        }
-                        face.push_back(idx);
+                        texcoords[k] = to_numeric<float>(tokens[ti]);
                     }
-                    break;
-                case PropRole::Texcoord:
-                    if (count > kMaxFaceListLength) {
-                        throw std::runtime_error(
-                            "read_ply: face texcoord count " +
-                            to_string(count) + " exceeds maximum of " +
-                            to_string(kMaxFaceListLength));
-                    }
-                    if (load_texcoords) {
-                        texcoords.resize(count);
-                        for (std::size_t k = 0;
-                             k < count && ti < tokens.size();
-                             ++k, ++ti) {
-                            texcoords[k] = to_numeric<float>(tokens[ti]);
-                        }
-                    } else {
-                        ti += count;
-                    }
-                    break;
-                default:
-                    if (count > kMaxFaceListLength) {
-                        throw std::runtime_error(
-                            "read_ply: face list property count " +
-                            to_string(count) + " exceeds maximum of " +
-                            to_string(kMaxFaceListLength));
-                    }
+                } else {
                     ti += count;
-                    break;
-            }
-        } else {
-            ++ti;
+                }
+                break;
+            default:
+                if (count > kMaxFaceListLength) {
+                    throw std::runtime_error(
+                        "read_ply: face list property count " +
+                        to_string(count) + " exceeds maximum of " +
+                        to_string(kMaxFaceListLength));
+                }
+                ti += count;
+                break;
         }
     }
 }
@@ -696,16 +696,15 @@ void read_ply_impl(
 
     // Helpers to skip unknown-element data without interpreting it.
     auto skip_binary_prop = [&](const PLYProp& prop) {
-        if (prop.is_list) {
-            const auto count =
-                read_ply_binary_prop<std::size_t>(file, prop.list_count_type);
-            file.ignore(
-                static_cast<std::streamsize>(
-                    count * ply_type_bytes(prop.type)));
-        } else {
+        if (not prop.is_list) {
             file.ignore(
                 static_cast<std::streamsize>(ply_type_bytes(prop.type)));
+            return;
         }
+        const auto count =
+            read_ply_binary_prop<std::size_t>(file, prop.list_count_type);
+        file.ignore(
+            static_cast<std::streamsize>(count * ply_type_bytes(prop.type)));
     };
 
     auto skip_ascii_line = [&]() {
