@@ -339,7 +339,7 @@ file << to_string_view(buf, x) << ' ' << to_string_view(buf, y) << '\n';
 See [examples/StringExample.cpp](examples/StringExample.cpp) for more usage
 examples.
 
-#### A note on `to_numeric` and `to_string` compilation
+#### A note on `to_numeric` and `to_string[_view]` compilation
 
 `to_numeric` uses `std::from_chars` for string-to-number conversion.
 `to_string` and `to_string_view` use `std::to_chars` for number-to-string
@@ -380,13 +380,11 @@ add_executable(foo foo.cpp)
 target_link_libraries(foo PRIVATE educelab::core)
 ```
 
-If using the headers without linking against the CMake target, check the CMake
-cache variables and set the needed definitions manually:
+If using the headers without linking against the CMake target, manually set 
+your required definitions:
 
 ```cmake
-foreach(_def IN LISTS EDUCE_CORE_CHARCONV_DEFS)
-    target_compile_definitions(foo PRIVATE ${_def})
-endforeach()
+target_compile_definitions(foo PRIVATE EDUCE_CORE_NEED_FROM_CHARS_LONG_DOUBLE)
 ```
 
 ### Data caching
