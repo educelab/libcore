@@ -6,11 +6,12 @@
 # in macOS 13.3; long double availability differs further.
 #
 # For each (function, type) combination a separate compile-time probe is run.
-# When unavailable, a per-type preprocessor definition is set so String.hpp
-# can activate the appropriate fallback specialisation without over-disabling
-# types that are actually supported.
+# When unavailable, a per-type preprocessor definition is appended to the
+# EDUCE_CORE_CHARCONV_DEFS list so the caller can attach it to the library
+# target via target_compile_definitions.
 #
-# Definitions emitted (only when the corresponding function+type is absent):
+# Definitions collected into EDUCE_CORE_CHARCONV_DEFS (only when the
+# corresponding function+type is absent):
 #   EDUCE_CORE_NEED_FROM_CHARS_FLOAT
 #   EDUCE_CORE_NEED_FROM_CHARS_DOUBLE
 #   EDUCE_CORE_NEED_FROM_CHARS_LONG_DOUBLE
@@ -47,7 +48,7 @@ macro(_charconv_probe _direction _typename _snippet _defname)
     ")
     check_cxx_source_compiles("${_probe_code}" _CXX_CHARCONV_${_defname})
     if(NOT _CXX_CHARCONV_${_defname})
-        add_compile_definitions(EDUCE_CORE_${_defname})
+        list(APPEND EDUCE_CORE_CHARCONV_DEFS EDUCE_CORE_${_defname})
     endif()
 endmacro()
 

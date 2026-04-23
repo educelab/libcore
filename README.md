@@ -346,17 +346,24 @@ examples.
 conversion. Both were introduced in C++17 but floating-point support arrived
 later and is gated on the runtime library version (e.g. macOS 13.3+).
 
-CMake probes for both at configure time and reports the results:
+CMake probes for both at configure time via `CheckCharconvFP.cmake` and reports
+the results as compile definitions (only emitted when the corresponding
+function+type combination is absent):
 
-- **`CXX_CHARCONV_FP_FROM_CHARS`** — whether `std::from_chars` supports
-  `float`. If not, `EDUCE_CORE_NEED_CHARCONV_FP` is defined and `to_numeric`
-  falls back to `std::stof` / `std::stod` / `std::stold`.
-- **`CXX_CHARCONV_FP_TO_CHARS`** — whether `std::to_chars` supports `float`.
-  `to_string_view` requires this unconditionally; no fallback is provided.
+- **`from_chars` fallbacks** — `to_numeric` falls back to `std::stof` /
+  `std::stod` / `std::stold` for any type whose definition is set:
+  - `EDUCE_CORE_NEED_FROM_CHARS_FLOAT`
+  - `EDUCE_CORE_NEED_FROM_CHARS_DOUBLE`
+  - `EDUCE_CORE_NEED_FROM_CHARS_LONG_DOUBLE`
+- **`to_chars` fallbacks** — `to_string` / `to_string_view` fall back to
+  `std::snprintf` for any type whose definition is set:
+  - `EDUCE_CORE_NEED_TO_CHARS_FLOAT`
+  - `EDUCE_CORE_NEED_TO_CHARS_DOUBLE`
+  - `EDUCE_CORE_NEED_TO_CHARS_LONG_DOUBLE`
 
-When linking against the `educelab::core` CMake target, `EDUCE_CORE_NEED_CHARCONV_FP`
-is propagated automatically. If using the library header-only, check the CMake
-cache variable and set the definition manually:
+These definitions are attached to the `educelab::core` target as `PUBLIC`
+compile definitions, so they propagate automatically to any target that links
+against it:
 
 ```cmake
 # Import libcore
@@ -368,17 +375,18 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(libcore)
 
-# Add an executable which has access to the libcore headers
+# Definitions are propagated automatically — no extra step needed.
 add_executable(foo foo.cpp)
-target_include_directories(foo
-    PUBLIC
-        $<BUILD_INTERFACE:${libcore_SOURCE_DIR}/include>
-)
+target_link_libraries(foo PRIVATE educelab::core)
+```
 
-# Propagate the to_numeric fallback definition if needed
-if(EDUCE_CORE_NEED_CHARCONV_FP)
-    target_compile_definitions(foo PRIVATE EDUCE_CORE_NEED_CHARCONV_FP)
-endif()
+If using the headers without linking against the CMake target, check the CMake
+cache variables and set the needed definitions manually:
+
+```cmake
+foreach(_def IN LISTS EDUCE_CORE_CHARCONV_DEFS)
+    target_compile_definitions(foo PRIVATE ${_def})
+endforeach()
 ```
 
 ### Data caching
