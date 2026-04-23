@@ -263,6 +263,8 @@ static auto split(
             chars.push_back(d[0]);
         }
         split(s, tokens, [&chars](char c) {
+            // std::is_invocable_r_v<bool, Pred, char> selects the predicate
+            // overload rather than re-entering this variadic template.
             return std::find(chars.begin(), chars.end(), c) != chars.end();
         });
         return;

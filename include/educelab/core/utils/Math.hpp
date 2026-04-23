@@ -57,7 +57,7 @@ template <typename T1, typename T2>
 auto cross(const T1& a, const T2& b) -> T1
 {
     if (std::size(a) != 3 or std::size(b) != 3) {
-        throw std::invalid_argument("Inputs have mismatched dimensions");
+        throw std::invalid_argument("Inputs must be 3-dimensional");
     }
     T1 c;
     c[0] = a[1] * b[2] - a[2] * b[1];
@@ -74,7 +74,7 @@ template <
 auto cross(const T1& a, const std::initializer_list<T2>& b) -> T1
 {
     if (std::size(a) != 3 or std::size(b) != 3) {
-        throw std::invalid_argument("Inputs have mismatched dimensions");
+        throw std::invalid_argument("Inputs must be 3-dimensional");
     }
     auto* bp = b.begin();
     T1 c;

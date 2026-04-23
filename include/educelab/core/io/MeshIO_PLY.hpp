@@ -128,13 +128,42 @@ enum class PropRole {
     Texcoord,
 };
 
+/** @brief Scalar type of a PLY property, parsed once from the header so inner
+ *  loops can switch on an integer instead of comparing strings. */
+enum class PLYType {
+    Unknown,
+    Float,   ///< IEEE 754 single-precision (4 bytes)
+    Double,  ///< IEEE 754 double-precision (8 bytes)
+    Int,     ///< Signed 32-bit integer
+    UInt,    ///< Unsigned 32-bit integer
+    Short,   ///< Signed 16-bit integer
+    UShort,  ///< Unsigned 16-bit integer
+    Char,    ///< Signed 8-bit integer
+    UChar,   ///< Unsigned 8-bit integer
+};
+
+/** @brief Parse a PLY type token into a @c PLYType enum value */
+inline auto parse_ply_type(std::string_view t) -> PLYType
+{
+    if (t == "float")  return PLYType::Float;
+    if (t == "double") return PLYType::Double;
+    if (t == "int")    return PLYType::Int;
+    if (t == "uint")   return PLYType::UInt;
+    if (t == "short")  return PLYType::Short;
+    if (t == "ushort") return PLYType::UShort;
+    if (t == "char")   return PLYType::Char;
+    if (t == "uchar")  return PLYType::UChar;
+    throw std::runtime_error(
+        "read_ply: unrecognized property type '" + std::string(t) + "'");
+}
+
 /** @brief Parsed representation of a single PLY property declaration */
 struct PLYProp {
-    std::string name;                  ///< Property name (e.g., "x", "nx", "red")
-    std::string type;                  ///< PLY scalar type string (e.g., "float", "uchar")
-    bool is_list{false};               ///< True when this is a list property
-    std::string list_count_type;       ///< Type of the list-length prefix (when @c is_list)
-    PropRole role{PropRole::Unknown};  ///< Pre-computed semantic role for dispatch
+    std::string name;                          ///< Property name (e.g., "x", "nx", "red")
+    PLYType type{PLYType::Unknown};            ///< Scalar type of the property value
+    bool is_list{false};                       ///< True when this is a list property
+    PLYType list_count_type{PLYType::Unknown}; ///< Type of the list-length prefix (when @c is_list)
+    PropRole role{PropRole::Unknown};          ///< Pre-computed semantic role for dispatch
 };
 
 /** @brief A single element block from the PLY header */
@@ -157,16 +186,21 @@ struct PLYHeader {
     std::vector<PLYElement> elements;                  ///< Element blocks in declaration order
 };
 
-/** @brief Return the byte width of a named PLY scalar type */
-inline auto ply_type_bytes(const std::string& t) -> std::size_t
+/** @brief Return the byte width of a PLY scalar type */
+inline auto ply_type_bytes(PLYType t) -> std::size_t
 {
-    if (t == "double") return 8;
-    if (t == "float" || t == "int" || t == "uint")
-        return 4;
-    if (t == "short" || t == "ushort") return 2;
-    if (t == "char" || t == "uchar") return 1;
-    throw std::runtime_error(
-        "read_ply: unrecognized property type '" + t + "'");
+    switch (t) {
+        case PLYType::Double: return 8;
+        case PLYType::Float:
+        case PLYType::Int:
+        case PLYType::UInt:   return 4;
+        case PLYType::Short:
+        case PLYType::UShort: return 2;
+        case PLYType::Char:
+        case PLYType::UChar:  return 1;
+        default:
+            throw std::runtime_error("read_ply: unrecognized property type");
+    }
 }
 
 /** @brief Parse a PLY header; leaves @p file positioned at first data byte */
@@ -230,12 +264,12 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
             PLYProp p;
             if (tokens[1] == "list" && tokens.size() >= 5) {
                 p.is_list = true;
-                p.list_count_type = std::string(tokens[2]);
-                p.type = std::string(tokens[3]);
+                p.list_count_type = parse_ply_type(tokens[2]);
+                p.type = parse_ply_type(tokens[3]);
                 p.name = std::string(tokens[4]);
             } else {
                 p.name = std::string(tokens[2]);
-                p.type = std::string(tokens[1]);
+                p.type = parse_ply_type(tokens[1]);
             }
             // Assign semantic role once so inner read loops switch on an
             // integer rather than comparing strings per vertex / face.
@@ -268,62 +302,66 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
 
 /** @brief Read a single binary little-endian PLY scalar property from @p f */
 template <typename DestT>
-auto read_ply_binary_prop(std::istream& f, const std::string& type) -> DestT
+auto read_ply_binary_prop(std::istream& f, PLYType type) -> DestT
 {
-    if (type == "float") {
-        float v{};
-        f.read(reinterpret_cast<char*>(&v), 4);
-        if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
-        return static_cast<DestT>(v);
-    }
-    if (type == "double") {
-        double v{};
-        f.read(reinterpret_cast<char*>(&v), 8);
-        if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
-        return static_cast<DestT>(v);
-    }
-    if (type == "int") {
-        int32_t v{};
-        f.read(reinterpret_cast<char*>(&v), 4);
-        if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
-        return static_cast<DestT>(v);
-    }
-    if (type == "uint") {
-        uint32_t v{};
-        f.read(reinterpret_cast<char*>(&v), 4);
-        if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
-        return static_cast<DestT>(v);
-    }
-    if (type == "short") {
-        int16_t v{};
-        f.read(reinterpret_cast<char*>(&v), 2);
-        if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
-        return static_cast<DestT>(v);
-    }
-    if (type == "ushort") {
-        uint16_t v{};
-        f.read(reinterpret_cast<char*>(&v), 2);
-        if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
-        return static_cast<DestT>(v);
-    }
-    if (type == "char") {
-        int8_t v{};
-        f.read(reinterpret_cast<char*>(&v), 1);
-        if (!f) {
-            throw std::runtime_error("read_ply: unexpected end of binary data");
+    const auto err = []() {
+        throw std::runtime_error("read_ply: unexpected end of binary data");
+    };
+    switch (type) {
+        case PLYType::Float: {
+            float v{};
+            f.read(reinterpret_cast<char*>(&v), 4);
+            if (!f) err();
+            return static_cast<DestT>(v);
         }
-        return static_cast<DestT>(v);
+        case PLYType::Double: {
+            double v{};
+            f.read(reinterpret_cast<char*>(&v), 8);
+            if (!f) err();
+            return static_cast<DestT>(v);
+        }
+        case PLYType::Int: {
+            int32_t v{};
+            f.read(reinterpret_cast<char*>(&v), 4);
+            if (!f) err();
+            return static_cast<DestT>(v);
+        }
+        case PLYType::UInt: {
+            uint32_t v{};
+            f.read(reinterpret_cast<char*>(&v), 4);
+            if (!f) err();
+            return static_cast<DestT>(v);
+        }
+        case PLYType::Short: {
+            int16_t v{};
+            f.read(reinterpret_cast<char*>(&v), 2);
+            if (!f) err();
+            return static_cast<DestT>(v);
+        }
+        case PLYType::UShort: {
+            uint16_t v{};
+            f.read(reinterpret_cast<char*>(&v), 2);
+            if (!f) err();
+            return static_cast<DestT>(v);
+        }
+        case PLYType::Char: {
+            int8_t v{};
+            f.read(reinterpret_cast<char*>(&v), 1);
+            if (!f) err();
+            return static_cast<DestT>(v);
+        }
+        case PLYType::UChar: {
+            uint8_t v{};
+            f.read(reinterpret_cast<char*>(&v), 1);
+            if (!f) err();
+            return static_cast<DestT>(v);
+        }
+        default:
+            // The header parser rejects unrecognized types before we reach
+            // here, but guard defensively so the function is correct in
+            // isolation.
+            throw std::runtime_error("read_ply: unrecognized property type");
     }
-    if (type == "uchar") {
-        uint8_t v{};
-        f.read(reinterpret_cast<char*>(&v), 1);
-        if (!f) { throw std::runtime_error("read_ply: unexpected end of binary data"); }
-        return static_cast<DestT>(v);
-    }
-    // The header parser rejects unrecognized types before we reach here,
-    // but guard defensively so the function is correct in isolation.
-    throw std::runtime_error(
-        "read_ply: unrecognized property type '" + type + "'");
 }
 
 /** @brief Extract a typed value from a raw byte buffer using memcpy.
@@ -334,34 +372,20 @@ auto read_ply_binary_prop(std::istream& f, const std::string& type) -> DestT
  *  istream::read calls.
  */
 template <typename DestT>
-auto read_ply_prop_from_buf(const char* buf, const std::string& type) -> DestT
+auto read_ply_prop_from_buf(const char* buf, PLYType type) -> DestT
 {
-    if (type == "float") {
-        float v; std::memcpy(&v, buf, 4); return static_cast<DestT>(v);
+    switch (type) {
+        case PLYType::Float:  { float v;    std::memcpy(&v, buf, 4); return static_cast<DestT>(v); }
+        case PLYType::Double: { double v;   std::memcpy(&v, buf, 8); return static_cast<DestT>(v); }
+        case PLYType::Int:    { int32_t v;  std::memcpy(&v, buf, 4); return static_cast<DestT>(v); }
+        case PLYType::UInt:   { uint32_t v; std::memcpy(&v, buf, 4); return static_cast<DestT>(v); }
+        case PLYType::Short:  { int16_t v;  std::memcpy(&v, buf, 2); return static_cast<DestT>(v); }
+        case PLYType::UShort: { uint16_t v; std::memcpy(&v, buf, 2); return static_cast<DestT>(v); }
+        case PLYType::Char:   { int8_t v;   std::memcpy(&v, buf, 1); return static_cast<DestT>(v); }
+        case PLYType::UChar:  { uint8_t v;  std::memcpy(&v, buf, 1); return static_cast<DestT>(v); }
+        default:
+            throw std::runtime_error("read_ply: unrecognized property type");
     }
-    if (type == "double") {
-        double v; std::memcpy(&v, buf, 8); return static_cast<DestT>(v);
-    }
-    if (type == "int") {
-        int32_t v; std::memcpy(&v, buf, 4); return static_cast<DestT>(v);
-    }
-    if (type == "uint") {
-        uint32_t v; std::memcpy(&v, buf, 4); return static_cast<DestT>(v);
-    }
-    if (type == "short") {
-        int16_t v; std::memcpy(&v, buf, 2); return static_cast<DestT>(v);
-    }
-    if (type == "ushort") {
-        uint16_t v; std::memcpy(&v, buf, 2); return static_cast<DestT>(v);
-    }
-    if (type == "char") {
-        int8_t v; std::memcpy(&v, buf, 1); return static_cast<DestT>(v);
-    }
-    if (type == "uchar") {
-        uint8_t v; std::memcpy(&v, buf, 1); return static_cast<DestT>(v);
-    }
-    throw std::runtime_error(
-        "read_ply: unrecognized property type '" + type + "'");
 }
 
 // -------------------------------------------------------------------------
@@ -598,7 +622,7 @@ void read_ply_impl(
     // Declared PLY type of the red property (taken as canonical for r/g/b).
     // Drives which Color variant is stored — uchar/ushort/float preserve the
     // file's native representation rather than forcing a lossy conversion.
-    std::string color_type;
+    PLYType color_type{PLYType::Unknown};
     if (vert_elem) {
         for (const auto& p : vert_elem->props) {
             switch (p.role) {
@@ -657,8 +681,8 @@ void read_ply_impl(
         while (std::getline(file, skip_line)) {
             // Trim trailing whitespace (incl. '\r' on Windows) then skip
             // '#'-comment lines; break on the first real data line.
-            trim_right_in_place(skip_line);
-            if (!skip_line.empty() && skip_line.front() != '#')
+            const auto sv = trim_right(skip_line);
+            if (!sv.empty() && sv.front() != '#')
                 break;
         }
     };
@@ -738,12 +762,13 @@ void read_ply_impl(
                     }
                 } else {
                     // ASCII: skip '#'-comment lines.
+                    std::string_view sv;
                     while (std::getline(file, line)) {
-                        trim_right_in_place(line);
-                        if (!line.empty() && line.front() != '#')
+                        sv = trim_right(line);
+                        if (!sv.empty() && sv.front() != '#')
                             break;
                     }
-                    split(std::string_view(line), tokens);
+                    split(sv, tokens);
                     for (std::size_t pi = 0;
                          pi < elem.props.size() && pi < tokens.size(); ++pi) {
                         switch (elem.props[pi].role) {
@@ -788,13 +813,12 @@ void read_ply_impl(
                         // read through a float intermediate, which is lossless
                         // for uchar (0-255) and ushort (0-65535) since both
                         // ranges fit exactly in float.
-                        if (color_type == "uchar" || color_type == "char") {
+                        if (color_type == PLYType::UChar) {
                             mesh.vertex(new_vi).color = Color::U8C3{
                                 static_cast<uint8_t>(r),
                                 static_cast<uint8_t>(g),
                                 static_cast<uint8_t>(b)};
-                        } else if (
-                            color_type == "ushort" || color_type == "short") {
+                        } else if (color_type == PLYType::UShort) {
                             mesh.vertex(new_vi).color = Color::U16C3{
                                 static_cast<uint16_t>(r),
                                 static_cast<uint16_t>(g),
@@ -829,12 +853,13 @@ void read_ply_impl(
                         file, elem, n_vertices, load_texcoords,
                         face_indices, texcoords);
                 } else {
+                    std::string_view sv;
                     while (std::getline(file, fline)) {
-                        trim_right_in_place(fline);
-                        if (!fline.empty() && fline.front() != '#')
+                        sv = trim_right(fline);
+                        if (!sv.empty() && sv.front() != '#')
                             break;
                     }
-                    split(std::string_view(fline), tokens);
+                    split(sv, tokens);
                     if (tokens.empty())
                         continue;
                     read_ply_face_ascii(

@@ -65,6 +65,9 @@ target_include_directories(core
         $<INSTALL_INTERFACE:include>
 )
 target_compile_features(core PUBLIC cxx_std_17)
+if(EDUCE_CORE_CHARCONV_DEFS)
+    target_compile_definitions(core PUBLIC ${EDUCE_CORE_CHARCONV_DEFS})
+endif()
 set_target_properties(core
     PROPERTIES
         PUBLIC_HEADER "${public_hdrs}"
