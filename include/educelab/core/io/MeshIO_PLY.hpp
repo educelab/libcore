@@ -375,14 +375,46 @@ template <typename DestT>
 auto read_ply_prop_from_buf(const char* buf, PLYType type) -> DestT
 {
     switch (type) {
-        case PLYType::Float:  { float v;    std::memcpy(&v, buf, 4); return static_cast<DestT>(v); }
-        case PLYType::Double: { double v;   std::memcpy(&v, buf, 8); return static_cast<DestT>(v); }
-        case PLYType::Int:    { int32_t v;  std::memcpy(&v, buf, 4); return static_cast<DestT>(v); }
-        case PLYType::UInt:   { uint32_t v; std::memcpy(&v, buf, 4); return static_cast<DestT>(v); }
-        case PLYType::Short:  { int16_t v;  std::memcpy(&v, buf, 2); return static_cast<DestT>(v); }
-        case PLYType::UShort: { uint16_t v; std::memcpy(&v, buf, 2); return static_cast<DestT>(v); }
-        case PLYType::Char:   { int8_t v;   std::memcpy(&v, buf, 1); return static_cast<DestT>(v); }
-        case PLYType::UChar:  { uint8_t v;  std::memcpy(&v, buf, 1); return static_cast<DestT>(v); }
+        case PLYType::Float: {
+            float v;
+            std::memcpy(&v, buf, 4);
+            return static_cast<DestT>(v);
+        }
+        case PLYType::Double: {
+            double v;
+            std::memcpy(&v, buf, 8);
+            return static_cast<DestT>(v);
+        }
+        case PLYType::Int: {
+            int32_t v;
+            std::memcpy(&v, buf, 4);
+            return static_cast<DestT>(v);
+        }
+        case PLYType::UInt: {
+            uint32_t v;
+            std::memcpy(&v, buf, 4);
+            return static_cast<DestT>(v);
+        }
+        case PLYType::Short: {
+            int16_t v;
+            std::memcpy(&v, buf, 2);
+            return static_cast<DestT>(v);
+        }
+        case PLYType::UShort: {
+            uint16_t v;
+            std::memcpy(&v, buf, 2);
+            return static_cast<DestT>(v);
+        }
+        case PLYType::Char: {
+            int8_t v;
+            std::memcpy(&v, buf, 1);
+            return static_cast<DestT>(v);
+        }
+        case PLYType::UChar: {
+            uint8_t v;
+            std::memcpy(&v, buf, 1);
+            return static_cast<DestT>(v);
+        }
         default:
             throw std::runtime_error("read_ply: unrecognized property type");
     }
