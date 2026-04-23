@@ -207,8 +207,8 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
             }
         } else if (tokens[0] == "element") {
             if (tokens.size() < 3) {
-                // TODO: Error
-                continue;
+                throw std::runtime_error(
+                    "read_ply: malformed element declaration");
             }
             constexpr std::size_t kMaxElements = 500'000'000;
             const auto n = to_numeric<std::size_t>(tokens[2]);
@@ -219,9 +219,13 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
             }
             h.elements.push_back({std::string(tokens[1]), n, {}});
         } else if (tokens[0] == "property") {
-            if (h.elements.empty() || tokens.size() < 3) {
-                // TODO: Both are errors
-                continue;
+            if (h.elements.empty()) {
+                throw std::runtime_error(
+                    "read_ply: property declaration outside of element");
+            }
+            if (tokens.size() < 3) {
+                throw std::runtime_error(
+                    "read_ply: malformed property declaration");
             }
             PLYProp p;
             if (tokens[1] == "list" && tokens.size() >= 5) {
@@ -379,6 +383,13 @@ inline void read_ply_face_binary(
     std::vector<std::size_t>& face,
     std::vector<float>& texcoords)
 {
+    // Cap any list property inside a face record. Legitimate values are small:
+    // vertex_indices is capped at 256 corners, texcoord is 2 floats per corner
+    // (<= 512). Unknown list properties are skipped but the count still governs
+    // how many bytes we read — without a cap, a hostile file can ask us to
+    // advance an unbounded number of bytes.
+    constexpr std::size_t kMaxFaceVertices = 256;
+    constexpr std::size_t kMaxFaceListLength = 1024;
     face.clear();
     texcoords.clear();
     for (const auto& prop : elem.props) {
@@ -387,10 +398,11 @@ inline void read_ply_face_binary(
                 read_ply_binary_prop<std::size_t>(file, prop.list_count_type);
             switch (prop.role) {
                 case PropRole::VertexIndices:
-                    if (count > 256) {
+                    if (count > kMaxFaceVertices) {
                         throw std::runtime_error(
-                            "read_ply: face vertex count " +
-                            to_string(count) + " exceeds maximum of 256");
+                            "read_ply: face vertex count " + to_string(count) +
+                            " exceeds maximum of " +
+                            to_string(kMaxFaceVertices));
                     }
                     face.reserve(count);
                     for (std::size_t k = 0; k < count; ++k) {
@@ -407,6 +419,12 @@ inline void read_ply_face_binary(
                     }
                     break;
                 case PropRole::Texcoord:
+                    if (count > kMaxFaceListLength) {
+                        throw std::runtime_error(
+                            "read_ply: face texcoord count " +
+                            to_string(count) + " exceeds maximum of " +
+                            to_string(kMaxFaceListLength));
+                    }
                     if (load_texcoords) {
                         texcoords.resize(count);
                         for (std::size_t k = 0; k < count; ++k) {
@@ -419,6 +437,12 @@ inline void read_ply_face_binary(
                     }
                     break;
                 default:
+                    if (count > kMaxFaceListLength) {
+                        throw std::runtime_error(
+                            "read_ply: face list property count " +
+                            to_string(count) + " exceeds maximum of " +
+                            to_string(kMaxFaceListLength));
+                    }
                     file.ignore(static_cast<std::streamsize>(
                         count * ply_type_bytes(prop.type)));
                     break;
@@ -445,6 +469,8 @@ inline void read_ply_face_ascii(
     std::vector<std::size_t>& face,
     std::vector<float>& texcoords)
 {
+    constexpr std::size_t kMaxFaceVertices = 256;
+    constexpr std::size_t kMaxFaceListLength = 1024;
     face.clear();
     texcoords.clear();
     std::size_t ti = 0;
@@ -455,10 +481,11 @@ inline void read_ply_face_ascii(
             const auto count = to_numeric<std::size_t>(tokens[ti++]);
             switch (prop.role) {
                 case PropRole::VertexIndices:
-                    if (count > 256) {
+                    if (count > kMaxFaceVertices) {
                         throw std::runtime_error(
-                            "read_ply: face vertex count " +
-                            to_string(count) + " exceeds maximum of 256");
+                            "read_ply: face vertex count " + to_string(count) +
+                            " exceeds maximum of " +
+                            to_string(kMaxFaceVertices));
                     }
                     face.reserve(count);
                     for (std::size_t k = 0;
@@ -476,6 +503,12 @@ inline void read_ply_face_ascii(
                     }
                     break;
                 case PropRole::Texcoord:
+                    if (count > kMaxFaceListLength) {
+                        throw std::runtime_error(
+                            "read_ply: face texcoord count " +
+                            to_string(count) + " exceeds maximum of " +
+                            to_string(kMaxFaceListLength));
+                    }
                     if (load_texcoords) {
                         texcoords.resize(count);
                         for (std::size_t k = 0;
@@ -488,6 +521,12 @@ inline void read_ply_face_ascii(
                     }
                     break;
                 default:
+                    if (count > kMaxFaceListLength) {
+                        throw std::runtime_error(
+                            "read_ply: face list property count " +
+                            to_string(count) + " exceeds maximum of " +
+                            to_string(kMaxFaceListLength));
+                    }
                     ti += count;
                     break;
             }
@@ -556,13 +595,20 @@ void read_ply_impl(
     bool has_nx{false}, has_ny{false}, has_nz{false};
     bool has_r{false}, has_g{false}, has_b{false};
     bool has_s{false}, has_t{false};
+    // Declared PLY type of the red property (taken as canonical for r/g/b).
+    // Drives which Color variant is stored — uchar/ushort/float preserve the
+    // file's native representation rather than forcing a lossy conversion.
+    std::string color_type;
     if (vert_elem) {
         for (const auto& p : vert_elem->props) {
             switch (p.role) {
                 case PropRole::NX:    has_nx = true; break;
                 case PropRole::NY:    has_ny = true; break;
                 case PropRole::NZ:    has_nz = true; break;
-                case PropRole::Red:   has_r  = true; break;
+                case PropRole::Red:
+                    has_r = true;
+                    color_type = p.type;
+                    break;
                 case PropRole::Green: has_g  = true; break;
                 case PropRole::Blue:  has_b  = true; break;
                 case PropRole::S:     has_s  = true; break;
@@ -738,10 +784,25 @@ void read_ply_impl(
                 }
                 if constexpr (traits::has_color<Vertex>::value) {
                     if (has_r && has_g && has_b) {
-                        // PLY stores colors as uchar (0-255); read back as such
-                        mesh.vertex(new_vi).color = Color::U8C3{
-                            static_cast<uint8_t>(r), static_cast<uint8_t>(g),
-                            static_cast<uint8_t>(b)};
+                        // Store the file's native representation. Values are
+                        // read through a float intermediate, which is lossless
+                        // for uchar (0-255) and ushort (0-65535) since both
+                        // ranges fit exactly in float.
+                        if (color_type == "uchar" || color_type == "char") {
+                            mesh.vertex(new_vi).color = Color::U8C3{
+                                static_cast<uint8_t>(r),
+                                static_cast<uint8_t>(g),
+                                static_cast<uint8_t>(b)};
+                        } else if (
+                            color_type == "ushort" || color_type == "short") {
+                            mesh.vertex(new_vi).color = Color::U16C3{
+                                static_cast<uint16_t>(r),
+                                static_cast<uint16_t>(g),
+                                static_cast<uint16_t>(b)};
+                        } else {
+                            // float / double / int / uint — store as F32C3
+                            mesh.vertex(new_vi).color = Color::F32C3{r, g, b};
+                        }
                     }
                 }
                 if (legacy_st_uvs) {
@@ -968,7 +1029,7 @@ void write_ply(
             "write_ply: cannot open file: " + path.string());
     }
 
-    std::array<char, 128> buf;
+    std::array<char, 128> buf{};
     detail::write_ply_header(file, mesh, "", false);
     detail::write_ply_data(file, buf, mesh, static_cast<const UVMap<float, 2>*>(nullptr));
 
@@ -1007,7 +1068,7 @@ void write_ply(
             "write_ply: cannot open file: " + path.string());
     }
 
-    std::array<char, 128> buf;
+    std::array<char, 128> buf{};
     detail::write_ply_header(file, mesh, "", true);
     detail::write_ply_data(file, buf, mesh, &uvmap);
 
@@ -1045,7 +1106,7 @@ void write_ply(
             "write_ply: cannot open file: " + path.string());
     }
 
-    std::array<char, 128> buf;
+    std::array<char, 128> buf{};
     detail::write_ply_header(file, mesh, texture_path.string(), true);
     detail::write_ply_data(file, buf, mesh, &uvmap);
 

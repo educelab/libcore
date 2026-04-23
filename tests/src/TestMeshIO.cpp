@@ -1351,3 +1351,191 @@ TEST_F(PLYTest, EmptyMesh_RoundTrip)
     EXPECT_EQ(dst.num_vertices(), 0u);
     EXPECT_EQ(dst.num_faces(), 0u);
 }
+
+// PLY: malformed "element" line (missing count) should throw
+TEST_F(PLYTest, MalformedElementLine_Throws)
+{
+    const auto path = ply("malformed_element");
+    {
+        std::ofstream f(path);
+        f << "ply\n"
+          << "format ascii 1.0\n"
+          << "element vertex\n"  // missing count
+          << "property float x\n"
+          << "end_header\n";
+    }
+    Mesh3f dst;
+    EXPECT_THROW(read_ply(path, dst), std::runtime_error);
+}
+
+// PLY: "property" line before any "element" should throw
+TEST_F(PLYTest, PropertyBeforeElement_Throws)
+{
+    const auto path = ply("property_no_element");
+    {
+        std::ofstream f(path);
+        f << "ply\n"
+          << "format ascii 1.0\n"
+          << "property float x\n"  // no preceding element
+          << "end_header\n";
+    }
+    Mesh3f dst;
+    EXPECT_THROW(read_ply(path, dst), std::runtime_error);
+}
+
+// PLY: malformed "property" line (too few tokens) should throw
+TEST_F(PLYTest, MalformedPropertyLine_Throws)
+{
+    const auto path = ply("malformed_property");
+    {
+        std::ofstream f(path);
+        f << "ply\n"
+          << "format ascii 1.0\n"
+          << "element vertex 1\n"
+          << "property float\n"  // missing name
+          << "end_header\n";
+    }
+    Mesh3f dst;
+    EXPECT_THROW(read_ply(path, dst), std::runtime_error);
+}
+
+// PLY: face record with texcoord list count beyond the per-face safety cap
+// should throw rather than attempting to allocate an unbounded buffer.
+TEST_F(PLYTest, ExcessiveTexcoordCount_Throws)
+{
+    const auto path = ply("excessive_texcoord");
+    {
+        std::ofstream f(path);
+        f << "ply\n"
+          << "format ascii 1.0\n"
+          << "element vertex 3\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "element face 1\n"
+          << "property list uchar int vertex_indices\n"
+          << "property list uint float texcoord\n"
+          << "end_header\n"
+          << "0 0 0\n"
+          << "1 0 0\n"
+          << "0 1 0\n"
+          // 3 corners, then a bogus texcoord count of ~4 billion
+          << "3 0 1 2 4294967295\n";
+    }
+    Mesh3f dst;
+    UVMap2f uv;
+    EXPECT_THROW(read_ply(path, dst, uv), std::runtime_error);
+}
+
+// PLY: vertex colors declared as float are stored as F32C3, not truncated to
+// uint8. Values in [0, 1] would otherwise collapse to 0 under the old cast.
+TEST_F(PLYTest, ReadFloatColor_StoresAsF32C3)
+{
+    const auto path = ply("float_color");
+    {
+        std::ofstream f(path);
+        f << "ply\n"
+          << "format ascii 1.0\n"
+          << "element vertex 1\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "property float red\n"
+          << "property float green\n"
+          << "property float blue\n"
+          << "element face 0\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n"
+          << "0 0 0 0.25 0.5 0.75\n";
+    }
+    Mesh<float, 3, traits::WithColor> dst;
+    read_ply(path, dst);
+    ASSERT_EQ(dst.num_vertices(), 1u);
+    const auto& c = dst.vertex(0).color;
+    ASSERT_EQ(c.type(), Color::Type::F32C3);
+    const auto rgb = c.value<Color::F32C3>();
+    EXPECT_FLOAT_EQ(rgb[0], 0.25f);
+    EXPECT_FLOAT_EQ(rgb[1], 0.50f);
+    EXPECT_FLOAT_EQ(rgb[2], 0.75f);
+}
+
+// PLY: vertex colors declared as ushort are stored as U16C3, not narrowed to
+// uint8. Values above 255 would otherwise wrap under the old cast.
+TEST_F(PLYTest, ReadUShortColor_StoresAsU16C3)
+{
+    const auto path = ply("ushort_color");
+    {
+        std::ofstream f(path);
+        f << "ply\n"
+          << "format ascii 1.0\n"
+          << "element vertex 1\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "property ushort red\n"
+          << "property ushort green\n"
+          << "property ushort blue\n"
+          << "element face 0\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n"
+          << "0 0 0 1000 20000 65535\n";
+    }
+    Mesh<float, 3, traits::WithColor> dst;
+    read_ply(path, dst);
+    ASSERT_EQ(dst.num_vertices(), 1u);
+    const auto& c = dst.vertex(0).color;
+    ASSERT_EQ(c.type(), Color::Type::U16C3);
+    const auto rgb = c.value<Color::U16C3>();
+    EXPECT_EQ(rgb[0], 1000u);
+    EXPECT_EQ(rgb[1], 20000u);
+    EXPECT_EQ(rgb[2], 65535u);
+}
+
+// PLY: vertex colors declared as uchar remain stored as U8C3 (default path)
+TEST_F(PLYTest, ReadUCharColor_StoresAsU8C3)
+{
+    const auto path = ply("uchar_color");
+    {
+        std::ofstream f(path);
+        f << "ply\n"
+          << "format ascii 1.0\n"
+          << "element vertex 1\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "property uchar red\n"
+          << "property uchar green\n"
+          << "property uchar blue\n"
+          << "element face 0\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n"
+          << "0 0 0 10 128 250\n";
+    }
+    Mesh<float, 3, traits::WithColor> dst;
+    read_ply(path, dst);
+    ASSERT_EQ(dst.num_vertices(), 1u);
+    const auto& c = dst.vertex(0).color;
+    ASSERT_EQ(c.type(), Color::Type::U8C3);
+    const auto rgb = c.value<Color::U8C3>();
+    EXPECT_EQ(rgb[0], 10u);
+    EXPECT_EQ(rgb[1], 128u);
+    EXPECT_EQ(rgb[2], 250u);
+}
+
+// OBJ: "mtllib" directive with no filename argument should throw
+TEST_F(OBJTest, MtllibWithoutArgument_Throws)
+{
+    const auto path = obj("bare_mtllib");
+    {
+        std::ofstream f(path);
+        f << "mtllib\n"
+          << "v 0 0 0\n"
+          << "v 1 0 0\n"
+          << "v 0 1 0\n"
+          << "f 1 2 3\n";
+    }
+    Mesh3f dst;
+    UVMap2f uv;
+    std::vector<fs::path> tex;
+    EXPECT_THROW(read_obj(path, dst, uv, tex), std::runtime_error);
+}

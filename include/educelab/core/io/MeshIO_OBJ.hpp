@@ -310,6 +310,9 @@ void read_obj_impl(
                 continue;
             }
             if (tokens.size() < 2) {
+                throw std::runtime_error(
+                    "read_obj: l." + to_string(line_no - 1) +
+                    ": invalid mtllib declaration");
             }
             // Resolve MTL path relative to the OBJ file. Capture everything
             // starting with the first token in case the filename has spaces.
@@ -323,7 +326,6 @@ void read_obj_impl(
                 throw std::runtime_error(
                     "read_obj: l." + to_string(line_no - 1) +
                     ": invalid f declaration");
-                continue;  // degenerate
             }
 
             FaceReference face;
