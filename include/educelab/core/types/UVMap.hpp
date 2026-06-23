@@ -28,6 +28,11 @@ struct DefaultUVTraits {
  * @code
  * using MyUVMap = UVMap<float, 2, traits::WithChart>;
  * @endcode
+ *
+ * @note Unlike the optional-bearing vertex traits, @c chart is a plain
+ * defaulted value (@c 0 = first chart) with no @em unset state, so I/O writers
+ * need no @c has_any_&lt;trait&gt; guard for it. See the trait-author
+ * convention on @c educelab::has_any_normal.
  */
 struct WithChart {
     /** @brief Atlas chart index */

@@ -25,6 +25,10 @@ namespace traits
  * per-vertex normal storage. Detected at compile time by I/O functions
  * via @c if @c constexpr and the C++17 detection idiom.
  *
+ * @note The @c std::optional storage has an @em unset state that I/O writers
+ * must not fabricate; see the trait-author convention documented on
+ * @ref has_any_normal.
+ *
  * @tparam T Numeric type of the normal vector
  * @tparam Dims Number of dimensions of the normal vector
  */
@@ -76,6 +80,9 @@ struct has_normal<V, std::void_t<decltype(std::declval<V>().normal)>>
  * Compose into a custom traits struct via multiple inheritance to add
  * per-vertex color storage. Detected at compile time by I/O functions
  * via @c if @c constexpr and the C++17 detection idiom.
+ *
+ * @note @ref Color has an @em unset state that I/O writers must not fabricate;
+ * see the trait-author convention documented on @ref has_any_normal.
  */
 struct WithColor {
     /** @brief Vertex color */
@@ -489,6 +496,18 @@ template <
  * I/O writers use this to avoid emitting fabricated zero normals for a
  * normal-capable mesh that has none set (OBJ would otherwise write
  * @c "vn 0 0 0"; PLY would declare @c nx/ny/nz and write zeros).
+ *
+ * @par Convention for trait authors
+ * This is one instance of a general rule. A vertex/coordinate trait whose
+ * storage carries a distinct @em unset state — an @c std::optional member, or
+ * a type like @ref Color with its own empty state — must not be fabricated on
+ * write. When you add such a trait, provide a @c has_any_&lt;trait&gt; runtime
+ * helper alongside it (see @ref has_any_normal, @ref has_any_color) and gate
+ * the I/O writers on it, so a capable-but-empty mesh round-trips as empty
+ * rather than acquiring fabricated defaults (zeros, black, etc.). Traits whose
+ * storage is a plain defaulted value where the default is itself valid (e.g.
+ * @ref traits::WithChart's @c std::size_t @c chart, default @c 0 = first
+ * chart) need no such guard — there is no unset state to misrepresent.
  *
  * @tparam T   Numeric type of the mesh
  * @tparam Dims Mesh dimensions
