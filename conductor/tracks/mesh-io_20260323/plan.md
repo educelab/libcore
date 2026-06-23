@@ -3,7 +3,7 @@
 **Track ID:** mesh-io_20260323
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-03-23
-**Updated:** 2026-03-25
+**Updated:** 2026-06-24
 **Status:** [x] Complete
 
 ## Overview
@@ -335,6 +335,48 @@ Completed changes (texcoord implementation):
 
 ---
 
+## Phase 7: No-Fabrication Round-Trips for Optional Vertex Attributes
+
+A `WithNormal`/`WithColor`-capable mesh with no values actually set was writing
+fabricated defaults: OBJ emitted `vn 0 0 0` and inline `0 0 0` for every vertex
+(with `vn` index tied to vertex index), and PLY declared `nx/ny/nz` /
+`red/green/blue` and wrote zeros. Reading such a file back materialised unwanted
+zero normals / black colors, so a capable-but-empty mesh did not round-trip as
+empty.
+
+Completed changes:
+- `Mesh.hpp`: added `has_any_normal(mesh)` / `has_any_color(mesh)` free functions
+  — runtime companions to the compile-time `has_normal` / `has_color` traits
+  (true only when at least one vertex actually carries the attribute).
+- OBJ: `build_normal_index` emits a compact `vn` pool referenced per-corner
+  (decoupled from vertex index); inline RGB gated per-vertex on
+  `color.has_value()`. Normal-less / color-less vertices emit no attribute data,
+  and partial meshes round-trip exactly with no fabrication.
+- PLY: header `nx/ny/nz` and `red/green/blue` declarations (and the matching data
+  columns) gated on `has_any_*`. PLY's fixed-property element forces
+  all-or-nothing per attribute; a fully-empty attribute is omitted, partial
+  meshes still zero-fill gaps (intrinsic to the format).
+- Docs: recorded the trait-author convention (optional-bearing traits need a
+  `has_any_<trait>` guard; plain defaulted-value traits like `WithChart` do not)
+  on `has_any_normal`, with `@note` pointers from `WithNormal`, `WithColor`, and
+  `WithChart`.
+
+### Tasks
+
+- [x] **Task 7.1**: OBJ/PLY no-fabrication for normals + `has_any_normal`
+- [x] **Task 7.2**: OBJ/PLY no-fabrication for colors + `has_any_color`
+- [x] **Task 7.3**: Document the no-fabrication convention for trait authors
+
+### Verification
+
+- [x] `ctest` 17/17 passes
+- [x] New regression tests: OBJ/PLY capable-but-empty emit nothing and round-trip
+      empty; OBJ partial-normal / partial-color round-trip exactly; `has_any_normal`
+      / `has_any_color` unit tests
+- [x] Doxygen builds cleanly (no broken `@ref`)
+
+---
+
 ## Final Verification
 
 - [x] All acceptance criteria in `spec.md` met
@@ -349,3 +391,4 @@ Completed changes (texcoord implementation):
 
 _Updated 2026-03-25 to add Phase 5 review-fix and deferred binary PLY perf tasks._
 _Updated 2026-04-21 to add Phase 6 PLY texcoord approach (per-wedge UV, backward-compat s/t read); expanded Task 5.6 scope to cover ASCII; added Task 5.8 face-helper refactor._
+_Updated 2026-06-24 to add Phase 7 no-fabrication round-trips (`has_any_normal` / `has_any_color`, compact OBJ `vn` pool, per-vertex inline RGB, gated PLY attribute declarations, trait-author convention docs)._
