@@ -869,6 +869,37 @@ TEST_F(PLYTest, ASCIIPositionsWithNormals)
     EXPECT_NEAR((*dst.vertex(2).normal)[2], 1.f, 1e-5f);
 }
 
+// A WithNormal mesh whose vertices carry no normals must not declare
+// nx/ny/nz in the header nor write fabricated zero normals. PLY's
+// fixed-property element makes this an all-or-nothing header decision.
+TEST_F(PLYTest, NormalCapableButNoneSet_DeclaresNoNormals)
+{
+    NormalMesh src;
+    (void)src.insert_vertex(0.f, 0.f, 0.f);
+    (void)src.insert_vertex(1.f, 0.f, 0.f);
+    (void)src.insert_vertex(0.f, 1.f, 0.f);
+    (void)src.insert_face(0u, 1u, 2u);  // no normals set
+
+    const auto path = ply("no_normals");
+    write_ply(path, src);
+
+    std::ifstream f(path);
+    std::string line;
+    while (std::getline(f, line)) {
+        EXPECT_EQ(line.find("property float nx"), std::string::npos)
+            << "Unexpected nx property for normal-less mesh: " << line;
+        EXPECT_EQ(line.find("property float ny"), std::string::npos);
+        EXPECT_EQ(line.find("property float nz"), std::string::npos);
+    }
+
+    NormalMesh dst;
+    read_ply(path, dst);
+    ASSERT_EQ(dst.num_vertices(), 3u);
+    EXPECT_FALSE(dst.vertex(0).normal.has_value());
+    EXPECT_FALSE(dst.vertex(1).normal.has_value());
+    EXPECT_FALSE(dst.vertex(2).normal.has_value());
+}
+
 TEST_F(PLYTest, ASCIIPositionsWithColors)
 {
     ColorMesh src;

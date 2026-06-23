@@ -478,4 +478,39 @@ template <
     return normalize(weighted);
 }
 
+/**
+ * @brief Whether @p mesh actually carries any per-vertex normal
+ *
+ * Runtime companion to the compile-time @ref traits::has_normal trait:
+ * @c has_normal reports whether the vertex type @em can hold a normal, while
+ * @c has_any_normal reports whether at least one vertex @em does. Always
+ * @c false when the vertex type has no normal member.
+ *
+ * I/O writers use this to avoid emitting fabricated zero normals for a
+ * normal-capable mesh that has none set (OBJ would otherwise write
+ * @c "vn 0 0 0"; PLY would declare @c nx/ny/nz and write zeros).
+ *
+ * @tparam T   Numeric type of the mesh
+ * @tparam Dims Mesh dimensions
+ * @tparam VertexTraits Vertex traits type
+ */
+template <
+    typename T,
+    std::size_t Dims,
+    typename VertexTraits,
+    std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
+[[nodiscard]] auto has_any_normal(const Mesh<T, Dims, VertexTraits>& mesh)
+    -> bool
+{
+    using Vertex = typename Mesh<T, Dims, VertexTraits>::Vertex;
+    if constexpr (traits::has_normal<Vertex>::value) {
+        for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
+            if (mesh.vertex(vi).normal.has_value()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 }  // namespace educelab

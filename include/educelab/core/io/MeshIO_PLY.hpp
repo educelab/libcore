@@ -951,14 +951,16 @@ void read_ply_impl(
  * Shared by all write_ply tiers. The @p texture_comment parameter may be
  * empty (no @c comment TextureFile line) or contain a path string.
  * The @p has_uvs flag controls whether a @c texcoord list property is
- * declared on the face element.
+ * declared on the face element. The @p has_normals flag (from
+ * @ref has_any_normal) controls whether @c nx/ny/nz are declared.
  */
 template <typename T, std::size_t Dims, typename VTraits>
 void write_ply_header(
     std::ostream& file,
     const Mesh<T, Dims, VTraits>& mesh,
     const std::string& texture_comment,
-    bool has_uvs)
+    bool has_uvs,
+    [[maybe_unused]] bool has_normals)
 {
     using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
 
@@ -976,9 +978,11 @@ void write_ply_header(
 
     if constexpr (traits::has_normal<Vertex>::value) {
         static_assert(Dims == 3, "write_ply: normals require Dims == 3");
-        file << "property float nx\n"
-             << "property float ny\n"
-             << "property float nz\n";
+        if (has_normals) {
+            file << "property float nx\n"
+                 << "property float ny\n"
+                 << "property float nz\n";
+        }
     }
     if constexpr (traits::has_color<Vertex>::value) {
         file << "property uchar red\n"
@@ -1001,14 +1005,17 @@ void write_ply_header(
  *
  * @p uvmap may be @c nullptr (no UV output). When non-null, each face record
  * is followed by a @c texcoord list of 2*N floats. Unmapped corners are
- * written as @c -1,-1 (sentinel for "no UV assignment").
+ * written as @c -1,-1 (sentinel for "no UV assignment"). @p has_normals must
+ * match the value passed to @ref write_ply_header so the data matches the
+ * declared properties.
  */
 template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
 void write_ply_data(
     std::ostream& file,
     std::array<char, 128>& buf,
     const Mesh<T, Dims, VTraits>& mesh,
-    const UVMapT* uvmap)
+    const UVMapT* uvmap,
+    [[maybe_unused]] bool has_normals)
 {
     using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
 
@@ -1018,10 +1025,14 @@ void write_ply_data(
              << to_string_view(buf, v[1]) << ' '
              << to_string_view(buf, v[2]);
         if constexpr (traits::has_normal<Vertex>::value) {
-            const auto n = v.normal.value_or(Vec<T, Dims>{});
-            file << ' ' << to_string_view(buf, n[0])
-                 << ' ' << to_string_view(buf, n[1])
-                 << ' ' << to_string_view(buf, n[2]);
+            if (has_normals) {
+                // PLY's fixed-property element forces a value for every
+                // vertex; gaps in a partially-normalled mesh fall back to zero.
+                const auto n = v.normal.value_or(Vec<T, Dims>{});
+                file << ' ' << to_string_view(buf, n[0])
+                     << ' ' << to_string_view(buf, n[1])
+                     << ' ' << to_string_view(buf, n[2]);
+            }
         }
         if constexpr (traits::has_color<Vertex>::value) {
             const auto [r, g, b] = detail::color_to_u8c3(v.color);
@@ -1067,8 +1078,9 @@ void write_ply_data(
  * @brief Write a mesh to an ASCII PLY file
  *
  * Emits @c x @c y @c z vertex properties. If @c Vertex carries
- * @ref traits::WithNormal, also emits @c nx @c ny @c nz properties.
- * If @c Vertex carries @ref traits::WithColor, also emits @c red @c green
+ * @ref traits::WithNormal @em and at least one vertex has a normal set, also
+ * emits @c nx @c ny @c nz properties (a normal-less mesh declares none). If
+ * @c Vertex carries @ref traits::WithColor, also emits @c red @c green
  * @c blue properties (@c uchar, 0–255).
  *
  * @throws std::runtime_error if the file cannot be opened
@@ -1086,8 +1098,11 @@ void write_ply(
     }
 
     std::array<char, 128> buf{};
-    detail::write_ply_header(file, mesh, "", false);
-    detail::write_ply_data(file, buf, mesh, static_cast<const UVMap<float, 2>*>(nullptr));
+    const bool has_normals = has_any_normal(mesh);
+    detail::write_ply_header(file, mesh, "", false, has_normals);
+    detail::write_ply_data(
+        file, buf, mesh, static_cast<const UVMap<float, 2>*>(nullptr),
+        has_normals);
 
     if (!file) {
         throw std::runtime_error(
@@ -1125,8 +1140,9 @@ void write_ply(
     }
 
     std::array<char, 128> buf{};
-    detail::write_ply_header(file, mesh, "", true);
-    detail::write_ply_data(file, buf, mesh, &uvmap);
+    const bool has_normals = has_any_normal(mesh);
+    detail::write_ply_header(file, mesh, "", true, has_normals);
+    detail::write_ply_data(file, buf, mesh, &uvmap, has_normals);
 
     if (!file) {
         throw std::runtime_error(
@@ -1163,8 +1179,9 @@ void write_ply(
     }
 
     std::array<char, 128> buf{};
-    detail::write_ply_header(file, mesh, texture_path.string(), true);
-    detail::write_ply_data(file, buf, mesh, &uvmap);
+    const bool has_normals = has_any_normal(mesh);
+    detail::write_ply_header(file, mesh, texture_path.string(), true, has_normals);
+    detail::write_ply_data(file, buf, mesh, &uvmap, has_normals);
 
     if (!file) {
         throw std::runtime_error(
