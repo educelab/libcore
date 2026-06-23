@@ -484,11 +484,16 @@ void write_obj_vertices(
         file << "v " << to_string_view(buf, v[0]) << ' '
                      << to_string_view(buf, v[1]) << ' '
                      << to_string_view(buf, v[2]);
+        // Inline RGB only for vertices that carry a color; a color-less vertex
+        // emits "v x y z" so the reader leaves its color unset (no fabricated
+        // black). The OBJ reader detects color per line via token count.
         if constexpr (traits::has_color<Vertex>::value) {
-            const auto [r, g, b] = detail::color_to_rgb(v.color);
-            file << ' ' << to_string_view(buf, r) << ' '
-                        << to_string_view(buf, g) << ' '
-                        << to_string_view(buf, b);
+            if (v.color.has_value()) {
+                const auto [r, g, b] = detail::color_to_rgb(v.color);
+                file << ' ' << to_string_view(buf, r) << ' '
+                            << to_string_view(buf, g) << ' '
+                            << to_string_view(buf, b);
+            }
         }
         file << '\n';
     }
@@ -567,7 +572,8 @@ void write_obj_faces(
  * @brief Write a mesh to an OBJ file
  *
  * Emits one @c v line per vertex; if @c Vertex inherits @ref
- * traits::WithColor, appends inline @c r @c g @c b values in [0,1].
+ * traits::WithColor, appends inline @c r @c g @c b values in [0,1] for each
+ * vertex that carries a color (color-less vertices emit @c "v x y z" only).
  * If @c Vertex inherits @ref traits::WithNormal, emits a @c vn line for each
  * vertex that carries a normal (a compact pool in vertex order) and encodes
  * the corresponding @c vn index in @c f lines as @c "vi//vni"; vertices

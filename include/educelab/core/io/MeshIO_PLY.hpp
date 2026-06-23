@@ -952,7 +952,9 @@ void read_ply_impl(
  * empty (no @c comment TextureFile line) or contain a path string.
  * The @p has_uvs flag controls whether a @c texcoord list property is
  * declared on the face element. The @p has_normals flag (from
- * @ref has_any_normal) controls whether @c nx/ny/nz are declared.
+ * @ref has_any_normal) controls whether @c nx/ny/nz are declared; the
+ * @p has_colors flag (from @ref has_any_color) controls whether
+ * @c red/green/blue are declared.
  */
 template <typename T, std::size_t Dims, typename VTraits>
 void write_ply_header(
@@ -960,7 +962,8 @@ void write_ply_header(
     const Mesh<T, Dims, VTraits>& mesh,
     const std::string& texture_comment,
     bool has_uvs,
-    [[maybe_unused]] bool has_normals)
+    [[maybe_unused]] bool has_normals,
+    [[maybe_unused]] bool has_colors)
 {
     using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
 
@@ -985,9 +988,11 @@ void write_ply_header(
         }
     }
     if constexpr (traits::has_color<Vertex>::value) {
-        file << "property uchar red\n"
-             << "property uchar green\n"
-             << "property uchar blue\n";
+        if (has_colors) {
+            file << "property uchar red\n"
+                 << "property uchar green\n"
+                 << "property uchar blue\n";
+        }
     }
 
     file << "element face " << mesh.num_faces() << '\n'
@@ -1005,9 +1010,9 @@ void write_ply_header(
  *
  * @p uvmap may be @c nullptr (no UV output). When non-null, each face record
  * is followed by a @c texcoord list of 2*N floats. Unmapped corners are
- * written as @c -1,-1 (sentinel for "no UV assignment"). @p has_normals must
- * match the value passed to @ref write_ply_header so the data matches the
- * declared properties.
+ * written as @c -1,-1 (sentinel for "no UV assignment"). @p has_normals and
+ * @p has_colors must match the values passed to @ref write_ply_header so the
+ * data matches the declared properties.
  */
 template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
 void write_ply_data(
@@ -1015,7 +1020,8 @@ void write_ply_data(
     std::array<char, 128>& buf,
     const Mesh<T, Dims, VTraits>& mesh,
     const UVMapT* uvmap,
-    [[maybe_unused]] bool has_normals)
+    [[maybe_unused]] bool has_normals,
+    [[maybe_unused]] bool has_colors)
 {
     using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
 
@@ -1035,10 +1041,14 @@ void write_ply_data(
             }
         }
         if constexpr (traits::has_color<Vertex>::value) {
-            const auto [r, g, b] = detail::color_to_u8c3(v.color);
-            file << ' ' << to_string_view(buf, r)
-                 << ' ' << to_string_view(buf, g)
-                 << ' ' << to_string_view(buf, b);
+            if (has_colors) {
+                // PLY's fixed-property element forces a value for every
+                // vertex; gaps in a partially-colored mesh fall back to black.
+                const auto [r, g, b] = detail::color_to_u8c3(v.color);
+                file << ' ' << to_string_view(buf, r)
+                     << ' ' << to_string_view(buf, g)
+                     << ' ' << to_string_view(buf, b);
+            }
         }
         file << '\n';
     }
@@ -1080,8 +1090,9 @@ void write_ply_data(
  * Emits @c x @c y @c z vertex properties. If @c Vertex carries
  * @ref traits::WithNormal @em and at least one vertex has a normal set, also
  * emits @c nx @c ny @c nz properties (a normal-less mesh declares none). If
- * @c Vertex carries @ref traits::WithColor, also emits @c red @c green
- * @c blue properties (@c uchar, 0–255).
+ * @c Vertex carries @ref traits::WithColor @em and at least one vertex has a
+ * color set, also emits @c red @c green @c blue properties (@c uchar, 0–255;
+ * a color-less mesh declares none).
  *
  * @throws std::runtime_error if the file cannot be opened
  */
@@ -1099,10 +1110,11 @@ void write_ply(
 
     std::array<char, 128> buf{};
     const bool has_normals = has_any_normal(mesh);
-    detail::write_ply_header(file, mesh, "", false, has_normals);
+    const bool has_colors = has_any_color(mesh);
+    detail::write_ply_header(file, mesh, "", false, has_normals, has_colors);
     detail::write_ply_data(
         file, buf, mesh, static_cast<const UVMap<float, 2>*>(nullptr),
-        has_normals);
+        has_normals, has_colors);
 
     if (!file) {
         throw std::runtime_error(
@@ -1141,8 +1153,9 @@ void write_ply(
 
     std::array<char, 128> buf{};
     const bool has_normals = has_any_normal(mesh);
-    detail::write_ply_header(file, mesh, "", true, has_normals);
-    detail::write_ply_data(file, buf, mesh, &uvmap, has_normals);
+    const bool has_colors = has_any_color(mesh);
+    detail::write_ply_header(file, mesh, "", true, has_normals, has_colors);
+    detail::write_ply_data(file, buf, mesh, &uvmap, has_normals, has_colors);
 
     if (!file) {
         throw std::runtime_error(
@@ -1180,8 +1193,10 @@ void write_ply(
 
     std::array<char, 128> buf{};
     const bool has_normals = has_any_normal(mesh);
-    detail::write_ply_header(file, mesh, texture_path.string(), true, has_normals);
-    detail::write_ply_data(file, buf, mesh, &uvmap, has_normals);
+    const bool has_colors = has_any_color(mesh);
+    detail::write_ply_header(
+        file, mesh, texture_path.string(), true, has_normals, has_colors);
+    detail::write_ply_data(file, buf, mesh, &uvmap, has_normals, has_colors);
 
     if (!file) {
         throw std::runtime_error(

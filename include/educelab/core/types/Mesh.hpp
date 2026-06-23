@@ -513,4 +513,40 @@ template <
     return false;
 }
 
+/**
+ * @brief Whether @p mesh actually carries any per-vertex color
+ *
+ * Runtime companion to the compile-time @ref traits::has_color trait:
+ * @c has_color reports whether the vertex type @em can hold a color, while
+ * @c has_any_color reports whether at least one vertex @em does. Always
+ * @c false when the vertex type has no color member.
+ *
+ * I/O writers use this to avoid emitting fabricated black for a color-capable
+ * mesh that has none set (PLY would otherwise declare @c red/green/blue and
+ * write @c "0 0 0"). OBJ gates inline RGB per vertex instead, since its
+ * @c v lines carry color positionally and can vary per line.
+ *
+ * @tparam T   Numeric type of the mesh
+ * @tparam Dims Mesh dimensions
+ * @tparam VertexTraits Vertex traits type
+ */
+template <
+    typename T,
+    std::size_t Dims,
+    typename VertexTraits,
+    std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
+[[nodiscard]] auto has_any_color(const Mesh<T, Dims, VertexTraits>& mesh)
+    -> bool
+{
+    using Vertex = typename Mesh<T, Dims, VertexTraits>::Vertex;
+    if constexpr (traits::has_color<Vertex>::value) {
+        for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
+            if (mesh.vertex(vi).color.has_value()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 }  // namespace educelab

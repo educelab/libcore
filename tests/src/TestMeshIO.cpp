@@ -340,6 +340,64 @@ TEST_F(OBJTest, PositionsWithColors_InlineRGB)
     EXPECT_NEAR(c2[2], 1.f, 1e-5f);
 }
 
+// A WithColor mesh whose vertices carry no colors must not append inline RGB
+// (no fabricated black); v lines stay "v x y z" and round-trip color-less.
+TEST_F(OBJTest, ColorCapableButNoneSet_EmitsNoColors)
+{
+    ColorMesh src;
+    src.insert_vertex(0.f, 0.f, 0.f);
+    src.insert_vertex(1.f, 0.f, 0.f);
+    src.insert_vertex(0.f, 1.f, 0.f);
+    src.insert_face(0u, 1u, 2u);  // no colors set
+
+    const auto path = obj("no_colors");
+    write_obj(path, src);
+
+    std::ifstream f(path);
+    std::string line;
+    while (std::getline(f, line)) {
+        if (line.rfind("v ", 0) == 0) {
+            const auto toks = split(std::string_view(line));
+            EXPECT_EQ(toks.size(), 4u)
+                << "Color-less vertex should emit 'v x y z' only: " << line;
+        }
+    }
+
+    ColorMesh dst;
+    read_obj(path, dst);
+    ASSERT_EQ(dst.num_vertices(), 3u);
+    EXPECT_FALSE(dst.vertex(0).color.has_value());
+    EXPECT_FALSE(dst.vertex(1).color.has_value());
+    EXPECT_FALSE(dst.vertex(2).color.has_value());
+}
+
+// Only some vertices carry colors: OBJ emits inline RGB per vertex, so the
+// color-less corner round-trips with no color while the others keep theirs.
+TEST_F(OBJTest, PartialColors_PerVertexInlineRGB)
+{
+    ColorMesh src;
+    src.insert_vertex(0.f, 0.f, 0.f);
+    src.insert_vertex(1.f, 0.f, 0.f);
+    src.insert_vertex(0.f, 1.f, 0.f);
+    src.vertex(0).color = Color::F32C3{1.f, 0.f, 0.f};
+    src.vertex(2).color = Color::F32C3{0.f, 0.f, 1.f};  // vertex 1 uncolored
+    src.insert_face(0u, 1u, 2u);
+
+    const auto path = obj("partial_colors");
+    write_obj(path, src);
+
+    ColorMesh dst;
+    read_obj(path, dst);
+    ASSERT_EQ(dst.num_vertices(), 3u);
+    ASSERT_TRUE(dst.vertex(0).color.has_value());
+    EXPECT_FALSE(dst.vertex(1).color.has_value());
+    ASSERT_TRUE(dst.vertex(2).color.has_value());
+    const auto c0 = dst.vertex(0).color.value<Color::F32C3>();
+    EXPECT_NEAR(c0[0], 1.f, 1e-5f);
+    const auto c2 = dst.vertex(2).color.value<Color::F32C3>();
+    EXPECT_NEAR(c2[2], 1.f, 1e-5f);
+}
+
 TEST_F(OBJTest, PositionsWithUVs_NoTexture)
 {
     const auto src_mesh = make_triangle();
@@ -932,6 +990,37 @@ TEST_F(PLYTest, ASCIIPositionsWithColors)
     EXPECT_EQ(c2[0], 0u);
     EXPECT_EQ(c2[1], 0u);
     EXPECT_EQ(c2[2], 255u);
+}
+
+// A WithColor mesh whose vertices carry no colors must not declare
+// red/green/blue in the header nor write fabricated black. Like normals,
+// PLY's fixed-property element makes this an all-or-nothing header decision.
+TEST_F(PLYTest, ColorCapableButNoneSet_DeclaresNoColors)
+{
+    ColorMesh src;
+    (void)src.insert_vertex(0.f, 0.f, 0.f);
+    (void)src.insert_vertex(1.f, 0.f, 0.f);
+    (void)src.insert_vertex(0.f, 1.f, 0.f);
+    (void)src.insert_face(0u, 1u, 2u);  // no colors set
+
+    const auto path = ply("no_colors");
+    write_ply(path, src);
+
+    std::ifstream f(path);
+    std::string line;
+    while (std::getline(f, line)) {
+        EXPECT_EQ(line.find("property uchar red"), std::string::npos)
+            << "Unexpected red property for color-less mesh: " << line;
+        EXPECT_EQ(line.find("property uchar green"), std::string::npos);
+        EXPECT_EQ(line.find("property uchar blue"), std::string::npos);
+    }
+
+    ColorMesh dst;
+    read_ply(path, dst);
+    ASSERT_EQ(dst.num_vertices(), 3u);
+    EXPECT_FALSE(dst.vertex(0).color.has_value());
+    EXPECT_FALSE(dst.vertex(1).color.has_value());
+    EXPECT_FALSE(dst.vertex(2).color.has_value());
 }
 
 TEST_F(PLYTest, NGonFace_Quad)
