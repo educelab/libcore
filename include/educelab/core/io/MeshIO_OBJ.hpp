@@ -433,17 +433,48 @@ void read_obj_impl(
 }
 
 /**
+ * @brief Build a compact @c vn pool: map each vertex to its 1-based @c vn
+ * index, assigned in vertex order to only those vertices that carry a normal
+ *
+ * The OBJ @c vn pool is independent of the @c v pool, so there is no need to
+ * emit one @c vn per vertex. Vertices without a normal are mapped to @c 0
+ * ("no @c vn ref") and contribute no @c vn line — a normal-less mesh emits no
+ * @c vn at all (no fabricated @c "vn 0 0 0"), and a partially-normalled mesh
+ * references normals only where they exist. Returns an empty vector when the
+ * vertex type carries no normals.
+ */
+template <typename T, std::size_t Dims, typename VTraits>
+std::vector<std::size_t> build_normal_index(const Mesh<T, Dims, VTraits>& mesh)
+{
+    using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
+    std::vector<std::size_t> vn_index;
+    if constexpr (traits::has_normal<Vertex>::value) {
+        vn_index.assign(mesh.num_vertices(), 0);
+        std::size_t next = 0;
+        for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
+            if (mesh.vertex(vi).normal.has_value()) {
+                vn_index[vi] = ++next;  // 1-based pool index
+            }
+        }
+    }
+    return vn_index;
+}
+
+/**
  * @brief Write @c v, @c vt, and @c vn lines to an OBJ stream
  *
  * Shared helper used by all write_obj tiers to avoid duplicating the
- * vertex/texture-coord/normal emission code.
+ * vertex/texture-coord/normal emission code. @c vn_index (from
+ * @ref build_normal_index) selects which vertices contribute a @c vn line and
+ * in what pool order.
  */
 template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
 void write_obj_vertices(
     std::ostream& file,
     std::array<char, 128>& buf,
     const Mesh<T, Dims, VTraits>& mesh,
-    const UVMapT* uvmap)
+    const UVMapT* uvmap,
+    [[maybe_unused]] const std::vector<std::size_t>& vn_index)
 {
     using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
 
@@ -471,12 +502,15 @@ void write_obj_vertices(
         }
     }
 
-    // Normals — one vn per vertex; vn index equals vertex index (both 1-based)
+    // Normals — compact pool, in vertex order, only for vertices that carry a
+    // normal (vn_index[vi] != 0). A normal-less mesh emits no vn lines.
     if constexpr (traits::has_normal<Vertex>::value) {
         static_assert(Dims == 3, "write_obj: normals require Dims == 3");
         for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
-            const auto& v = mesh.vertex(vi);
-            const auto n = v.normal.value_or(Vec<T, Dims>{});
+            if (vn_index[vi] == 0) {
+                continue;
+            }
+            const auto& n = *mesh.vertex(vi).normal;
             file << "vn " << to_string_view(buf, n[0]) << ' '
                           << to_string_view(buf, n[1]) << ' '
                           << to_string_view(buf, n[2]) << '\n';
@@ -495,7 +529,8 @@ void write_obj_faces(
     std::ostream& file,
     std::array<char, 128>& buf,
     const Mesh<T, Dims, VTraits>& mesh,
-    const UVMapT* uvmap)
+    const UVMapT* uvmap,
+    [[maybe_unused]] const std::vector<std::size_t>& vn_index)
 {
     using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
 
@@ -508,10 +543,14 @@ void write_obj_faces(
             if (uvmap != nullptr && uvmap->has(fi, ci)) {
                 file << '/' << to_string_view(buf, uvmap->get(fi, ci) + 1);
                 if constexpr (traits::has_normal<Vertex>::value) {
-                    file << '/' << to_string_view(buf, vi + 1);
+                    if (vn_index[vi] != 0) {
+                        file << '/' << to_string_view(buf, vn_index[vi]);
+                    }
                 }
             } else if constexpr (traits::has_normal<Vertex>::value) {
-                file << "//" << to_string_view(buf, vi + 1);
+                if (vn_index[vi] != 0) {
+                    file << "//" << to_string_view(buf, vn_index[vi]);
+                }
             }
         }
         file << '\n';
@@ -529,9 +568,10 @@ void write_obj_faces(
  *
  * Emits one @c v line per vertex; if @c Vertex inherits @ref
  * traits::WithColor, appends inline @c r @c g @c b values in [0,1].
- * If @c Vertex inherits @ref traits::WithNormal, emits @c vn lines (one per
- * vertex, in vertex order) and encodes the normal index in @c f lines as
- * @c "vi//vni".
+ * If @c Vertex inherits @ref traits::WithNormal, emits a @c vn line for each
+ * vertex that carries a normal (a compact pool in vertex order) and encodes
+ * the corresponding @c vn index in @c f lines as @c "vi//vni"; vertices
+ * without a normal contribute no @c vn line and no normal ref.
  *
  * @throws std::runtime_error if the file cannot be opened
  * @tparam T  Mesh numeric type
@@ -553,8 +593,9 @@ void write_obj(
     std::array<char, 128> buf{};
     using DummyUV = UVMap<T>;
     DummyUV* no_uvmap = nullptr;
-    detail::write_obj_vertices(file, buf, mesh, no_uvmap);
-    detail::write_obj_faces(file, buf, mesh, no_uvmap);
+    const auto vn_index = detail::build_normal_index(mesh);
+    detail::write_obj_vertices(file, buf, mesh, no_uvmap, vn_index);
+    detail::write_obj_faces(file, buf, mesh, no_uvmap, vn_index);
 
     if (!file) {
         throw std::runtime_error(
@@ -590,8 +631,9 @@ void write_obj(
     }
 
     std::array<char, 128> buf{};
-    detail::write_obj_vertices(file, buf, mesh, &uvmap);
-    detail::write_obj_faces(file, buf, mesh, &uvmap);
+    const auto vn_index = detail::build_normal_index(mesh);
+    detail::write_obj_vertices(file, buf, mesh, &uvmap, vn_index);
+    detail::write_obj_faces(file, buf, mesh, &uvmap, vn_index);
 
     if (!file) {
         throw std::runtime_error(
@@ -648,8 +690,9 @@ void write_obj(
     file << "mtllib " << mtl_path.filename().string() << '\n';
     file << "usemtl material0\n";
 
-    detail::write_obj_vertices(file, buf, mesh, &uvmap);
-    detail::write_obj_faces(file, buf, mesh, &uvmap);
+    const auto vn_index = detail::build_normal_index(mesh);
+    detail::write_obj_vertices(file, buf, mesh, &uvmap, vn_index);
+    detail::write_obj_faces(file, buf, mesh, &uvmap, vn_index);
 
     if (!file) {
         throw std::runtime_error(
@@ -711,7 +754,8 @@ void write_obj(
 
     file << "mtllib " << mtl_path.filename().string() << '\n';
 
-    detail::write_obj_vertices(file, buf, mesh, &uvmap);
+    const auto vn_index = detail::build_normal_index(mesh);
+    detail::write_obj_vertices(file, buf, mesh, &uvmap, vn_index);
 
     // Group face indices by chart index of corner-0 UV
     std::vector<std::vector<std::size_t>> chart_faces(texture_paths.size());
@@ -742,10 +786,14 @@ void write_obj(
                     file << '/'
                          << to_string_view(buf, uvmap.get(fi, corner) + 1);
                     if constexpr (traits::has_normal<Vertex>::value) {
-                        file << '/' << to_string_view(buf, vi + 1);
+                        if (vn_index[vi] != 0) {
+                            file << '/' << to_string_view(buf, vn_index[vi]);
+                        }
                     }
                 } else if constexpr (traits::has_normal<Vertex>::value) {
-                    file << "//" << to_string_view(buf, vi + 1);
+                    if (vn_index[vi] != 0) {
+                        file << "//" << to_string_view(buf, vn_index[vi]);
+                    }
                 }
             }
             file << '\n';

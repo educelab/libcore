@@ -222,6 +222,75 @@ TEST_F(OBJTest, PositionsWithNormals)
     EXPECT_NEAR((*dst.vertex(2).normal)[2], 1.f, 1e-5f);
 }
 
+// A WithNormal mesh whose vertices carry no normals must not emit any vn
+// lines (no fabricated "vn 0 0 0") nor normal refs in f lines.
+TEST_F(OBJTest, NormalCapableButNoneSet_EmitsNoNormals)
+{
+    NormalMesh src;
+    src.insert_vertex(0.f, 0.f, 0.f);
+    src.insert_vertex(1.f, 0.f, 0.f);
+    src.insert_vertex(0.f, 1.f, 0.f);
+    src.insert_face(0u, 1u, 2u);  // no normals set
+
+    const auto path = obj("no_normals");
+    write_obj(path, src);
+
+    std::ifstream f(path);
+    std::string line;
+    while (std::getline(f, line)) {
+        EXPECT_NE(line.rfind("vn ", 0), 0u)
+            << "Unexpected vn line for normal-less mesh: " << line;
+        if (line.rfind("f ", 0) == 0) {
+            EXPECT_EQ(line.find("//"), std::string::npos)
+                << "Unexpected normal ref in face line: " << line;
+        }
+    }
+
+    NormalMesh dst;
+    read_obj(path, dst);
+    ASSERT_EQ(dst.num_vertices(), 3u);
+    EXPECT_FALSE(dst.vertex(0).normal.has_value());
+    EXPECT_FALSE(dst.vertex(1).normal.has_value());
+    EXPECT_FALSE(dst.vertex(2).normal.has_value());
+}
+
+// Only some vertices carry normals: the vn pool is compact (one vn per
+// normalled vertex, not per vertex), and f lines reference normals only for
+// the corners whose vertex has one.
+TEST_F(OBJTest, PartialNormals_CompactPoolAndSelectiveRefs)
+{
+    NormalMesh src;
+    src.insert_vertex(0.f, 0.f, 0.f);
+    src.insert_vertex(1.f, 0.f, 0.f);
+    src.insert_vertex(0.f, 1.f, 0.f);
+    src.vertex(0).normal = Vec3f{0, 0, 1};
+    src.vertex(2).normal = Vec3f{1, 0, 0};  // vertex 1 has no normal
+    src.insert_face(0u, 1u, 2u);
+
+    const auto path = obj("partial_normals");
+    write_obj(path, src);
+
+    std::ifstream f(path);
+    std::string line;
+    std::size_t vn_count = 0;
+    while (std::getline(f, line)) {
+        if (line.rfind("vn ", 0) == 0) {
+            ++vn_count;
+        }
+    }
+    EXPECT_EQ(vn_count, 2u) << "Compact pool should emit exactly 2 vn lines";
+
+    // Round-trip: v0 -> vn 1, v2 -> vn 2; v1 keeps no normal.
+    NormalMesh dst;
+    read_obj(path, dst);
+    ASSERT_EQ(dst.num_vertices(), 3u);
+    ASSERT_TRUE(dst.vertex(0).normal.has_value());
+    EXPECT_FALSE(dst.vertex(1).normal.has_value());
+    ASSERT_TRUE(dst.vertex(2).normal.has_value());
+    EXPECT_NEAR((*dst.vertex(0).normal)[2], 1.f, 1e-5f);
+    EXPECT_NEAR((*dst.vertex(2).normal)[0], 1.f, 1e-5f);
+}
+
 TEST_F(OBJTest, PositionsWithColors_InlineRGB)
 {
     ColorMesh src;
