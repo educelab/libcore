@@ -478,16 +478,64 @@ TEST_F(OBJTest, PositionsWithUVs_MultiChart_PerChartUsemtl)
     const auto path = obj("multicharts");
     write_obj(path, src_mesh, src_uv, tex_paths);
 
-    // Verify file contains two usemtl directives
+    // Walk the file tracking which usemtl each face falls under. It is not
+    // enough to count the directives: we must confirm faces are *grouped*
+    // under the correct material. Chart 0's UVs occupy vt pool 1..3 (1-based)
+    // and chart 1's occupy vt pool 4..6, so the vt index on each face corner
+    // tells us which chart that face belongs to.
     std::ifstream f(path);
     std::string line;
-    int usemtl_count = 0;
+    std::vector<std::string> usemtls;        // directives, in file order
+    std::string current_mtl;                 // material in effect for faces
+    // For each material, the set of vt pool indices (1-based) its faces use.
+    std::vector<std::pair<std::string, std::vector<std::size_t>>> faces_under;
     while (std::getline(f, line)) {
         if (line.rfind("usemtl", 0) == 0) {
-            ++usemtl_count;
+            const auto toks = split(std::string_view(line));
+            ASSERT_GE(toks.size(), 2u) << "usemtl missing material name";
+            current_mtl = std::string(toks[1]);
+            usemtls.push_back(current_mtl);
+        } else if (line.rfind("f ", 0) == 0) {
+            EXPECT_FALSE(current_mtl.empty())
+                << "face emitted before any usemtl: " << line;
+            const auto toks = split(std::string_view(line));
+            std::vector<std::size_t> vts;
+            for (std::size_t i = 1; i < toks.size(); ++i) {
+                const auto ref   = std::string(toks[i]);
+                const auto slash = ref.find('/');
+                ASSERT_NE(slash, std::string::npos)
+                    << "face corner missing vt ref: " << line;
+                vts.push_back(std::stoul(ref.substr(slash + 1)));
+            }
+            faces_under.emplace_back(current_mtl, std::move(vts));
         }
     }
-    EXPECT_EQ(usemtl_count, 2);
+
+    // Exactly two materials, declared in chart-index order.
+    ASSERT_EQ(usemtls.size(), 2u);
+    EXPECT_EQ(usemtls[0], "material0");
+    EXPECT_EQ(usemtls[1], "material1");
+
+    // Exactly two faces, each grouped under the material for its chart:
+    // face on chart 0 → material0 with vt refs in 1..3; chart 1 → material1
+    // with vt refs in 4..6.
+    ASSERT_EQ(faces_under.size(), 2u);
+    for (const auto& [mtl, vts] : faces_under) {
+        ASSERT_EQ(vts.size(), 3u);
+        if (mtl == "material0") {
+            for (const auto vt : vts) {
+                EXPECT_GE(vt, 1u);
+                EXPECT_LE(vt, 3u) << "chart-0 face references chart-1 vt " << vt;
+            }
+        } else if (mtl == "material1") {
+            for (const auto vt : vts) {
+                EXPECT_GE(vt, 4u) << "chart-1 face references chart-0 vt " << vt;
+                EXPECT_LE(vt, 6u);
+            }
+        } else {
+            ADD_FAILURE() << "face grouped under unexpected material: " << mtl;
+        }
+    }
 
     // Round-trip into a WithChart UVMap
     Mesh3f dst_mesh;
@@ -498,9 +546,13 @@ TEST_F(OBJTest, PositionsWithUVs_MultiChart_PerChartUsemtl)
     ASSERT_EQ(dst_textures.size(), 2u);
     EXPECT_EQ(dst_textures[0], tex_paths[0]);
     EXPECT_EQ(dst_textures[1], tex_paths[1]);
-    // Chart indices recovered
-    EXPECT_EQ(dst_uv.at(dst_uv.get(0, 0)).chart, 0u);
-    EXPECT_EQ(dst_uv.at(dst_uv.get(1, 0)).chart, 1u);
+    // Chart indices recovered for every corner of both faces, not just corner 0.
+    for (std::size_t corner = 0; corner < 3; ++corner) {
+        EXPECT_EQ(dst_uv.at(dst_uv.get(0, corner)).chart, 0u)
+            << "face 0 corner " << corner << " should be on chart 0";
+        EXPECT_EQ(dst_uv.at(dst_uv.get(1, corner)).chart, 1u)
+            << "face 1 corner " << corner << " should be on chart 1";
+    }
 }
 
 TEST_F(OBJTest, ReadMultiChart_ChartIndicesOnlyWhenHasChart)

@@ -1174,6 +1174,13 @@ void write_ply(
  * @c "comment TextureFile <path>" line immediately after @c "format ascii 1.0"
  * (MeshLab convention).
  *
+ * @note PLY write supports only a **single** texture/chart: there is no
+ *       @c std::vector<std::filesystem::path> overload as there is for
+ *       @c write_obj, because multi-texture PLY has no well-supported ecosystem
+ *       standard outside MeshLab. Multi-chart meshes should be written to OBJ.
+ *       (@c read_ply will still recover multiple @c "comment TextureFile" lines
+ *       into its @c texture_paths out-parameter when reading such files.)
+ *
  * @throws std::runtime_error if the file cannot be opened
  */
 template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
@@ -1252,6 +1259,11 @@ void read_ply(
  * back to legacy per-vertex @c s / @c t scalar properties when texcoord is
  * absent. @c comment @c TextureFile lines from the PLY header are appended to
  * @p texture_paths (empty vector if none present).
+ *
+ * @note Multiple @c "comment TextureFile" lines are recovered here for
+ *       compatibility with multi-chart files produced by other tools, but
+ *       @c write_ply only ever emits a single texture path — see the
+ *       single-texture @c write_ply overload.
  *
  * @throws std::runtime_error if the file cannot be opened or is not a PLY file
  */

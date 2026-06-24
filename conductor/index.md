@@ -15,6 +15,7 @@ Navigation hub for project context.
 - [Mesh Class Redesign](./tracks/mesh-redesign_20260320/index.md) — `mesh-redesign_20260320` ✓ complete
 - [UVMap](./tracks/uv-map_20260323/index.md) — `uv-map_20260323` ✓ complete
 - [Mesh IO](./tracks/mesh-io_20260323/index.md) — `mesh-io_20260323` ✓ complete
+- [Multi-Chart PLY Write Support](./tracks/ply-multichart_20260624/index.md) — `ply-multichart_20260624` ⋯ pending
 
 ## Getting Started
 
