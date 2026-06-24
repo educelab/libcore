@@ -8,7 +8,6 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
 # Modules
 include(FetchContent)
-include(CheckCXXSourceCompiles)
 include(CMakeDependentOption)
 
 # Get Git hash
@@ -22,13 +21,16 @@ else()
 endif()
 
 # Extra compile definitions
-include(CheckToNumericFP)
+include(CheckCharconvFP)
 
 # Build library
 set(public_hdrs
     include/educelab/core.hpp
     include/educelab/core/Version.hpp
     include/educelab/core/io/ImageIO.hpp
+    include/educelab/core/io/MeshIO.hpp
+    include/educelab/core/io/MeshIO_OBJ.hpp
+    include/educelab/core/io/MeshIO_PLY.hpp
     include/educelab/core/types/Color.hpp
     include/educelab/core/types/Image.hpp
     include/educelab/core/types/Mat.hpp
@@ -38,6 +40,7 @@ set(public_hdrs
     include/educelab/core/types/Uuid.hpp
     include/educelab/core/types/Vec.hpp
     include/educelab/core/utils/Caching.hpp
+    include/educelab/core/utils/MeshUtils.hpp
     include/educelab/core/utils/Filesystem.hpp
     include/educelab/core/utils/Iteration.hpp
     include/educelab/core/utils/LinearAlgebra.hpp
@@ -62,6 +65,9 @@ target_include_directories(core
         $<INSTALL_INTERFACE:include>
 )
 target_compile_features(core PUBLIC cxx_std_17)
+if(EDUCE_CORE_CHARCONV_DEFS)
+    target_compile_definitions(core PUBLIC ${EDUCE_CORE_CHARCONV_DEFS})
+endif()
 set_target_properties(core
     PROPERTIES
         PUBLIC_HEADER "${public_hdrs}"

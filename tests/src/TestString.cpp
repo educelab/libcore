@@ -127,10 +127,81 @@ TEST(String, TrimCopy)
     EXPECT_EQ(result, "This is only a test.");
 }
 
+TEST(String, SplitInto)
+{
+    // Setup expected
+    std::vector<std::string_view> expected{"a", "b", "c"};
+
+    // Result vector
+    std::vector<std::string_view> result;
+
+    // Space separated (predicate)
+    split("a b c", result, [](char c) {
+        thread_local std::locale loc;
+        return std::isspace(c, loc);
+    });
+    EXPECT_EQ(result, expected);
+    result.clear();
+
+    // Space separated (implicit)
+    split("a b c", result);
+    EXPECT_EQ(result, expected);
+    result.clear();
+
+    // Multiple spaces (implicit)
+    split("  a  b  c  ", result);
+    EXPECT_EQ(result, expected);
+    result.clear();
+
+    // Space separated (explicit)
+    split("a b c", result, " ");
+    EXPECT_EQ(result, expected);
+    result.clear();
+
+    // Comma separated
+    split("a,b,c", result, ",");
+    EXPECT_EQ(result, expected);
+    result.clear();
+
+    // Multi-delimited
+    split("a+b-c", result, "+", "-");
+    EXPECT_EQ(result, expected);
+    result.clear();
+
+    // Multi-character delimiter
+    split("a b->c", result, " ", "->");
+    EXPECT_EQ(result, expected);
+    result.clear();
+
+    // Multi-character, ignore nested
+    split("a-b->c", result, "-", "->");
+    EXPECT_EQ(result, expected);
+    result.clear();
+
+    // Overlapping will only consume first delim
+    expected = {"a", "b", ">c"};
+    split("a--b-->c", result, "--", "->");
+    EXPECT_EQ(result, expected);
+    result.clear();
+
+    // Sentence
+    expected = {"This", "is", "only", "a", "test."};
+    split("This is only a test.", result);
+    EXPECT_EQ(result, expected);
+    result.clear();
+}
+
 TEST(String, Split)
 {
     // Setup expected
     std::vector<std::string_view> expected{"a", "b", "c"};
+
+    // Space separated (predicate)
+    auto result = split("a b c", [](char c) {
+        thread_local std::locale loc;
+        return std::isspace(c, loc);
+    });
+    EXPECT_EQ(result, expected);
 
     // Space separated (implicit)
     EXPECT_EQ(split("a b c"), expected);
@@ -160,6 +231,45 @@ TEST(String, Split)
     // Sentence
     expected = {"This", "is", "only", "a", "test."};
     EXPECT_EQ(split("This is only a test."), expected);
+}
+
+TEST(String, SplitEdgeCases)
+{
+    std::vector<std::string_view> result;
+
+    // Empty string
+    split("", result);
+    EXPECT_TRUE(result.empty());
+    EXPECT_TRUE(split("").empty());
+
+    // No delimiters found
+    split("abc", result, ",");
+    EXPECT_EQ(result, std::vector<std::string_view>{"abc"});
+    EXPECT_EQ(split("abc", ","), std::vector<std::string_view>{"abc"});
+
+    // Leading/trailing/consecutive delimiters (whitespace/predicate)
+    // Should skip all empty tokens
+    std::vector<std::string_view> expected{"a", "b"};
+    split("  a  b  ", result);
+    EXPECT_EQ(result, expected);
+    EXPECT_EQ(split("  a  b  "), expected);
+
+    // Leading/trailing/consecutive delimiters (string)
+    split("--a--b--", result, "-");
+    EXPECT_EQ(result, expected);
+    EXPECT_EQ(split("--a--b--", "-"), expected);
+
+    // Predicate always true
+    split("abc", result, [](char) { return true; });
+    EXPECT_TRUE(result.empty());
+
+    // Predicate always false
+    split("abc", result, [](char) { return false; });
+    EXPECT_EQ(result, std::vector<std::string_view>{"abc"});
+
+    // No delimiters provided to variadic split
+    // (Note: this should compile and return the whole string as one token)
+    EXPECT_EQ(split("abc"), std::vector<std::string_view>{"abc"});
 }
 
 TEST(String, Partition)

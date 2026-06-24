@@ -28,11 +28,54 @@ struct DefaultUVTraits {
  * @code
  * using MyUVMap = UVMap<float, 2, traits::WithChart>;
  * @endcode
+ *
+ * @note Unlike the optional-bearing vertex traits, @c chart is a plain
+ * defaulted value (@c 0 = first chart) with no @em unset state, so I/O writers
+ * need no @c has_any_&lt;trait&gt; guard for it. See the trait-author
+ * convention on @c educelab::has_any_normal.
  */
 struct WithChart {
     /** @brief Atlas chart index */
     std::size_t chart{0};
 };
+
+/**
+ * @brief Detect whether a UV map type @c UVMapT carries per-coordinate chart
+ *        indices
+ *
+ * Resolves to @c std::true_type when @c UVMapT::Coordinate has a @c .chart
+ * member (i.e. @c UVMapT is instantiated with @ref traits::WithChart),
+ * @c std::false_type otherwise.
+ *
+ * I/O functions use this trait via @c if @c constexpr to conditionally
+ * populate or preserve chart indices. @c write_obj with a @c
+ * std::vector<std::filesystem::path> also enforces it at compile time via
+ * @c static_assert:
+ *
+ * @code
+ * // Opt in by instantiating UVMap with traits::WithChart:
+ * using MyUVMap = UVMap<float, 2, traits::WithChart>;
+ *
+ * // Detected automatically at compile time:
+ * if constexpr (traits::has_chart<UVMapT>::value) {
+ *     // OBJ: populate chart indices from usemtl group ordering
+ * }
+ * @endcode
+ *
+ * @tparam UVMapT UVMap type to inspect
+ */
+template <typename UVMapT, typename = void>
+struct has_chart : std::false_type {
+};
+
+/** @cond */
+template <typename UVMapT>
+struct has_chart<
+    UVMapT,
+    std::void_t<decltype(std::declval<typename UVMapT::Coordinate>().chart)>>
+    : std::true_type {
+};
+/** @endcond */
 
 }  // namespace traits
 

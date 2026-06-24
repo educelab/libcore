@@ -353,3 +353,41 @@ TEST(Mesh, VertexNormalBoundaryVertex)
         EXPECT_NEAR(vn[i], fn[i], 1e-5f);
     }
 }
+
+TEST(Mesh, HasAnyNormal)
+{
+    // A vertex type without the normal trait is always false
+    Mesh3f plain;
+    plain.insert_vertex(0, 0, 0);
+    EXPECT_FALSE(has_any_normal(plain));
+
+    // Normal-capable but none set: false (runtime, unlike has_normal)
+    TestMesh mesh;
+    const auto v0 = mesh.insert_vertex(0, 0, 0);
+    const auto v1 = mesh.insert_vertex(1, 0, 0);
+    EXPECT_FALSE(has_any_normal(mesh));
+
+    // Setting a single vertex normal flips it to true
+    mesh.vertex(v1).normal = Vec3f{0, 0, 1};
+    EXPECT_TRUE(has_any_normal(mesh));
+    (void)v0;
+}
+
+TEST(Mesh, HasAnyColor)
+{
+    // A vertex type without the color trait is always false
+    Mesh3f plain;
+    plain.insert_vertex(0, 0, 0);
+    EXPECT_FALSE(has_any_color(plain));
+
+    // Color-capable but none set: false (runtime, unlike has_color)
+    TestMesh mesh;
+    const auto v0 = mesh.insert_vertex(0, 0, 0);
+    const auto v1 = mesh.insert_vertex(1, 0, 0);
+    EXPECT_FALSE(has_any_color(mesh));
+
+    // Setting a single vertex color flips it to true
+    mesh.vertex(v1).color = Color{uint8_t(255)};
+    EXPECT_TRUE(has_any_color(mesh));
+    (void)v0;
+}

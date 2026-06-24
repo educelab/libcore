@@ -47,3 +47,8 @@ docs/html/
 
 # CLion
 cmake-build*/
+
+.cache/
+
+# Agents
+.claude/settings.local.json

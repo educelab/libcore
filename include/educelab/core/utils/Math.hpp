@@ -57,12 +57,30 @@ template <typename T1, typename T2>
 auto cross(const T1& a, const T2& b) -> T1
 {
     if (std::size(a) != 3 or std::size(b) != 3) {
-        throw std::invalid_argument("Inputs have mismatched dimensions");
+        throw std::invalid_argument("Inputs must be 3-dimensional");
     }
     T1 c;
     c[0] = a[1] * b[2] - a[2] * b[1];
     c[1] = a[2] * b[0] - a[0] * b[2];
     c[2] = a[0] * b[1] - a[1] * b[0];
+    return c;
+}
+
+/** @brief Vector cross product for initializer list */
+template <
+    typename T1,
+    typename T2,
+    std::enable_if_t<std::is_arithmetic_v<T2>, bool> = true>
+auto cross(const T1& a, const std::initializer_list<T2>& b) -> T1
+{
+    if (std::size(a) != 3 or std::size(b) != 3) {
+        throw std::invalid_argument("Inputs must be 3-dimensional");
+    }
+    auto* bp = b.begin();
+    T1 c;
+    c[0] = a[1] * bp[2] - a[2] * bp[1];
+    c[1] = a[2] * bp[0] - a[0] * bp[2];
+    c[2] = a[0] * bp[1] - a[1] * bp[0];
     return c;
 }
 
@@ -75,24 +93,6 @@ auto schur_product(const T1& a, const T2& b) -> T1
         std::begin(a), std::end(a), std::begin(b), std::begin(res),
         std::multiplies<typename T1::value_type>());
     return res;
-}
-
-/** @brief Vector cross product for initializer list */
-template <
-    typename T1,
-    typename T2,
-    std::enable_if_t<std::is_arithmetic_v<T2>, bool> = true>
-auto cross(const T1& a, const std::initializer_list<T2>& b) -> T1
-{
-    struct InitList : public std::initializer_list<T2> {
-        using Base = std::initializer_list<T2>;
-        InitList(const Base& b) : Base{b} {}
-        auto operator[](std::size_t idx) const -> const T2&
-        {
-            return *(Base::begin() + idx);
-        }
-    };
-    return cross(a, InitList{b});
 }
 
 /** @brief Norm type enumeration */

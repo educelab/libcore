@@ -64,6 +64,22 @@ following files can be installed in this way:
 - `types/UVMap.hpp`
     - Requires:
       - `types/Vec.hpp`
+- `utils/MeshUtils.hpp`
+    - Requires:
+      - `types/Mesh.hpp`
+      - `types/UVMap.hpp`
+- `io/MeshIO_OBJ.hpp`
+    - Requires:
+      - `types/Mesh.hpp`
+      - `types/UVMap.hpp`
+      - `utils/String.hpp`
+- `io/MeshIO_PLY.hpp`
+    - Requires:
+      - `types/Mesh.hpp`
+      - `types/UVMap.hpp`
+      - `utils/String.hpp`
+- `io/MeshIO.hpp`
+    - Convenience facade; includes `MeshIO_OBJ.hpp` and `MeshIO_PLY.hpp`
 
 
 ## Usage
@@ -199,6 +215,50 @@ std::cout << charted.get_coordinate(0, 0).chart << "\n";  // 1
 
 See [examples/MeshExample.cpp](examples/MeshExample.cpp) for more usage examples.
 
+### Mesh IO
+
+Read and write OBJ and PLY files using the convenience facade:
+
+```c++
+#include "educelab/core/io/MeshIO.hpp"
+
+Mesh<float, 3> mesh;
+
+// Read — format detected from file extension (.obj or .ply)
+read_mesh("model.obj", mesh);
+
+// Write
+write_mesh("output.ply", mesh);
+```
+
+Read and write with UV maps and texture paths:
+
+```c++
+#include "educelab/core/io/MeshIO.hpp"
+
+Mesh<float, 3> mesh;
+UVMap<float, 2> uvmap;
+std::vector<std::filesystem::path> texture_paths;
+
+// Read UV coords and texture path references
+read_mesh("model.obj", mesh, uvmap, texture_paths);
+
+// Write with a single texture path (OBJ emits .mtl; PLY emits comment TextureFile)
+write_mesh("output.obj", mesh, uvmap, texture_paths[0]);
+```
+
+Vertex traits are detected at compile time — normals and colors are read/written
+automatically when the vertex type includes them:
+
+```c++
+struct MyTraits : traits::WithNormal<float, 3>, traits::WithColor {};
+using RichMesh = Mesh<float, 3, MyTraits>;
+
+RichMesh mesh;
+read_mesh("model.ply", mesh);  // normals and colors populated if present in file
+write_mesh("output.ply", mesh); // normals and colors included in output
+```
+
 ### Image class
 
 ```c++
@@ -258,49 +318,86 @@ std::cout << trim_left("  left") << "\n";      // "left"
 std::cout << trim_right("right  ") << "\n";    // "right"
 std::cout << trim("  center  ") << "\n";       // "center"
 
-// Conversion to numeric types
+// Split on whitespace (any run treated as one delimiter)
+auto tokens = split("  v  1.0\t2.0  3.0  ");  // {"v", "1.0", "2.0", "3.0"}
+
+// Split with a predicate (single-pass, no allocation)
+auto parts = split("1/2/3", [](char c) { return c == '/'; }); // {"1", "2", "3"}
+
+// Conversion from string to numeric types
 std::cout << to_numeric<int>("3.14") << "\n";   // 3
 std::cout << to_numeric<float>("3.14") << "\n"; // 3.14
+
+// Conversion from numeric to string (locale-independent)
+std::cout << to_string(3.14f) << "\n";          // "3.14"
+
+// Buffer-reusing variant for hot paths (no heap allocation)
+std::array<char, 128> buf;
+file << to_string_view(buf, x) << ' ' << to_string_view(buf, y) << '\n';
 ```
 
 See [examples/StringExample.cpp](examples/StringExample.cpp) for more usage
-examples.å
+examples.
 
-#### A note on `to_numeric` compilation
-The default `to_numeric` implementation relies upon `std::from_chars`.
-However, many compilers do not provide implementations for this function for 
-floating point types. In these circumstances, you may fall back to a 
-`std::sto*`-based `to_numeric` implementation by adding the 
-`EDUCE_CORE_NEED_TO_NUMERIC_FP` compiler definition. When using this project 
-with CMake, this definition will automatically be added when you link against 
-the `educelab::core` target. 
+#### A note on `to_numeric` and `to_string[_view]` compilation
 
-**(v0.2.1 and later)** If not linking against the target (i.e. when using the 
-library as header-only), you may alternatively check the result of the 
-`EDUCE_CORE_NEED_TO_NUMERIC_FP` CMake cache variable and set the definition 
-manually in your own project.
+`to_numeric` uses `std::from_chars` for string-to-number conversion.
+`to_string` and `to_string_view` use `std::to_chars` for number-to-string
+conversion. Both were introduced in C++17 but floating-point support arrived
+later and is gated on the runtime library version (e.g. macOS 13.3+).
+
+CMake probes for both at configure time via `CheckCharconvFP.cmake` and reports
+the results as compile definitions (only emitted when the corresponding
+function+type combination is absent):
+
+- **`from_chars` fallbacks** — `to_numeric` falls back to `std::stof` /
+  `std::stod` / `std::stold` for any type whose definition is set:
+  - `EDUCE_CORE_NEED_FROM_CHARS_FLOAT`
+  - `EDUCE_CORE_NEED_FROM_CHARS_DOUBLE`
+  - `EDUCE_CORE_NEED_FROM_CHARS_LONG_DOUBLE`
+- **`to_chars` fallbacks** — `to_string` / `to_string_view` fall back to
+  `std::snprintf` for any type whose definition is set:
+  - `EDUCE_CORE_NEED_TO_CHARS_FLOAT`
+  - `EDUCE_CORE_NEED_TO_CHARS_DOUBLE`
+  - `EDUCE_CORE_NEED_TO_CHARS_LONG_DOUBLE`
+
+These definitions are attached to the `educelab::core` target as `PUBLIC`
+compile definitions, so they propagate automatically to any target that links
+against it:
 
 ```cmake
 # Import libcore
 FetchContent_Declare(
     libcore
     GIT_REPOSITORY https://github.com/educelab/libcore.git
-    GIT_TAG v0.2.1
+    GIT_TAG v0.3.0
     EXCLUDE_FROM_ALL
 )
 FetchContent_MakeAvailable(libcore)
 
-# Add an executable which has access to the libcore headers
+# Definitions are propagated automatically — no extra step needed.
 add_executable(foo foo.cpp)
-target_include_directories(foo
-    PUBLIC
-        $<BUILD_INTERFACE:${libcore_SOURCE_DIR}/include>
-)
+target_link_libraries(foo PRIVATE educelab::core)
+```
 
-# Conditionally add the to_numeric compiler definition
-if(EDUCE_CORE_NEED_TO_NUMERIC_FP)
-    target_compile_definitions(foo PRIVATE EDUCE_CORE_NEED_TO_NUMERIC_FP)
-endif()
+Alternatively, header-only functionality can be compiled into your binary 
+without linking against the library by adding the libcore's include directory 
+to your target's set of include directories:
+```cmake
+target_include_directories(foo
+    $<BUILD_INTERFACE:${libcore_SOURCE_DIR}/include>
+)
+```
+
+> [!NOTE]
+> This means that `#include <educelab/core/{Header}.hpp` must only appear in 
+> `.cpp` files.
+
+If using the headers without linking against the CMake target, you must also 
+manually set any required definitions:
+
+```cmake
+target_compile_definitions(foo PRIVATE EDUCE_CORE_NEED_FROM_CHARS_LONG_DOUBLE)
 ```
 
 ### Data caching

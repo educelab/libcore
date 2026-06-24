@@ -20,6 +20,7 @@ set(tests
     src/TestMat.cpp
     src/TestMath.cpp
     src/TestMesh.cpp
+    src/TestMeshIO.cpp
     src/TestSignals.cpp
     src/TestString.cpp
     src/TestUuid.cpp

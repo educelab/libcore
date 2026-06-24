@@ -2,16 +2,15 @@
   "id": "mesh-io_20260323",
   "title": "Mesh IO",
   "type": "feature",
-  "status": "blocked",
+  "status": "complete",
   "created": "2026-03-23T00:00:00Z",
-  "updated": "2026-03-23T00:00:00Z",
-  "blockedBy": ["mesh-redesign_20260320", "uv-map_20260323"],
+  "updated": "2026-06-24T00:00:00Z",
   "phases": {
-    "total": 3,
-    "completed": 0
+    "total": 7,
+    "completed": 7
   },
   "tasks": {
-    "total": 14,
-    "completed": 0
+    "total": 39,
+    "completed": 39
   }
 }

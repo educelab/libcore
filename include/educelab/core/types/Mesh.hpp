@@ -6,7 +6,7 @@
 #include <memory>
 #include <optional>
 #include <stdexcept>
-#include <variant>
+#include <type_traits>
 #include <vector>
 
 #include "educelab/core/types/Color.hpp"
@@ -25,6 +25,10 @@ namespace traits
  * per-vertex normal storage. Detected at compile time by I/O functions
  * via @c if @c constexpr and the C++17 detection idiom.
  *
+ * @note The @c std::optional storage has an @em unset state that I/O writers
+ * must not fabricate; see the trait-author convention documented on
+ * @ref has_any_normal.
+ *
  * @tparam T Numeric type of the normal vector
  * @tparam Dims Number of dimensions of the normal vector
  */
@@ -38,16 +42,86 @@ struct WithNormal {
 };
 
 /**
+ * @brief Detect whether a vertex type @c V carries a per-vertex normal
+ *
+ * Resolves to @c std::true_type when @c V has a @c .normal member (i.e. @c V
+ * inherits @ref traits::WithNormal), @c std::false_type otherwise.
+ *
+ * I/O functions use this trait via @c if @c constexpr to conditionally read
+ * or write normal data without requiring a separate function overload:
+ *
+ * @code
+ * // Opt in by composing WithNormal into VertexTraits:
+ * struct MyTraits : traits::WithNormal<float, 3> {};
+ * using MyMesh = Mesh<float, 3, MyTraits>;
+ *
+ * // Detected automatically at compile time:
+ * if constexpr (has_normal<typename MeshT::Vertex>::value) {
+ *     // read/write vn lines
+ * }
+ * @endcode
+ *
+ * @tparam V Vertex type to inspect
+ */
+template <typename V, typename = void>
+struct has_normal : std::false_type {
+};
+
+/** @cond */
+template <typename V>
+struct has_normal<V, std::void_t<decltype(std::declval<V>().normal)>>
+    : std::true_type {
+};
+/** @endcond */
+
+/**
  * @brief Opt-in vertex color mixin
  *
  * Compose into a custom traits struct via multiple inheritance to add
  * per-vertex color storage. Detected at compile time by I/O functions
  * via @c if @c constexpr and the C++17 detection idiom.
+ *
+ * @note @ref Color has an @em unset state that I/O writers must not fabricate;
+ * see the trait-author convention documented on @ref has_any_normal.
  */
 struct WithColor {
     /** @brief Vertex color */
     Color color;
 };
+
+/**
+ * @brief Detect whether a vertex type @c V carries a per-vertex color
+ *
+ * Resolves to @c std::true_type when @c V has a @c .color member (i.e. @c V
+ * inherits @ref traits::WithColor), @c std::false_type otherwise.
+ *
+ * I/O functions use this trait via @c if @c constexpr to conditionally read
+ * or write inline vertex color data:
+ *
+ * @code
+ * // Opt in by composing WithColor into VertexTraits:
+ * struct MyTraits : traits::WithColor {};
+ * using MyMesh = Mesh<float, 3, MyTraits>;
+ *
+ * // Detected automatically at compile time:
+ * if constexpr (has_color<typename MeshT::Vertex>::value) {
+ *     // OBJ: read/write inline 'v x y z r g b' lines
+ *     // PLY: read/write 'red green blue' properties
+ * }
+ * @endcode
+ *
+ * @tparam V Vertex type to inspect
+ */
+template <typename V, typename = void>
+struct has_color : std::false_type {
+};
+
+/** @cond */
+template <typename V>
+struct has_color<V, std::void_t<decltype(std::declval<V>().color)>>
+    : std::true_type {
+};
+/** @endcond */
 
 /**
  * @brief Default traits for Mesh vertices
@@ -103,10 +177,6 @@ public:
         explicit Vertex(Args... args) : Vec<T, Dims>{args...}
         {
         }
-
-        // Compound-assignment and binary operators are defined on Vertex so
-        // that both return Vertex / Vertex& rather than Vec / Vec&, preserving
-        // trait fields. Vec's equivalents would silently slice any trait data.
 
         /** Inherit value-assignment operator */
         using Vec<T, Dims>::operator=;
@@ -221,6 +291,12 @@ public:
         return idx;
     }
 
+    /** @brief Number of vertices in the mesh */
+    [[nodiscard]] auto num_vertices() const noexcept -> std::size_t
+    {
+        return vertices_.size();
+    }
+
     /** @brief Get a vertex by index */
     [[nodiscard]] auto vertex(std::size_t idx) const -> const Vertex&
     {
@@ -261,6 +337,12 @@ public:
         face_normal_cache_.emplace_back(std::nullopt);
         adjacency_valid_ = false;
         return idx;
+    }
+
+    /** @brief Number of faces in the mesh */
+    [[nodiscard]] auto num_faces() const noexcept -> std::size_t
+    {
+        return faces_.size();
     }
 
     /** @brief Get a face by index */
@@ -319,6 +401,16 @@ public:
             face_normal_cache_[idx] = normalize((v1 - v0).cross(v2 - v0));
         }
         return *face_normal_cache_[idx];
+    }
+
+    /** @brief Empty the mesh of all vertices and faces */
+    auto clear() -> void
+    {
+        vertices_.clear();
+        faces_.clear();
+        face_normal_cache_.clear();
+        adjacency_.clear();
+        adjacency_valid_ = false;
     }
 
 private:
@@ -391,6 +483,89 @@ template <
         weighted += mesh.face_normal(fi) * angle;
     }
     return normalize(weighted);
+}
+
+/**
+ * @brief Whether @p mesh actually carries any per-vertex normal
+ *
+ * Runtime companion to the compile-time @ref traits::has_normal trait:
+ * @c has_normal reports whether the vertex type @em can hold a normal, while
+ * @c has_any_normal reports whether at least one vertex @em does. Always
+ * @c false when the vertex type has no normal member.
+ *
+ * I/O writers use this to avoid emitting fabricated zero normals for a
+ * normal-capable mesh that has none set (OBJ would otherwise write
+ * @c "vn 0 0 0"; PLY would declare @c nx/ny/nz and write zeros).
+ *
+ * @par Convention for trait authors
+ * This is one instance of a general rule. A vertex/coordinate trait whose
+ * storage carries a distinct @em unset state — an @c std::optional member, or
+ * a type like @ref Color with its own empty state — must not be fabricated on
+ * write. When you add such a trait, provide a @c has_any_&lt;trait&gt; runtime
+ * helper alongside it (see @ref has_any_normal, @ref has_any_color) and gate
+ * the I/O writers on it, so a capable-but-empty mesh round-trips as empty
+ * rather than acquiring fabricated defaults (zeros, black, etc.). Traits whose
+ * storage is a plain defaulted value where the default is itself valid (e.g.
+ * @ref traits::WithChart's @c std::size_t @c chart, default @c 0 = first
+ * chart) need no such guard — there is no unset state to misrepresent.
+ *
+ * @tparam T   Numeric type of the mesh
+ * @tparam Dims Mesh dimensions
+ * @tparam VertexTraits Vertex traits type
+ */
+template <
+    typename T,
+    std::size_t Dims,
+    typename VertexTraits,
+    std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
+[[nodiscard]] auto has_any_normal(const Mesh<T, Dims, VertexTraits>& mesh)
+    -> bool
+{
+    using Vertex = typename Mesh<T, Dims, VertexTraits>::Vertex;
+    if constexpr (traits::has_normal<Vertex>::value) {
+        for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
+            if (mesh.vertex(vi).normal.has_value()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * @brief Whether @p mesh actually carries any per-vertex color
+ *
+ * Runtime companion to the compile-time @ref traits::has_color trait:
+ * @c has_color reports whether the vertex type @em can hold a color, while
+ * @c has_any_color reports whether at least one vertex @em does. Always
+ * @c false when the vertex type has no color member.
+ *
+ * I/O writers use this to avoid emitting fabricated black for a color-capable
+ * mesh that has none set (PLY would otherwise declare @c red/green/blue and
+ * write @c "0 0 0"). OBJ gates inline RGB per vertex instead, since its
+ * @c v lines carry color positionally and can vary per line.
+ *
+ * @tparam T   Numeric type of the mesh
+ * @tparam Dims Mesh dimensions
+ * @tparam VertexTraits Vertex traits type
+ */
+template <
+    typename T,
+    std::size_t Dims,
+    typename VertexTraits,
+    std::enable_if_t<std::is_arithmetic_v<T>, bool> = true>
+[[nodiscard]] auto has_any_color(const Mesh<T, Dims, VertexTraits>& mesh)
+    -> bool
+{
+    using Vertex = typename Mesh<T, Dims, VertexTraits>::Vertex;
+    if constexpr (traits::has_color<Vertex>::value) {
+        for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
+            if (mesh.vertex(vi).color.has_value()) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 }  // namespace educelab
