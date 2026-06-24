@@ -380,8 +380,21 @@ add_executable(foo foo.cpp)
 target_link_libraries(foo PRIVATE educelab::core)
 ```
 
-If using the headers without linking against the CMake target, manually set 
-your required definitions:
+Alternatively, header-only functionality can be compiled into your binary 
+without linking against the library by adding the libcore's include directory 
+to your target's set of include directories:
+```cmake
+target_include_directories(foo
+    $<BUILD_INTERFACE:${libcore_SOURCE_DIR}/include>
+)
+```
+
+> [!NOTE]
+> This means that `#include <educelab/core/{Header}.hpp` must only appear in 
+> `.cpp` files.
+
+If using the headers without linking against the CMake target, you must also 
+manually set any required definitions:
 
 ```cmake
 target_compile_definitions(foo PRIVATE EDUCE_CORE_NEED_FROM_CHARS_LONG_DOUBLE)
