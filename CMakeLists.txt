@@ -9,6 +9,7 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 # Modules
 include(FetchContent)
 include(CMakeDependentOption)
+include(GNUInstallDirs)
 
 # Get Git hash
 include(GetGitRevisionDescription)
@@ -68,17 +69,19 @@ target_compile_features(core PUBLIC cxx_std_17)
 if(EDUCE_CORE_CHARCONV_DEFS)
     target_compile_definitions(core PUBLIC ${EDUCE_CORE_CHARCONV_DEFS})
 endif()
-set_target_properties(core
-    PROPERTIES
-        PUBLIC_HEADER "${public_hdrs}"
-)
 install(
     TARGETS core
     EXPORT EduceLabCoreTargets
-    ARCHIVE DESTINATION "lib"
-    LIBRARY DESTINATION "lib"
-    INCLUDES DESTINATION "include/educelab/core"
-    PUBLIC_HEADER DESTINATION "include/educelab/core"
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+)
+# Install headers preserving their directory structure under include/educelab/core
+install(
+    DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+    FILES_MATCHING PATTERN "*.hpp"
 )
 
 # Docs
