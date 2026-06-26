@@ -20,8 +20,28 @@ jobs:
 
       - name: Build libcore
         run: |
-          cmake -S . -B build $EXTRA_CMAKE_FLAGS
+          cmake -S . -B build $EXTRA_CMAKE_FLAGS -DCMAKE_INSTALL_PREFIX="$PWD/install"
           cmake --build build/ -j 4
 
       - name: Run tests
         run: ctest -V --test-dir build/
+
+      - name: Install libcore
+        run: cmake --install build/
+
+      - name: Test find_package from a consumer project
+        run: |
+          mkdir -p consumer
+          cat > consumer/CMakeLists.txt <<'EOF'
+          cmake_minimum_required(VERSION 3.15)
+          project(consumer CXX)
+          find_package(EduceLabCore REQUIRED)
+          add_executable(consumer main.cpp)
+          target_link_libraries(consumer PRIVATE educelab::core)
+          EOF
+          cat > consumer/main.cpp <<'EOF'
+          #include "educelab/core/io/MeshIO.hpp"
+          int main() { return 0; }
+          EOF
+          cmake -S consumer -B consumer/build -DCMAKE_PREFIX_PATH="$PWD/install"
+          cmake --build consumer/build -j 4
