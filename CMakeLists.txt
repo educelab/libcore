@@ -41,6 +41,7 @@ set(public_hdrs
     include/educelab/core/types/Uuid.hpp
     include/educelab/core/types/Vec.hpp
     include/educelab/core/utils/Caching.hpp
+    include/educelab/core/utils/Flags.hpp
     include/educelab/core/utils/MeshUtils.hpp
     include/educelab/core/utils/Filesystem.hpp
     include/educelab/core/utils/Iteration.hpp
