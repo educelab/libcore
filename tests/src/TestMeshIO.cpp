@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -593,6 +594,86 @@ TEST_F(OBJTest, ReadMultiChart_ChartIndicesOnlyWhenHasChart)
     EXPECT_EQ(dst_uv.size(), 6u);
 }
 
+// Writes three single-triangle charts to `path`, using materials in usemtl
+// usage order material_00, material_01, material_02. Each face gets its own
+// three vt entries so chart indices are assigned per-pool-index cleanly.
+static void write_three_chart_obj(const fs::path& path, const std::string& mtl)
+{
+    std::ofstream o(path);
+    o << "mtllib " << mtl << '\n';
+    o << "v 0 0 0\nv 1 0 0\nv 0 1 0\n";
+    o << "v 2 0 0\nv 3 0 0\nv 2 1 0\n";
+    o << "v 4 0 0\nv 5 0 0\nv 4 1 0\n";
+    o << "vt 0.0 0.0\nvt 0.1 0.0\nvt 0.0 0.1\n";
+    o << "vt 0.2 0.0\nvt 0.3 0.0\nvt 0.2 0.1\n";
+    o << "vt 0.4 0.0\nvt 0.5 0.0\nvt 0.4 0.1\n";
+    o << "usemtl material_00\nf 1/1 2/2 3/3\n";
+    o << "usemtl material_01\nf 4/4 5/5 6/6\n";
+    o << "usemtl material_02\nf 7/7 8/8 9/9\n";
+}
+
+// The .mtl declares materials in a different order than the .obj uses them.
+// Chart indices follow usemtl *usage* order; texture_paths must be aligned to
+// chart index by material *name*, not by .mtl declaration order.
+TEST_F(OBJTest, ReadMultiChart_TexturePathsIndexedByChartNotMtlOrder)
+{
+    {
+        std::ofstream mtl(dir / "reorder.mtl");
+        mtl << "newmtl material_00\nmap_Kd 00.jpg\n"   // decl 0
+            << "newmtl material_02\nmap_Kd 02.jpg\n"   // decl 1 (out of order)
+            << "newmtl material_01\nmap_Kd 01.jpg\n";  // decl 2
+    }
+    const auto path = obj("reorder");
+    write_three_chart_obj(path, "reorder.mtl");
+
+    Mesh3f dst_mesh;
+    ChartUVMap dst_uv;
+    std::vector<fs::path> tex;
+    read_obj(path, dst_mesh, dst_uv, tex);
+
+    ASSERT_EQ(dst_mesh.num_faces(), 3u);
+    ASSERT_EQ(tex.size(), 3u);
+    // Face fi uses material_0{fi}, whose map_Kd is 0{fi}.jpg. Whatever chart
+    // index that face resolved to, texture_paths[chart] must be its own image.
+    const std::array<fs::path, 3> expected{
+        fs::path("00.jpg"), fs::path("01.jpg"), fs::path("02.jpg")};
+    for (std::size_t fi = 0; fi < 3; ++fi) {
+        const auto chart = dst_uv.at(dst_uv.get(fi, 0)).chart;
+        EXPECT_EQ(tex[chart], expected[fi])
+            << "face " << fi << " (chart " << chart << ") got wrong texture";
+    }
+}
+
+// A used material with no map_Kd must keep an empty texture_paths slot (not be
+// compacted out), so later charts retain their correct images.
+TEST_F(OBJTest, ReadMultiChart_MaterialWithoutMapKd_PreservesEmptySlot)
+{
+    {
+        std::ofstream mtl(dir / "missing.mtl");
+        mtl << "newmtl material_00\nmap_Kd 00.jpg\n"
+            << "newmtl material_01\n"                  // no map_Kd
+            << "newmtl material_02\nmap_Kd 02.jpg\n";
+    }
+    const auto path = obj("missing");
+    write_three_chart_obj(path, "missing.mtl");
+
+    Mesh3f dst_mesh;
+    ChartUVMap dst_uv;
+    std::vector<fs::path> tex;
+    read_obj(path, dst_mesh, dst_uv, tex);
+
+    ASSERT_EQ(tex.size(), 3u);
+    // Charts follow usage order 00, 01, 02 → 0, 1, 2.
+    const auto chart0 = dst_uv.at(dst_uv.get(0, 0)).chart;
+    const auto chart1 = dst_uv.at(dst_uv.get(1, 0)).chart;
+    const auto chart2 = dst_uv.at(dst_uv.get(2, 0)).chart;
+    EXPECT_EQ(tex[chart0], fs::path("00.jpg"));
+    EXPECT_TRUE(tex[chart1].empty())
+        << "material with no map_Kd should keep an empty slot, got "
+        << tex[chart1];
+    EXPECT_EQ(tex[chart2], fs::path("02.jpg"));
+}
+
 TEST_F(OBJTest, NGonFace_Quad)
 {
     const auto src = make_quad();
@@ -643,7 +724,7 @@ TEST_F(OBJTest, WriteMissingDir_Throws)
         std::runtime_error);
 }
 
-TEST_F(OBJTest, MTLPresent_NoMapKd_EmptyTexturePaths)
+TEST_F(OBJTest, MTLPresent_NoMapKd_PreservesEmptyChartSlot)
 {
     // Write an OBJ that references a MTL but the MTL has no map_Kd
     const auto path     = obj("no_mapkd");
@@ -669,7 +750,10 @@ TEST_F(OBJTest, MTLPresent_NoMapKd_EmptyTexturePaths)
     std::vector<fs::path> dst_textures;
     read_obj(path, dst_mesh, dst_uv, dst_textures);
 
-    EXPECT_TRUE(dst_textures.empty());
+    // The used material (chart 0) has no map_Kd, but its slot is preserved as
+    // an empty path so texture_paths stays indexed by chart index.
+    ASSERT_EQ(dst_textures.size(), 1u);
+    EXPECT_TRUE(dst_textures[0].empty());
 }
 
 TEST_F(OBJTest, CombinedNormalsAndUVs_VTVNFormat)
