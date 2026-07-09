@@ -316,9 +316,13 @@ void read_obj_impl(
                     ": invalid mtllib declaration");
             }
             // Resolve MTL path relative to the OBJ file. Capture everything
-            // starting with the first token in case the filename has spaces.
+            // from the first argument to end of line (trimmed) so the filename
+            // may contain spaces without a trailing CR / whitespace leaking in
+            // (e.g. from a CRLF line ending).
             const auto name_pos = std::string_view(line).find(tokens[1]);
-            mtllib_path = path.parent_path() / line.substr(name_pos);
+            mtllib_path =
+                path.parent_path() /
+                std::string(trim(std::string_view(line).substr(name_pos)));
         }
 
         // ---- Face ----

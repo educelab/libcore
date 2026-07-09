@@ -771,6 +771,33 @@ TEST_F(OBJTest, ReadMapKd_FilenameWithSpaces)
     EXPECT_EQ(tex[0], fs::path("my texture file.jpg"));
 }
 
+// CRLF line endings must not leak a trailing '\r' into the resolved mtllib
+// path; otherwise the MTL fails to open and texture_paths comes back empty.
+TEST_F(OBJTest, ReadMtllib_CRLFLineEndings)
+{
+    {
+        std::ofstream mtl(dir / "crlf.mtl");
+        mtl << "newmtl material_00\nmap_Kd tex.jpg\n";
+    }
+    const auto path = obj("crlf");
+    {
+        std::ofstream o(path, std::ios::binary);  // preserve CRLF
+        o << "mtllib crlf.mtl\r\n";
+        o << "v 0 0 0\r\nv 1 0 0\r\nv 0 1 0\r\n";
+        o << "vt 0 0\r\nvt 1 0\r\nvt 0 1\r\n";
+        o << "usemtl material_00\r\nf 1/1 2/2 3/3\r\n";
+    }
+
+    Mesh3f dst_mesh;
+    ChartUVMap dst_uv;
+    std::vector<fs::path> tex;
+    read_obj(path, dst_mesh, dst_uv, tex);
+
+    ASSERT_EQ(tex.size(), 1u);
+    EXPECT_EQ(tex[0], fs::path("tex.jpg"))
+        << "trailing CR leaked into the mtllib path (MTL failed to resolve)";
+}
+
 TEST_F(OBJTest, NGonFace_Quad)
 {
     const auto src = make_quad();
@@ -1477,6 +1504,71 @@ TEST_F(PLYTest, ReadCommentTextureFile_HandCraftedPLY)
     ASSERT_EQ(dst_textures.size(), 2u);
     EXPECT_EQ(dst_textures[0], fs::path("atlas0.png"));
     EXPECT_EQ(dst_textures[1], fs::path("atlas1.png"));
+}
+
+// A "comment TextureFile" path may contain spaces; the reader must capture the
+// whole line remainder, not just the first token.
+TEST_F(PLYTest, ReadCommentTextureFile_FilenameWithSpaces)
+{
+    const auto path = ply("spaced_texture");
+    {
+        std::ofstream f(path);
+        f << "ply\n"
+          << "format ascii 1.0\n"
+          << "comment TextureFile my atlas file.png\n"
+          << "element vertex 3\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "element face 1\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n"
+          << "0 0 0\n"
+          << "1 0 0\n"
+          << "0 1 0\n"
+          << "3 0 1 2\n";
+    }
+
+    Mesh3f dst_mesh;
+    UVMap2f dst_uv;
+    std::vector<fs::path> dst_textures;
+    read_ply(path, dst_mesh, dst_uv, dst_textures);
+
+    ASSERT_EQ(dst_textures.size(), 1u);
+    EXPECT_EQ(dst_textures[0], fs::path("my atlas file.png"));
+}
+
+// CRLF line endings must not leak a trailing '\r' into a captured texture path.
+TEST_F(PLYTest, ReadCommentTextureFile_CRLFLineEndings)
+{
+    const auto path = ply("crlf_texture");
+    {
+        // Write with explicit CRLF terminators (binary mode to preserve them).
+        std::ofstream f(path, std::ios::binary);
+        f << "ply\r\n"
+          << "format ascii 1.0\r\n"
+          << "comment TextureFile atlas.png\r\n"
+          << "element vertex 3\r\n"
+          << "property float x\r\n"
+          << "property float y\r\n"
+          << "property float z\r\n"
+          << "element face 1\r\n"
+          << "property list uchar int vertex_indices\r\n"
+          << "end_header\r\n"
+          << "0 0 0\r\n"
+          << "1 0 0\r\n"
+          << "0 1 0\r\n"
+          << "3 0 1 2\r\n";
+    }
+
+    Mesh3f dst_mesh;
+    UVMap2f dst_uv;
+    std::vector<fs::path> dst_textures;
+    read_ply(path, dst_mesh, dst_uv, dst_textures);
+
+    ASSERT_EQ(dst_textures.size(), 1u);
+    EXPECT_EQ(dst_textures[0], fs::path("atlas.png"))
+        << "trailing CR leaked into the texture path";
 }
 
 TEST_F(PLYTest, ReadMissingFile_Throws)
