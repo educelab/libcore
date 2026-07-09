@@ -235,9 +235,13 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
                 // else ASCII (default)
             }
         } else if (tokens[0] == "comment") {
-            // Look for "comment TextureFile <path>"
+            // Look for "comment TextureFile <path>". Capture everything from
+            // the path's first token to end of line (trimmed) so filenames may
+            // contain spaces without a trailing CR / whitespace leaking in.
             if (tokens.size() >= 3 && tokens[1] == "TextureFile") {
-                h.texture_files.emplace_back(std::string(tokens[2]));
+                const auto name_pos = std::string_view(line).find(tokens[2]);
+                h.texture_files.emplace_back(
+                    std::string(trim(std::string_view(line).substr(name_pos))));
             }
         } else if (tokens[0] == "element") {
             if (tokens.size() < 3) {

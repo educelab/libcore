@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "educelab/core/types/Color.hpp"
@@ -315,9 +316,13 @@ void read_obj_impl(
                     ": invalid mtllib declaration");
             }
             // Resolve MTL path relative to the OBJ file. Capture everything
-            // starting with the first token in case the filename has spaces.
+            // from the first argument to end of line (trimmed) so the filename
+            // may contain spaces without a trailing CR / whitespace leaking in
+            // (e.g. from a CRLF line ending).
             const auto name_pos = std::string_view(line).find(tokens[1]);
-            mtllib_path = path.parent_path() / line.substr(name_pos);
+            mtllib_path =
+                path.parent_path() /
+                std::string(trim(std::string_view(line).substr(name_pos)));
         }
 
         // ---- Face ----
@@ -404,30 +409,52 @@ void read_obj_impl(
     }
     std::ifstream mtl(mtllib_path);
     if (!mtl) {
-        return;  // MTL missing — no-op per spec
+        return;  // MTL missing / unreadable — leave texture_paths empty
     }
-    std::vector<std::filesystem::path> ordered_paths;
+
+    // Collect (material name -> map_Kd path) in MTL declaration order.
+    std::vector<std::pair<std::string, std::filesystem::path>> mtl_materials;
     std::string mtl_line;
     std::vector<std::string_view> mt;
     while (std::getline(mtl, mtl_line)) {
-        // Tokenize
         split(mtl_line, mt);
-        // Skip comments
         if (mt.empty() || mt[0].front() == '#') {
             continue;
         }
-        if (mt[0] == "newmtl") {
-            ordered_paths.emplace_back();  // placeholder
+        if (mt[0] == "newmtl" && mt.size() >= 2) {
+            mtl_materials.emplace_back(
+                std::string(mt[1]), std::filesystem::path{});
         } else if (
-            mt[0] == "map_Kd" && !ordered_paths.empty() && mt.size() >= 2) {
-            ordered_paths.back() =
-                std::filesystem::path{std::string(mt[1])};
+            mt[0] == "map_Kd" && !mtl_materials.empty() && mt.size() >= 2) {
+            // Capture everything from the first argument to end of line so
+            // texture filenames may contain spaces (mirrors the mtllib
+            // handling above). trim() drops any trailing whitespace / CR.
+            const auto arg_pos = std::string_view(mtl_line).find(mt[1]);
+            mtl_materials.back().second = std::filesystem::path{
+                std::string(trim(std::string_view(mtl_line).substr(arg_pos)))};
         }
     }
-    // Remove placeholder entries that had no map_Kd
-    for (const auto& p : ordered_paths) {
-        if (!p.empty()) {
-            texture_paths->push_back(p);
+
+    if (!material_index.empty()) {
+        // Chart indices are assigned in usemtl *usage* order, which can differ
+        // from the MTL's newmtl *declaration* order. Align texture_paths with
+        // chart indices by looking each material up by name, so
+        // texture_paths[chart] is that chart's image. Materials with no map_Kd
+        // (or absent from the MTL) keep an empty path so index alignment holds.
+        texture_paths->assign(material_index.size(), std::filesystem::path{});
+        for (const auto& [name, tex] : mtl_materials) {
+            if (auto it = material_index.find(name);
+                it != material_index.end()) {
+                (*texture_paths)[it->second] = tex;
+            }
+        }
+    } else {
+        // No usemtl directives: emit each map_Kd in declaration order (legacy
+        // single-/implicit-material behavior).
+        for (const auto& [name, tex] : mtl_materials) {
+            if (!tex.empty()) {
+                texture_paths->push_back(tex);
+            }
         }
     }
 }
@@ -858,9 +885,19 @@ void read_obj(
  * @brief Read an OBJ file into a mesh, UV map, and texture path list (Tier 3)
  *
  * In addition to Tier 2, parses the @c .mtl file referenced by the
- * @c mtllib directive and appends @c map_Kd paths (in material-declaration
- * order) to @p texture_paths. If no @c .mtl is referenced or no @c map_Kd
- * entries are present, @p texture_paths is left unchanged.
+ * @c mtllib directive and populates @p texture_paths indexed by UV **chart
+ * index** (i.e. @c usemtl usage order), resolving each material by name so
+ * @c texture_paths[chart] is that chart's @c map_Kd image. Any chart whose
+ * material has no @c map_Kd (or is absent from the @c .mtl) gets an empty
+ * path so indexing by chart stays valid. If no @c .mtl is referenced, or the
+ * referenced @c .mtl cannot be opened, @p texture_paths is left empty.
+ *
+ * A @c map_Kd value captures the rest of the line (trimmed), so texture
+ * filenames may contain spaces. A @c newmtl with no material name is ignored,
+ * along with any @c map_Kd that would attach to it.
+ *
+ * If the OBJ contains no @c usemtl directives, each @c map_Kd is appended in
+ * @c .mtl declaration order instead (legacy single-/implicit-material meshes).
  *
  * @throws std::runtime_error if the OBJ file cannot be opened
  */

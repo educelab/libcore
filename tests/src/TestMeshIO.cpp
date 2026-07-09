@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -593,6 +594,210 @@ TEST_F(OBJTest, ReadMultiChart_ChartIndicesOnlyWhenHasChart)
     EXPECT_EQ(dst_uv.size(), 6u);
 }
 
+// Writes three single-triangle charts to `path`, using materials in usemtl
+// usage order material_00, material_01, material_02. Each face gets its own
+// three vt entries so chart indices are assigned per-pool-index cleanly.
+static void write_three_chart_obj(const fs::path& path, const std::string& mtl)
+{
+    std::ofstream o(path);
+    o << "mtllib " << mtl << '\n';
+    o << "v 0 0 0\nv 1 0 0\nv 0 1 0\n";
+    o << "v 2 0 0\nv 3 0 0\nv 2 1 0\n";
+    o << "v 4 0 0\nv 5 0 0\nv 4 1 0\n";
+    o << "vt 0.0 0.0\nvt 0.1 0.0\nvt 0.0 0.1\n";
+    o << "vt 0.2 0.0\nvt 0.3 0.0\nvt 0.2 0.1\n";
+    o << "vt 0.4 0.0\nvt 0.5 0.0\nvt 0.4 0.1\n";
+    o << "usemtl material_00\nf 1/1 2/2 3/3\n";
+    o << "usemtl material_01\nf 4/4 5/5 6/6\n";
+    o << "usemtl material_02\nf 7/7 8/8 9/9\n";
+}
+
+// The .mtl declares materials in a different order than the .obj uses them.
+// Chart indices follow usemtl *usage* order; texture_paths must be aligned to
+// chart index by material *name*, not by .mtl declaration order.
+TEST_F(OBJTest, ReadMultiChart_TexturePathsIndexedByChartNotMtlOrder)
+{
+    {
+        std::ofstream mtl(dir / "reorder.mtl");
+        mtl << "newmtl material_00\nmap_Kd 00.jpg\n"   // decl 0
+            << "newmtl material_02\nmap_Kd 02.jpg\n"   // decl 1 (out of order)
+            << "newmtl material_01\nmap_Kd 01.jpg\n";  // decl 2
+    }
+    const auto path = obj("reorder");
+    write_three_chart_obj(path, "reorder.mtl");
+
+    Mesh3f dst_mesh;
+    ChartUVMap dst_uv;
+    std::vector<fs::path> tex;
+    read_obj(path, dst_mesh, dst_uv, tex);
+
+    ASSERT_EQ(dst_mesh.num_faces(), 3u);
+    ASSERT_EQ(tex.size(), 3u);
+    // Face fi uses material_0{fi}, whose map_Kd is 0{fi}.jpg. Whatever chart
+    // index that face resolved to, texture_paths[chart] must be its own image.
+    const std::array<fs::path, 3> expected{
+        fs::path("00.jpg"), fs::path("01.jpg"), fs::path("02.jpg")};
+    for (std::size_t fi = 0; fi < 3; ++fi) {
+        const auto chart = dst_uv.at(dst_uv.get(fi, 0)).chart;
+        EXPECT_EQ(tex[chart], expected[fi])
+            << "face " << fi << " (chart " << chart << ") got wrong texture";
+    }
+}
+
+// A used material with no map_Kd must keep an empty texture_paths slot (not be
+// compacted out), so later charts retain their correct images.
+TEST_F(OBJTest, ReadMultiChart_MaterialWithoutMapKd_PreservesEmptySlot)
+{
+    {
+        std::ofstream mtl(dir / "missing.mtl");
+        mtl << "newmtl material_00\nmap_Kd 00.jpg\n"
+            << "newmtl material_01\n"                  // no map_Kd
+            << "newmtl material_02\nmap_Kd 02.jpg\n";
+    }
+    const auto path = obj("missing");
+    write_three_chart_obj(path, "missing.mtl");
+
+    Mesh3f dst_mesh;
+    ChartUVMap dst_uv;
+    std::vector<fs::path> tex;
+    read_obj(path, dst_mesh, dst_uv, tex);
+
+    ASSERT_EQ(tex.size(), 3u);
+    // Charts follow usage order 00, 01, 02 → 0, 1, 2.
+    const auto chart0 = dst_uv.at(dst_uv.get(0, 0)).chart;
+    const auto chart1 = dst_uv.at(dst_uv.get(1, 0)).chart;
+    const auto chart2 = dst_uv.at(dst_uv.get(2, 0)).chart;
+    EXPECT_EQ(tex[chart0], fs::path("00.jpg"));
+    EXPECT_TRUE(tex[chart1].empty())
+        << "material with no map_Kd should keep an empty slot, got "
+        << tex[chart1];
+    EXPECT_EQ(tex[chart2], fs::path("02.jpg"));
+}
+
+// A material re-entered later in the OBJ (usemtl A ... B ... A) must resolve
+// to the same chart/texture on both uses; chart indexing is by name, so no new
+// chart is created on re-entry.
+TEST_F(OBJTest, ReadMultiChart_MaterialReEntry_ReusesSameChart)
+{
+    {
+        std::ofstream mtl(dir / "reentry.mtl");
+        mtl << "newmtl material_00\nmap_Kd a.jpg\n"
+            << "newmtl material_01\nmap_Kd b.jpg\n";
+    }
+    const auto path = obj("reentry");
+    {
+        std::ofstream o(path);
+        o << "mtllib reentry.mtl\n";
+        o << "v 0 0 0\nv 1 0 0\nv 0 1 0\n";
+        o << "v 2 0 0\nv 3 0 0\nv 2 1 0\n";
+        o << "v 4 0 0\nv 5 0 0\nv 4 1 0\n";
+        o << "vt 0.0 0.0\nvt 0.1 0.0\nvt 0.0 0.1\n";
+        o << "vt 0.2 0.0\nvt 0.3 0.0\nvt 0.2 0.1\n";
+        o << "vt 0.4 0.0\nvt 0.5 0.0\nvt 0.4 0.1\n";
+        o << "usemtl material_00\nf 1/1 2/2 3/3\n";   // chart for material_00
+        o << "usemtl material_01\nf 4/4 5/5 6/6\n";   // chart for material_01
+        o << "usemtl material_00\nf 7/7 8/8 9/9\n";   // re-entry of material_00
+    }
+
+    Mesh3f dst_mesh;
+    ChartUVMap dst_uv;
+    std::vector<fs::path> tex;
+    read_obj(path, dst_mesh, dst_uv, tex);
+
+    ASSERT_EQ(dst_mesh.num_faces(), 3u);
+    // Exactly two charts: material_00 and material_01. The re-entry does not
+    // create a third.
+    ASSERT_EQ(tex.size(), 2u);
+    const auto chart_f0 = dst_uv.at(dst_uv.get(0, 0)).chart;
+    const auto chart_f1 = dst_uv.at(dst_uv.get(1, 0)).chart;
+    const auto chart_f2 = dst_uv.at(dst_uv.get(2, 0)).chart;
+    EXPECT_EQ(chart_f0, chart_f2) << "re-entered material must reuse its chart";
+    EXPECT_NE(chart_f0, chart_f1);
+    EXPECT_EQ(tex[chart_f0], fs::path("a.jpg"));
+    EXPECT_EQ(tex[chart_f1], fs::path("b.jpg"));
+}
+
+// With no usemtl directives, texture_paths falls back to emitting each map_Kd
+// in .mtl declaration order (legacy single-/implicit-material behavior).
+TEST_F(OBJTest, ReadNoUsemtl_TexturePathsInDeclarationOrder)
+{
+    {
+        std::ofstream mtl(dir / "legacy.mtl");
+        mtl << "newmtl material_00\nmap_Kd first.jpg\n"
+            << "newmtl material_01\nmap_Kd second.jpg\n";
+    }
+    const auto path = obj("legacy");
+    {
+        std::ofstream o(path);
+        o << "mtllib legacy.mtl\n";
+        o << "v 0 0 0\nv 1 0 0\nv 0 1 0\n";
+        o << "vt 0 0\nvt 1 0\nvt 0 1\n";
+        o << "f 1/1 2/2 3/3\n";  // no usemtl
+    }
+
+    Mesh3f dst_mesh;
+    ChartUVMap dst_uv;
+    std::vector<fs::path> tex;
+    read_obj(path, dst_mesh, dst_uv, tex);
+
+    ASSERT_EQ(tex.size(), 2u);
+    EXPECT_EQ(tex[0], fs::path("first.jpg"));
+    EXPECT_EQ(tex[1], fs::path("second.jpg"));
+}
+
+// map_Kd captures the rest of the line, so texture filenames with spaces
+// survive the round-trip (previously truncated at the first token).
+TEST_F(OBJTest, ReadMapKd_FilenameWithSpaces)
+{
+    {
+        std::ofstream mtl(dir / "spaces.mtl");
+        mtl << "newmtl material_00\nmap_Kd my texture file.jpg\n";
+    }
+    const auto path = obj("spaces");
+    {
+        std::ofstream o(path);
+        o << "mtllib spaces.mtl\n";
+        o << "v 0 0 0\nv 1 0 0\nv 0 1 0\n";
+        o << "vt 0 0\nvt 1 0\nvt 0 1\n";
+        o << "usemtl material_00\nf 1/1 2/2 3/3\n";
+    }
+
+    Mesh3f dst_mesh;
+    ChartUVMap dst_uv;
+    std::vector<fs::path> tex;
+    read_obj(path, dst_mesh, dst_uv, tex);
+
+    ASSERT_EQ(tex.size(), 1u);
+    EXPECT_EQ(tex[0], fs::path("my texture file.jpg"));
+}
+
+// CRLF line endings must not leak a trailing '\r' into the resolved mtllib
+// path; otherwise the MTL fails to open and texture_paths comes back empty.
+TEST_F(OBJTest, ReadMtllib_CRLFLineEndings)
+{
+    {
+        std::ofstream mtl(dir / "crlf.mtl");
+        mtl << "newmtl material_00\nmap_Kd tex.jpg\n";
+    }
+    const auto path = obj("crlf");
+    {
+        std::ofstream o(path, std::ios::binary);  // preserve CRLF
+        o << "mtllib crlf.mtl\r\n";
+        o << "v 0 0 0\r\nv 1 0 0\r\nv 0 1 0\r\n";
+        o << "vt 0 0\r\nvt 1 0\r\nvt 0 1\r\n";
+        o << "usemtl material_00\r\nf 1/1 2/2 3/3\r\n";
+    }
+
+    Mesh3f dst_mesh;
+    ChartUVMap dst_uv;
+    std::vector<fs::path> tex;
+    read_obj(path, dst_mesh, dst_uv, tex);
+
+    ASSERT_EQ(tex.size(), 1u);
+    EXPECT_EQ(tex[0], fs::path("tex.jpg"))
+        << "trailing CR leaked into the mtllib path (MTL failed to resolve)";
+}
+
 TEST_F(OBJTest, NGonFace_Quad)
 {
     const auto src = make_quad();
@@ -643,7 +848,7 @@ TEST_F(OBJTest, WriteMissingDir_Throws)
         std::runtime_error);
 }
 
-TEST_F(OBJTest, MTLPresent_NoMapKd_EmptyTexturePaths)
+TEST_F(OBJTest, MTLPresent_NoMapKd_PreservesEmptyChartSlot)
 {
     // Write an OBJ that references a MTL but the MTL has no map_Kd
     const auto path     = obj("no_mapkd");
@@ -669,7 +874,10 @@ TEST_F(OBJTest, MTLPresent_NoMapKd_EmptyTexturePaths)
     std::vector<fs::path> dst_textures;
     read_obj(path, dst_mesh, dst_uv, dst_textures);
 
-    EXPECT_TRUE(dst_textures.empty());
+    // The used material (chart 0) has no map_Kd, but its slot is preserved as
+    // an empty path so texture_paths stays indexed by chart index.
+    ASSERT_EQ(dst_textures.size(), 1u);
+    EXPECT_TRUE(dst_textures[0].empty());
 }
 
 TEST_F(OBJTest, CombinedNormalsAndUVs_VTVNFormat)
@@ -1296,6 +1504,71 @@ TEST_F(PLYTest, ReadCommentTextureFile_HandCraftedPLY)
     ASSERT_EQ(dst_textures.size(), 2u);
     EXPECT_EQ(dst_textures[0], fs::path("atlas0.png"));
     EXPECT_EQ(dst_textures[1], fs::path("atlas1.png"));
+}
+
+// A "comment TextureFile" path may contain spaces; the reader must capture the
+// whole line remainder, not just the first token.
+TEST_F(PLYTest, ReadCommentTextureFile_FilenameWithSpaces)
+{
+    const auto path = ply("spaced_texture");
+    {
+        std::ofstream f(path);
+        f << "ply\n"
+          << "format ascii 1.0\n"
+          << "comment TextureFile my atlas file.png\n"
+          << "element vertex 3\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "element face 1\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n"
+          << "0 0 0\n"
+          << "1 0 0\n"
+          << "0 1 0\n"
+          << "3 0 1 2\n";
+    }
+
+    Mesh3f dst_mesh;
+    UVMap2f dst_uv;
+    std::vector<fs::path> dst_textures;
+    read_ply(path, dst_mesh, dst_uv, dst_textures);
+
+    ASSERT_EQ(dst_textures.size(), 1u);
+    EXPECT_EQ(dst_textures[0], fs::path("my atlas file.png"));
+}
+
+// CRLF line endings must not leak a trailing '\r' into a captured texture path.
+TEST_F(PLYTest, ReadCommentTextureFile_CRLFLineEndings)
+{
+    const auto path = ply("crlf_texture");
+    {
+        // Write with explicit CRLF terminators (binary mode to preserve them).
+        std::ofstream f(path, std::ios::binary);
+        f << "ply\r\n"
+          << "format ascii 1.0\r\n"
+          << "comment TextureFile atlas.png\r\n"
+          << "element vertex 3\r\n"
+          << "property float x\r\n"
+          << "property float y\r\n"
+          << "property float z\r\n"
+          << "element face 1\r\n"
+          << "property list uchar int vertex_indices\r\n"
+          << "end_header\r\n"
+          << "0 0 0\r\n"
+          << "1 0 0\r\n"
+          << "0 1 0\r\n"
+          << "3 0 1 2\r\n";
+    }
+
+    Mesh3f dst_mesh;
+    UVMap2f dst_uv;
+    std::vector<fs::path> dst_textures;
+    read_ply(path, dst_mesh, dst_uv, dst_textures);
+
+    ASSERT_EQ(dst_textures.size(), 1u);
+    EXPECT_EQ(dst_textures[0], fs::path("atlas.png"))
+        << "trailing CR leaked into the texture path";
 }
 
 TEST_F(PLYTest, ReadMissingFile_Throws)
