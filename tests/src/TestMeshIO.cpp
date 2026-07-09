@@ -674,6 +674,103 @@ TEST_F(OBJTest, ReadMultiChart_MaterialWithoutMapKd_PreservesEmptySlot)
     EXPECT_EQ(tex[chart2], fs::path("02.jpg"));
 }
 
+// A material re-entered later in the OBJ (usemtl A ... B ... A) must resolve
+// to the same chart/texture on both uses; chart indexing is by name, so no new
+// chart is created on re-entry.
+TEST_F(OBJTest, ReadMultiChart_MaterialReEntry_ReusesSameChart)
+{
+    {
+        std::ofstream mtl(dir / "reentry.mtl");
+        mtl << "newmtl material_00\nmap_Kd a.jpg\n"
+            << "newmtl material_01\nmap_Kd b.jpg\n";
+    }
+    const auto path = obj("reentry");
+    {
+        std::ofstream o(path);
+        o << "mtllib reentry.mtl\n";
+        o << "v 0 0 0\nv 1 0 0\nv 0 1 0\n";
+        o << "v 2 0 0\nv 3 0 0\nv 2 1 0\n";
+        o << "v 4 0 0\nv 5 0 0\nv 4 1 0\n";
+        o << "vt 0.0 0.0\nvt 0.1 0.0\nvt 0.0 0.1\n";
+        o << "vt 0.2 0.0\nvt 0.3 0.0\nvt 0.2 0.1\n";
+        o << "vt 0.4 0.0\nvt 0.5 0.0\nvt 0.4 0.1\n";
+        o << "usemtl material_00\nf 1/1 2/2 3/3\n";   // chart for material_00
+        o << "usemtl material_01\nf 4/4 5/5 6/6\n";   // chart for material_01
+        o << "usemtl material_00\nf 7/7 8/8 9/9\n";   // re-entry of material_00
+    }
+
+    Mesh3f dst_mesh;
+    ChartUVMap dst_uv;
+    std::vector<fs::path> tex;
+    read_obj(path, dst_mesh, dst_uv, tex);
+
+    ASSERT_EQ(dst_mesh.num_faces(), 3u);
+    // Exactly two charts: material_00 and material_01. The re-entry does not
+    // create a third.
+    ASSERT_EQ(tex.size(), 2u);
+    const auto chart_f0 = dst_uv.at(dst_uv.get(0, 0)).chart;
+    const auto chart_f1 = dst_uv.at(dst_uv.get(1, 0)).chart;
+    const auto chart_f2 = dst_uv.at(dst_uv.get(2, 0)).chart;
+    EXPECT_EQ(chart_f0, chart_f2) << "re-entered material must reuse its chart";
+    EXPECT_NE(chart_f0, chart_f1);
+    EXPECT_EQ(tex[chart_f0], fs::path("a.jpg"));
+    EXPECT_EQ(tex[chart_f1], fs::path("b.jpg"));
+}
+
+// With no usemtl directives, texture_paths falls back to emitting each map_Kd
+// in .mtl declaration order (legacy single-/implicit-material behavior).
+TEST_F(OBJTest, ReadNoUsemtl_TexturePathsInDeclarationOrder)
+{
+    {
+        std::ofstream mtl(dir / "legacy.mtl");
+        mtl << "newmtl material_00\nmap_Kd first.jpg\n"
+            << "newmtl material_01\nmap_Kd second.jpg\n";
+    }
+    const auto path = obj("legacy");
+    {
+        std::ofstream o(path);
+        o << "mtllib legacy.mtl\n";
+        o << "v 0 0 0\nv 1 0 0\nv 0 1 0\n";
+        o << "vt 0 0\nvt 1 0\nvt 0 1\n";
+        o << "f 1/1 2/2 3/3\n";  // no usemtl
+    }
+
+    Mesh3f dst_mesh;
+    ChartUVMap dst_uv;
+    std::vector<fs::path> tex;
+    read_obj(path, dst_mesh, dst_uv, tex);
+
+    ASSERT_EQ(tex.size(), 2u);
+    EXPECT_EQ(tex[0], fs::path("first.jpg"));
+    EXPECT_EQ(tex[1], fs::path("second.jpg"));
+}
+
+// map_Kd captures the rest of the line, so texture filenames with spaces
+// survive the round-trip (previously truncated at the first token).
+TEST_F(OBJTest, ReadMapKd_FilenameWithSpaces)
+{
+    {
+        std::ofstream mtl(dir / "spaces.mtl");
+        mtl << "newmtl material_00\nmap_Kd my texture file.jpg\n";
+    }
+    const auto path = obj("spaces");
+    {
+        std::ofstream o(path);
+        o << "mtllib spaces.mtl\n";
+        o << "v 0 0 0\nv 1 0 0\nv 0 1 0\n";
+        o << "vt 0 0\nvt 1 0\nvt 0 1\n";
+        o << "usemtl material_00\nf 1/1 2/2 3/3\n";
+    }
+
+    Mesh3f dst_mesh;
+    ChartUVMap dst_uv;
+    std::vector<fs::path> tex;
+    read_obj(path, dst_mesh, dst_uv, tex);
+
+    ASSERT_EQ(tex.size(), 1u);
+    EXPECT_EQ(tex[0], fs::path("my texture file.jpg"));
+}
+
 TEST_F(OBJTest, NGonFace_Quad)
 {
     const auto src = make_quad();

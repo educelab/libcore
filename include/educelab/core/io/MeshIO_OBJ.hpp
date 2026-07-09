@@ -405,7 +405,7 @@ void read_obj_impl(
     }
     std::ifstream mtl(mtllib_path);
     if (!mtl) {
-        return;  // MTL missing — no-op per spec
+        return;  // MTL missing / unreadable — leave texture_paths empty
     }
 
     // Collect (material name -> map_Kd path) in MTL declaration order.
@@ -422,8 +422,12 @@ void read_obj_impl(
                 std::string(mt[1]), std::filesystem::path{});
         } else if (
             mt[0] == "map_Kd" && !mtl_materials.empty() && mt.size() >= 2) {
-            mtl_materials.back().second =
-                std::filesystem::path{std::string(mt[1])};
+            // Capture everything from the first argument to end of line so
+            // texture filenames may contain spaces (mirrors the mtllib
+            // handling above). trim() drops any trailing whitespace / CR.
+            const auto arg_pos = std::string_view(mtl_line).find(mt[1]);
+            mtl_materials.back().second = std::filesystem::path{
+                std::string(trim(std::string_view(mtl_line).substr(arg_pos)))};
         }
     }
 
@@ -881,8 +885,15 @@ void read_obj(
  * index** (i.e. @c usemtl usage order), resolving each material by name so
  * @c texture_paths[chart] is that chart's @c map_Kd image. Any chart whose
  * material has no @c map_Kd (or is absent from the @c .mtl) gets an empty
- * path so indexing by chart stays valid. If no @c .mtl is referenced,
- * @p texture_paths is left empty.
+ * path so indexing by chart stays valid. If no @c .mtl is referenced, or the
+ * referenced @c .mtl cannot be opened, @p texture_paths is left empty.
+ *
+ * A @c map_Kd value captures the rest of the line (trimmed), so texture
+ * filenames may contain spaces. A @c newmtl with no material name is ignored,
+ * along with any @c map_Kd that would attach to it.
+ *
+ * If the OBJ contains no @c usemtl directives, each @c map_Kd is appended in
+ * @c .mtl declaration order instead (legacy single-/implicit-material meshes).
  *
  * @throws std::runtime_error if the OBJ file cannot be opened
  */
