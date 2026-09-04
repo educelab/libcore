@@ -3,6 +3,7 @@
 #include <array>
 #include <csignal>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -1113,6 +1114,121 @@ TEST(ExpandAtSeams, EmptyMesh_ReturnsEmptyExpanded)
     EXPECT_EQ(exp.num_vertices(), 0u);
     EXPECT_EQ(exp.num_faces(), 0u);
     EXPECT_TRUE(flat.empty());
+}
+
+//------------------------------------------------------------------------------
+// Byte-order helpers (detail::host_is_little_endian, detail::swap_bytes)
+//
+// The byte-order foundation the binary PLY reader and writer both sit on.
+// Tested directly rather than only through a PLY file, because a swap that is
+// wrong in a way the writer shares would round-trip perfectly.
+//------------------------------------------------------------------------------
+
+// Independent probe of the host's byte order. Deliberately does not reuse the
+// compile-time macros detail::host_is_little_endian() consults, so the two can
+// disagree and the test can notice.
+static auto probe_host_is_little_endian() -> bool
+{
+    const uint32_t v = 0x01020304U;
+    std::array<unsigned char, 4> bytes{};
+    std::memcpy(bytes.data(), &v, 4);
+    return bytes[0] == 0x04;
+}
+
+TEST(PLYByteOrder, HostOrderMatchesRuntimeProbe)
+{
+    EXPECT_EQ(detail::host_is_little_endian(), probe_host_is_little_endian());
+}
+
+TEST(PLYByteOrder, HostOrderIsCompileTimeConstant)
+{
+    // Used to derive a loop-invariant swap flag, so it must be usable in a
+    // constant expression rather than resolved per property read.
+    constexpr bool kLittle = detail::host_is_little_endian();
+    EXPECT_EQ(kLittle, probe_host_is_little_endian());
+}
+
+TEST(PLYByteOrder, SwapBytes_OneByteIsNoOp)
+{
+    uint8_t v{0xAB};
+    detail::swap_bytes(v);
+    EXPECT_EQ(v, 0xABu);
+
+    int8_t sv{-2};  // 0xFE
+    detail::swap_bytes(sv);
+    EXPECT_EQ(sv, -2);
+}
+
+TEST(PLYByteOrder, SwapBytes_TwoBytes)
+{
+    uint16_t v{0x1234};
+    detail::swap_bytes(v);
+    EXPECT_EQ(v, 0x3412u);
+
+    int16_t sv{0x0102};
+    detail::swap_bytes(sv);
+    EXPECT_EQ(sv, static_cast<int16_t>(0x0201));
+}
+
+TEST(PLYByteOrder, SwapBytes_FourBytes)
+{
+    uint32_t v{0x12345678U};
+    detail::swap_bytes(v);
+    EXPECT_EQ(v, 0x78563412U);
+
+    int32_t sv{0x01020304};
+    detail::swap_bytes(sv);
+    EXPECT_EQ(sv, 0x04030201);
+}
+
+TEST(PLYByteOrder, SwapBytes_EightBytes)
+{
+    uint64_t v{0x0102030405060708ULL};
+    detail::swap_bytes(v);
+    EXPECT_EQ(v, 0x0807060504030201ULL);
+}
+
+TEST(PLYByteOrder, SwapBytes_Float)
+{
+    // 1.0f is 3F 80 00 00 big-endian; reversed it is 00 00 80 3F.
+    float f{1.f};
+    detail::swap_bytes(f);
+    uint32_t bits{};
+    std::memcpy(&bits, &f, 4);
+    // The assertion holds on either host: reversing the bytes and then
+    // reading them back as an integer of the same width is symmetric.
+    EXPECT_EQ(bits, 0x0000803FU);
+}
+
+TEST(PLYByteOrder, SwapBytes_Double)
+{
+    // 1.0 is 3F F0 00 00 00 00 00 00 big-endian; reversed, 00 ... 00 F0 3F.
+    double d{1.};
+    detail::swap_bytes(d);
+    uint64_t bits{};
+    std::memcpy(&bits, &d, 8);
+    EXPECT_EQ(bits, 0x000000000000F03FULL);
+}
+
+TEST(PLYByteOrder, SwapBytes_IsItsOwnInverse)
+{
+    // Two swaps must restore the original for every width the format uses.
+    uint16_t u16{0xBEEF};
+    detail::swap_bytes(u16);
+    detail::swap_bytes(u16);
+    EXPECT_EQ(u16, 0xBEEFu);
+
+    const float f_orig{-1234.5678f};
+    float f{f_orig};
+    detail::swap_bytes(f);
+    detail::swap_bytes(f);
+    EXPECT_EQ(f, f_orig);
+
+    const double d_orig{3.14159265358979};
+    double d{d_orig};
+    detail::swap_bytes(d);
+    detail::swap_bytes(d);
+    EXPECT_EQ(d, d_orig);
 }
 
 //------------------------------------------------------------------------------

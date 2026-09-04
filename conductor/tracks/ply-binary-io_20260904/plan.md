@@ -49,10 +49,10 @@ consumes them.
       `MeshIO_PLY.hpp` (assumed: PLY-local, adds no public surface) or a new
       public `utils/Endian.hpp`. Record the decision and rationale in
       `spec.md`.
-- [ ] **Task 1.2**: Tests for host-order detection and byte swapping across all
+- [x] **Task 1.2**: Tests for host-order detection and byte swapping across all
       four widths the format uses (1, 2, 4, 8 bytes), including the 1-byte
       no-op and a `double` case.
-- [ ] **Task 1.3**: Implement host-endianness detection (`__BYTE_ORDER__` where
+- [~] **Task 1.3**: Implement host-endianness detection (`__BYTE_ORDER__` where
       the compiler defines it, `_WIN32` fallback) and the width-dispatched
       swap. `<cstring>`/`<cstdint>` only — no new dependency, no new include of
       anything platform-specific.
