@@ -1,0 +1,17 @@
+{
+  "id": "acvd_20260904",
+  "title": "ACVD Remeshing",
+  "type": "feature",
+  "status": "pending",
+  "created": "2026-09-04T00:00:00Z",
+  "updated": "2026-09-04T00:00:00Z",
+  "issue": 22,
+  "phases": {
+    "total": 7,
+    "completed": 0
+  },
+  "tasks": {
+    "total": 26,
+    "completed": 0
+  }
+}
