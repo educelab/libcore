@@ -30,7 +30,7 @@ All work is in `include/educelab/core/io/MeshIO_PLY.hpp` and
 | ------- | -------------- | ---- | ------- |
 | Phase 1 | `5861ee1` | 2026-09-04 | verified |
 | Phase 2 | `3483f88` | 2026-09-04 | verified |
-| Phase 3 |                |      | pending |
+| Phase 3 | `7583422` | 2026-09-04 | verified |
 | Phase 4 |                |      | pending |
 | Phase 5 |                |      | pending |
 

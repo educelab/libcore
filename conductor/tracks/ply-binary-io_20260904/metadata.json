@@ -4,17 +4,17 @@
   "type": "feature",
   "status": "in_progress",
   "created": "2026-09-04T00:00:00+0200",
-  "updated": "2026-09-04T22:30:00Z",
+  "updated": "2026-09-04T22:45:00Z",
   "issue": 25,
-  "current_phase": 3,
-  "current_task": "3.1",
+  "current_phase": 4,
+  "current_task": "4.1",
   "phases": {
     "total": 5,
-    "completed": 2
+    "completed": 3
   },
   "tasks": {
     "total": 22,
-    "completed": 8
+    "completed": 11
   },
   "commits": [
     "b28d606: docs(conductor): record byte-order helper placement in detail",
@@ -22,6 +22,8 @@
     "5861ee1: feat(MeshIO): hand-rolled byte-order detection and width-dispatched swap",
     "f8940e4: test(MeshIO): big-endian PLY read fixtures",
     "c185fc9: fix(MeshIO): honor the byte order declared in the PLY header on read",
-    "3483f88: test(MeshIO): drop the big-endian rejection test, document byte-order support"
+    "3483f88: test(MeshIO): drop the big-endian rejection test, document byte-order support",
+    "549b2ed: test(MeshIO): face list-count limit tests for the PLY writer",
+    "7583422: feat(MeshIO): reject face list counts a uchar cannot express"
   ]
 }
