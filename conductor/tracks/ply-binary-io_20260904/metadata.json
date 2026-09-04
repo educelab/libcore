@@ -4,21 +4,24 @@
   "type": "feature",
   "status": "in_progress",
   "created": "2026-09-04T00:00:00+0200",
-  "updated": "2026-09-04T22:10:00Z",
+  "updated": "2026-09-04T22:30:00Z",
   "issue": 25,
-  "current_phase": 2,
-  "current_task": "2.1",
+  "current_phase": 3,
+  "current_task": "3.1",
   "phases": {
     "total": 5,
-    "completed": 1
+    "completed": 2
   },
   "tasks": {
     "total": 22,
-    "completed": 3
+    "completed": 8
   },
   "commits": [
     "b28d606: docs(conductor): record byte-order helper placement in detail",
     "802863c: test(MeshIO): byte-order helper tests for host detection and swapping",
-    "5861ee1: feat(MeshIO): hand-rolled byte-order detection and width-dispatched swap"
+    "5861ee1: feat(MeshIO): hand-rolled byte-order detection and width-dispatched swap",
+    "f8940e4: test(MeshIO): big-endian PLY read fixtures",
+    "c185fc9: fix(MeshIO): honor the byte order declared in the PLY header on read",
+    "3483f88: test(MeshIO): drop the big-endian rejection test, document byte-order support"
   ]
 }
