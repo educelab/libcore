@@ -4,17 +4,21 @@
   "type": "feature",
   "status": "in_progress",
   "created": "2026-09-04T00:00:00+0200",
-  "updated": "2026-09-04T21:55:13Z",
+  "updated": "2026-09-04T22:10:00Z",
   "issue": 25,
-  "current_phase": 1,
-  "current_task": "1.1",
+  "current_phase": 2,
+  "current_task": "2.1",
   "phases": {
     "total": 5,
-    "completed": 0
+    "completed": 1
   },
   "tasks": {
     "total": 22,
-    "completed": 0
+    "completed": 3
   },
-  "commits": []
+  "commits": [
+    "b28d606: docs(conductor): record byte-order helper placement in detail",
+    "802863c: test(MeshIO): byte-order helper tests for host detection and swapping",
+    "5861ee1: feat(MeshIO): hand-rolled byte-order detection and width-dispatched swap"
+  ]
 }

@@ -28,7 +28,7 @@ All work is in `include/educelab/core/io/MeshIO_PLY.hpp` and
 
 | Phase   | Checkpoint SHA | Date | Status  |
 | ------- | -------------- | ---- | ------- |
-| Phase 1 |                |      | pending |
+| Phase 1 | `5861ee1` | 2026-09-04 | verified |
 | Phase 2 |                |      | pending |
 | Phase 3 |                |      | pending |
 | Phase 4 |                |      | pending |
