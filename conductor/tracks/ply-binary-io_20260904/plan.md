@@ -90,17 +90,17 @@ passes through.
       every call site — the batched vertex path, `read_ply_face_binary`, and
       the `skip_binary_prop` lambda. Missing one leaves a silently misread
       property.
-- [~] **Task 2.5**: Replace `PLYTest.BinaryBigEndian_Throws` with the positive
+- [x] **Task 2.5**: Replace `PLYTest.BinaryBigEndian_Throws` with the positive
       read test from Task 2.1, and update the `read_ply` Doxygen that currently
       says "Supports ASCII and binary-little-endian PLY".
 
 ### Verification
 
-- [ ] BE fixture and pre-cast-swap tests pass
-- [ ] `BinaryLittleEndian_Read` and `SizedTypeAliases_BinaryLittleEndian_Read`
+- [x] BE fixture and pre-cast-swap tests pass
+- [x] `BinaryLittleEndian_Read` and `SizedTypeAliases_BinaryLittleEndian_Read`
       still pass unmodified — the LE path must not have moved
-- [ ] No remaining reference to the BE rejection in code or docs
-- [ ] Full suite green, Debug and Release
+- [x] No remaining reference to the BE rejection in code or docs
+- [x] Full suite green, Debug and Release
 
 ---
 

@@ -1378,7 +1378,9 @@ void write_ply(
 /**
  * @brief Read a PLY file into a mesh (Tier 1 — positions only)
  *
- * Supports ASCII and binary-little-endian PLY. Parses @c x @c y @c z vertex
+ * Supports ASCII and binary PLY in either byte order. Binary files are read
+ * according to the byte order declared in the header, byte-swapping when it
+ * differs from the host's. Parses @c x @c y @c z vertex
  * properties; populates @ref traits::WithNormal and @ref traits::WithColor
  * vertex fields when present in the file and the @c Vertex type supports them.
  * All other properties are skipped.

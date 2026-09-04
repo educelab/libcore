@@ -1986,28 +1986,6 @@ TEST_F(PLYTest, MalformedHeader_Throws)
     EXPECT_THROW(read_ply(path, dst), std::runtime_error);
 }
 
-TEST_F(PLYTest, BinaryBigEndian_Throws)
-{
-    const auto path = ply("big_endian");
-    {
-        std::ofstream f(path, std::ios::binary);
-        f << "ply\n"
-          << "format binary_big_endian 1.0\n"
-          << "element vertex 3\n"
-          << "property float x\n"
-          << "property float y\n"
-          << "property float z\n"
-          << "element face 1\n"
-          << "property list uchar int vertex_indices\n"
-          << "end_header\n";
-        // Some placeholder data (will never be read)
-        const float verts[9] = {};
-        f.write(reinterpret_cast<const char*>(verts), sizeof(verts));
-    }
-    Mesh3f dst;
-    EXPECT_THROW(read_ply(path, dst), std::runtime_error);
-}
-
 //------------------------------------------------------------------------------
 // Task 4.1 — read_mesh / write_mesh convenience facade tests
 //------------------------------------------------------------------------------
