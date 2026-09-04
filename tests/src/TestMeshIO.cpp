@@ -2,12 +2,16 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <csignal>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/resource.h>
@@ -175,6 +179,34 @@ static auto make_triangle_uvmap(const Mesh3f& /*m*/) -> UVMap2f
     uv.map(0, 0, 0);
     uv.map(0, 1, 1);
     uv.map(0, 2, 2);
+    return uv;
+}
+
+// Single n-gon face with `n` corners on a unit circle. Used to walk the uchar
+// list-count boundaries the PLY writer has to enforce.
+static auto make_ngon(std::size_t n) -> Mesh3f
+{
+    Mesh3f m;
+    Mesh3f::Face idx(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto a = 2.f * 3.14159265f * static_cast<float>(i) /
+                       static_cast<float>(n);
+        (void)m.insert_vertex(std::cos(a), std::sin(a), 0.f);
+        idx[i] = i;
+    }
+    (void)m.insert_face(idx);
+    return m;
+}
+
+// Per-wedge UVs for the single face of make_ngon(n) — every corner mapped.
+static auto make_ngon_uvmap(std::size_t n) -> UVMap2f
+{
+    UVMap2f uv;
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto t = static_cast<float>(i) / static_cast<float>(n);
+        const auto pool = uv.insert(t, 1.f - t);
+        uv.map(0, i, pool);
+    }
     return uv;
 }
 
@@ -1733,6 +1765,125 @@ TEST_F(PLYTest, BinaryBigEndian_SwapPrecedesCast_StreamPath)
 
     ASSERT_EQ(dst.num_faces(), 1u);
     EXPECT_EQ(dst.face(0), (Mesh3f::Face{2, 1, 0}));
+}
+
+//------------------------------------------------------------------------------
+// Face list-count limits
+//
+// write_ply declares both of its list properties with a `uchar` count:
+// vertex_indices writes N, texcoord writes 2*N. A count above 255 would
+// truncate silently and produce a file no reader can make sense of, so the
+// writer rejects it. The limits are therefore 255 corners without UVs and 127
+// with them.
+//------------------------------------------------------------------------------
+
+TEST_F(PLYTest, FaceOver255Corners_Throws)
+{
+    const auto src  = make_ngon(256);
+    const auto path = ply("ngon256");
+
+    try {
+        write_ply(path, src);
+        FAIL() << "expected write_ply to reject a 256-corner face";
+    } catch (const std::runtime_error& e) {
+        const std::string msg = e.what();
+        EXPECT_NE(msg.find("vertex_indices"), std::string::npos) << msg;
+        EXPECT_NE(msg.find("face 0"), std::string::npos) << msg;
+        EXPECT_NE(msg.find("256"), std::string::npos) << msg;
+    }
+
+    // Validated before the stream is opened, so a mesh that cannot be written
+    // leaves no truncated file behind.
+    EXPECT_FALSE(fs::exists(path));
+}
+
+TEST_F(PLYTest, FaceWith255Corners_WritesAndReadsBack)
+{
+    // The largest face the uchar count can express. Also the Task 3.3
+    // coherence check: the reader's own cap is kMaxFaceVertices = 256, so
+    // everything the writer now permits stays readable.
+    const auto src  = make_ngon(255);
+    const auto path = ply("ngon255");
+    ASSERT_NO_THROW(write_ply(path, src));
+
+    Mesh3f dst;
+    read_ply(path, dst);
+    ASSERT_EQ(dst.num_vertices(), 255u);
+    ASSERT_EQ(dst.num_faces(), 1u);
+    EXPECT_EQ(dst.face(0).size(), 255u);
+    EXPECT_EQ(dst.face(0).back(), 254u);
+}
+
+TEST_F(PLYTest, FaceOver127CornersWithUVs_Throws)
+{
+    // 128 corners is legal for vertex_indices but its texcoord list would be
+    // 256 values, one past the uchar count.
+    const auto src  = make_ngon(128);
+    const auto uv   = make_ngon_uvmap(128);
+    const auto path = ply("ngon128_uv");
+
+    try {
+        write_ply(path, src, uv);
+        FAIL() << "expected write_ply to reject a 128-corner face with UVs";
+    } catch (const std::runtime_error& e) {
+        const std::string msg = e.what();
+        EXPECT_NE(msg.find("texcoord"), std::string::npos) << msg;
+        EXPECT_NE(msg.find("face 0"), std::string::npos) << msg;
+    }
+
+    EXPECT_FALSE(fs::exists(path));
+}
+
+TEST_F(PLYTest, FaceOver127CornersWithUVs_Tier3_Throws)
+{
+    // Tier 3 takes the same guard. Asserted separately because a missed call
+    // site there would fail silently rather than at compile time.
+    const auto src  = make_ngon(128);
+    const auto uv   = make_ngon_uvmap(128);
+    const auto path = ply("ngon128_uv_tex");
+
+    try {
+        write_ply(path, src, uv, fs::path("tex.png"));
+        FAIL() << "expected write_ply tier 3 to reject the same face";
+    } catch (const std::runtime_error& e) {
+        const std::string msg = e.what();
+        EXPECT_NE(msg.find("texcoord"), std::string::npos) << msg;
+    }
+
+    EXPECT_FALSE(fs::exists(path));
+}
+
+TEST_F(PLYTest, FaceWith127CornersWithUVs_WritesAndReadsBack)
+{
+    // The largest face that can carry UVs: 127 corners, 254 texcoord values.
+    // The reader's texcoord cap is kMaxFaceListLength = 1024, well clear.
+    const auto src  = make_ngon(127);
+    const auto uv   = make_ngon_uvmap(127);
+    const auto path = ply("ngon127_uv");
+    ASSERT_NO_THROW(write_ply(path, src, uv));
+
+    Mesh3f   dst;
+    UVMap2f  dst_uv;
+    read_ply(path, dst, dst_uv);
+    ASSERT_EQ(dst.num_faces(), 1u);
+    EXPECT_EQ(dst.face(0).size(), 127u);
+    ASSERT_TRUE(dst_uv.has(0, 0));
+    ASSERT_TRUE(dst_uv.has(0, 126));
+    EXPECT_NEAR(dst_uv.at(dst_uv.get(0, 0))[0], 0.f, 1e-5f);
+    EXPECT_NEAR(dst_uv.at(dst_uv.get(0, 126))[0], 126.f / 127.f, 1e-5f);
+}
+
+TEST_F(PLYTest, FaceWith128CornersNoUVs_WritesCleanly)
+{
+    // 128 corners only trips the texcoord limit, so tier 1 must still accept
+    // it — the two limits are independent.
+    const auto src  = make_ngon(128);
+    const auto path = ply("ngon128");
+    ASSERT_NO_THROW(write_ply(path, src));
+
+    Mesh3f dst;
+    read_ply(path, dst);
+    EXPECT_EQ(dst.face(0).size(), 128u);
 }
 
 TEST_F(PLYTest, WriteWithUVMap_PerWedgeTexcoord)
