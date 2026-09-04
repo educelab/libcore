@@ -381,63 +381,77 @@ inline auto parse_ply_header(std::istream& file) -> PLYHeader
 }
 
 // -------------------------------------------------------------------------
-// Binary property reading (little-endian)
+// Binary property reading
 // -------------------------------------------------------------------------
 
-/** @brief Read a single binary little-endian PLY scalar property from @p f */
+/** @brief Read a single binary PLY scalar property from @p f
+ *
+ * @p needs_swap must be true when the file's declared byte order differs from
+ * the host's. The swap is applied to the raw fixed-width value, **before** the
+ * cast to @c DestT: a big-endian float 1.0 (@c 3F @c 80 @c 00 @c 00) read
+ * natively is the denormal 4.6e-41, and no reversal of the widened value
+ * recovers it.
+ *
+ * It is a runtime parameter rather than a template one because the flag is
+ * loop-invariant, and it carries no default so a new call site cannot silently
+ * omit it.
+ */
 template <typename DestT>
-auto read_ply_binary_prop(std::istream& f, PLYType type) -> DestT
+auto read_ply_binary_prop(std::istream& f, PLYType type, bool needs_swap)
+    -> DestT
 {
-    const auto err = []() {
-        throw std::runtime_error("read_ply: unexpected end of binary data");
+    // One raw read per width, so the swap cannot be forgotten in a single
+    // case of the dispatch below.
+    const auto read_raw = [&f, needs_swap](auto& v) {
+        f.read(reinterpret_cast<char*>(&v), sizeof(v));
+        if (!f) {
+            throw std::runtime_error(
+                "read_ply: unexpected end of binary data");
+        }
+        if (needs_swap) {
+            swap_bytes(v);
+        }
     };
+
     switch (type) {
         case PLYType::Float: {
             float v{};
-            f.read(reinterpret_cast<char*>(&v), 4);
-            if (!f) err();
+            read_raw(v);
             return static_cast<DestT>(v);
         }
         case PLYType::Double: {
             double v{};
-            f.read(reinterpret_cast<char*>(&v), 8);
-            if (!f) err();
+            read_raw(v);
             return static_cast<DestT>(v);
         }
         case PLYType::Int: {
             int32_t v{};
-            f.read(reinterpret_cast<char*>(&v), 4);
-            if (!f) err();
+            read_raw(v);
             return static_cast<DestT>(v);
         }
         case PLYType::UInt: {
             uint32_t v{};
-            f.read(reinterpret_cast<char*>(&v), 4);
-            if (!f) err();
+            read_raw(v);
             return static_cast<DestT>(v);
         }
         case PLYType::Short: {
             int16_t v{};
-            f.read(reinterpret_cast<char*>(&v), 2);
-            if (!f) err();
+            read_raw(v);
             return static_cast<DestT>(v);
         }
         case PLYType::UShort: {
             uint16_t v{};
-            f.read(reinterpret_cast<char*>(&v), 2);
-            if (!f) err();
+            read_raw(v);
             return static_cast<DestT>(v);
         }
         case PLYType::Char: {
             int8_t v{};
-            f.read(reinterpret_cast<char*>(&v), 1);
-            if (!f) err();
+            read_raw(v);
             return static_cast<DestT>(v);
         }
         case PLYType::UChar: {
             uint8_t v{};
-            f.read(reinterpret_cast<char*>(&v), 1);
-            if (!f) err();
+            read_raw(v);
             return static_cast<DestT>(v);
         }
         default:
@@ -454,49 +468,61 @@ auto read_ply_binary_prop(std::istream& f, PLYType type) -> DestT
  *  been read in one istream::read call. Each field is extracted by its
  *  pre-computed byte offset within the buffer rather than via individual
  *  istream::read calls.
+ *
+ *  @p needs_swap follows the same contract as in @ref read_ply_binary_prop:
+ *  true when the file's byte order differs from the host's, applied to the raw
+ *  fixed-width value before the cast to @c DestT, and with no default.
  */
 template <typename DestT>
-auto read_ply_prop_from_buf(const char* buf, PLYType type) -> DestT
+auto read_ply_prop_from_buf(const char* buf, PLYType type, bool needs_swap)
+    -> DestT
 {
+    const auto load = [buf, needs_swap](auto& v) {
+        std::memcpy(&v, buf, sizeof(v));
+        if (needs_swap) {
+            swap_bytes(v);
+        }
+    };
+
     switch (type) {
         case PLYType::Float: {
             float v;
-            std::memcpy(&v, buf, 4);
+            load(v);
             return static_cast<DestT>(v);
         }
         case PLYType::Double: {
             double v;
-            std::memcpy(&v, buf, 8);
+            load(v);
             return static_cast<DestT>(v);
         }
         case PLYType::Int: {
             int32_t v;
-            std::memcpy(&v, buf, 4);
+            load(v);
             return static_cast<DestT>(v);
         }
         case PLYType::UInt: {
             uint32_t v;
-            std::memcpy(&v, buf, 4);
+            load(v);
             return static_cast<DestT>(v);
         }
         case PLYType::Short: {
             int16_t v;
-            std::memcpy(&v, buf, 2);
+            load(v);
             return static_cast<DestT>(v);
         }
         case PLYType::UShort: {
             uint16_t v;
-            std::memcpy(&v, buf, 2);
+            load(v);
             return static_cast<DestT>(v);
         }
         case PLYType::Char: {
             int8_t v;
-            std::memcpy(&v, buf, 1);
+            load(v);
             return static_cast<DestT>(v);
         }
         case PLYType::UChar: {
             uint8_t v;
-            std::memcpy(&v, buf, 1);
+            load(v);
             return static_cast<DestT>(v);
         }
         default:
@@ -527,12 +553,17 @@ constexpr std::size_t kMaxFaceListLength = 1024;
  *  true, @p texcoords with raw float values. Both containers are cleared
  *  before filling. Skips any list or scalar face properties that are not
  *  vertex_indices or texcoord.
+ *
+ *  @p needs_swap is forwarded to every scalar read; see
+ *  @ref read_ply_binary_prop. Skipped properties are advanced over as bytes
+ *  and need no swap.
  */
 inline void read_ply_face_binary(
     std::istream& file,
     const PLYElement& elem,
     std::size_t n_vertices,
     bool load_texcoords,
+    bool needs_swap,
     std::vector<std::size_t>& face,
     std::vector<float>& texcoords)
 {
@@ -544,8 +575,8 @@ inline void read_ply_face_binary(
                 static_cast<std::streamsize>(ply_type_bytes(prop.type)));
             continue;
         }
-        const auto count =
-            read_ply_binary_prop<std::size_t>(file, prop.list_count_type);
+        const auto count = read_ply_binary_prop<std::size_t>(
+            file, prop.list_count_type, needs_swap);
         switch (prop.role) {
             case PropRole::VertexIndices:
                 if (count > kMaxFaceVertices) {
@@ -556,8 +587,8 @@ inline void read_ply_face_binary(
                 }
                 face.reserve(count);
                 for (std::size_t k = 0; k < count; ++k) {
-                    const auto idx =
-                        read_ply_binary_prop<std::size_t>(file, prop.type);
+                    const auto idx = read_ply_binary_prop<std::size_t>(
+                        file, prop.type, needs_swap);
                     if (idx >= n_vertices) {
                         throw std::runtime_error(
                             "read_ply: face vertex index " +
@@ -578,8 +609,8 @@ inline void read_ply_face_binary(
                 if (load_texcoords) {
                     texcoords.resize(count);
                     for (std::size_t k = 0; k < count; ++k) {
-                        texcoords[k] =
-                            read_ply_binary_prop<float>(file, prop.type);
+                        texcoords[k] = read_ply_binary_prop<float>(
+                            file, prop.type, needs_swap);
                     }
                 } else {
                     file.ignore(static_cast<std::streamsize>(
@@ -710,11 +741,15 @@ void read_ply_impl(
     }
 
     const auto hdr = parse_ply_header(file);
-    if (hdr.format == PLYHeader::Format::BinaryBE) {
-        throw std::runtime_error(
-            "read_ply: binary big-endian format is not supported");
-    }
-    const bool binary = hdr.format == PLYHeader::Format::BinaryLE;
+    const bool binary = hdr.format == PLYHeader::Format::BinaryLE or
+                        hdr.format == PLYHeader::Format::BinaryBE;
+    // Swap when the file's declared byte order differs from the host's. The
+    // flag is loop-invariant, so it is resolved once here and threaded to
+    // every binary scalar read: the batched vertex path, the face record, and
+    // the unknown-element skip.
+    const bool needs_swap =
+        binary and ((hdr.format == PLYHeader::Format::BinaryLE) !=
+                    host_is_little_endian());
 
     // Populate texture paths from header
     if (texture_paths != nullptr) {
@@ -789,8 +824,8 @@ void read_ply_impl(
                 static_cast<std::streamsize>(ply_type_bytes(prop.type)));
             return;
         }
-        const auto count =
-            read_ply_binary_prop<std::size_t>(file, prop.list_count_type);
+        const auto count = read_ply_binary_prop<std::size_t>(
+            file, prop.list_count_type, needs_swap);
         // Bound before multiplying. A negative count from a signed count type
         // arrives here as a huge unsigned value, and the byte total would wrap
         // to a negative seek that skips nothing at all.
@@ -876,27 +911,27 @@ void read_ply_impl(
                         const char* pb = vbuf.data() + vert_offsets[pi];
                         switch (prop.role) {
                             case PropRole::X:
-                                x = read_ply_prop_from_buf<T>(pb, prop.type); break;
+                                x = read_ply_prop_from_buf<T>(pb, prop.type, needs_swap); break;
                             case PropRole::Y:
-                                y = read_ply_prop_from_buf<T>(pb, prop.type); break;
+                                y = read_ply_prop_from_buf<T>(pb, prop.type, needs_swap); break;
                             case PropRole::Z:
-                                z = read_ply_prop_from_buf<T>(pb, prop.type); break;
+                                z = read_ply_prop_from_buf<T>(pb, prop.type, needs_swap); break;
                             case PropRole::NX:
-                                nx = read_ply_prop_from_buf<T>(pb, prop.type); break;
+                                nx = read_ply_prop_from_buf<T>(pb, prop.type, needs_swap); break;
                             case PropRole::NY:
-                                ny = read_ply_prop_from_buf<T>(pb, prop.type); break;
+                                ny = read_ply_prop_from_buf<T>(pb, prop.type, needs_swap); break;
                             case PropRole::NZ:
-                                nz = read_ply_prop_from_buf<T>(pb, prop.type); break;
+                                nz = read_ply_prop_from_buf<T>(pb, prop.type, needs_swap); break;
                             case PropRole::Red:
-                                r = read_ply_prop_from_buf<float>(pb, prop.type); break;
+                                r = read_ply_prop_from_buf<float>(pb, prop.type, needs_swap); break;
                             case PropRole::Green:
-                                g = read_ply_prop_from_buf<float>(pb, prop.type); break;
+                                g = read_ply_prop_from_buf<float>(pb, prop.type, needs_swap); break;
                             case PropRole::Blue:
-                                b = read_ply_prop_from_buf<float>(pb, prop.type); break;
+                                b = read_ply_prop_from_buf<float>(pb, prop.type, needs_swap); break;
                             case PropRole::S:
-                                s = read_ply_prop_from_buf<float>(pb, prop.type); break;
+                                s = read_ply_prop_from_buf<float>(pb, prop.type, needs_swap); break;
                             case PropRole::T:
-                                t = read_ply_prop_from_buf<float>(pb, prop.type); break;
+                                t = read_ply_prop_from_buf<float>(pb, prop.type, needs_swap); break;
                             default:
                                 break;  // unknown: in buffer, role ignored
                         }
@@ -991,7 +1026,7 @@ void read_ply_impl(
             for (std::size_t fi = 0; fi < elem.count; ++fi) {
                 if (binary) {
                     read_ply_face_binary(
-                        file, elem, n_vertices, load_texcoords,
+                        file, elem, n_vertices, load_texcoords, needs_swap,
                         face_indices, texcoords);
                 } else {
                     std::string_view sv;

@@ -81,16 +81,16 @@ passes through.
       `3F 80 00 00` must read as 1.0, not 4.6e-41. This is the failure mode the
       spec calls out as unrecoverable if the order is inverted, so it gets its
       own test rather than riding along inside a fixture assertion.
-- [~] **Task 2.3**: Add a runtime `bool` swap parameter to
+- [x] **Task 2.3**: Add a runtime `bool` swap parameter to
       `read_ply_binary_prop` and `read_ply_prop_from_buf`, swapping the raw
       fixed-width value **before** `static_cast<DestT>`. Not a template
       parameter — see spec.
-- [ ] **Task 2.4**: In `read_ply_impl`, compute the flag from `hdr.format`
+- [x] **Task 2.4**: In `read_ply_impl`, compute the flag from `hdr.format`
       against host order, delete the `BinaryBE` rejection, and thread it to
       every call site — the batched vertex path, `read_ply_face_binary`, and
       the `skip_binary_prop` lambda. Missing one leaves a silently misread
       property.
-- [ ] **Task 2.5**: Replace `PLYTest.BinaryBigEndian_Throws` with the positive
+- [~] **Task 2.5**: Replace `PLYTest.BinaryBigEndian_Throws` with the positive
       read test from Task 2.1, and update the `read_ply` Doxygen that currently
       says "Supports ASCII and binary-little-endian PLY".
 
