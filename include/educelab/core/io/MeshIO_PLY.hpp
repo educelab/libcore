@@ -142,17 +142,26 @@ enum class PLYType {
     UChar,   ///< Unsigned 8-bit integer
 };
 
-/** @brief Parse a PLY type token into a @c PLYType enum value */
+/** @brief Parse a PLY type token into a @c PLYType enum value
+ *
+ * Accepts two spellings for each type. The eight names in Greg Turk's original
+ * PLY description (`char`, `uchar`, ... `float`, `double`) are the only ones
+ * the format defines, and they are what write_ply emits. The sized aliases
+ * (`int8`, `uint8`, ... `float32`, `float64`) are not in that description, but
+ * they are in wide circulation: vcglib (and therefore MeshLab) has parsed both
+ * sets for two decades, and OpenMVS writes the sized ones. Rejecting them
+ * means being unable to read files we have to read.
+ */
 inline auto parse_ply_type(std::string_view t) -> PLYType
 {
-    if (t == "float")  return PLYType::Float;
-    if (t == "double") return PLYType::Double;
-    if (t == "int")    return PLYType::Int;
-    if (t == "uint")   return PLYType::UInt;
-    if (t == "short")  return PLYType::Short;
-    if (t == "ushort") return PLYType::UShort;
-    if (t == "char")   return PLYType::Char;
-    if (t == "uchar")  return PLYType::UChar;
+    if (t == "float" or t == "float32")  return PLYType::Float;
+    if (t == "double" or t == "float64") return PLYType::Double;
+    if (t == "int" or t == "int32")      return PLYType::Int;
+    if (t == "uint" or t == "uint32")    return PLYType::UInt;
+    if (t == "short" or t == "int16")    return PLYType::Short;
+    if (t == "ushort" or t == "uint16")  return PLYType::UShort;
+    if (t == "char" or t == "int8")      return PLYType::Char;
+    if (t == "uchar" or t == "uint8")    return PLYType::UChar;
     throw std::runtime_error(
         "read_ply: unrecognized property type '" + std::string(t) + "'");
 }
