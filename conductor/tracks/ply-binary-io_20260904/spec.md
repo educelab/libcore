@@ -203,32 +203,28 @@ additive of the two.
 Precedes [mesh-io-options_20260904](../mesh-io-options_20260904/index.md) (#26),
 which was filed out of this track's decision to leave `write_mesh` untouched.
 
-## Known Limitation (found during implementation)
+## Interoperability Note: MeshLab and per-wedge `texcoord`
 
-MeshLab cannot open **any** PLY libcore writes that combines a `texcoord` list
-with a face of more than 3 corners — ASCII or binary, and regardless of this
-track. It reports "Face with more than 3 vertices".
+Not a libcore limitation. What `write_ply` emits is valid PLY: `texcoord` is a
+list property, and a `2*N` count on an N-corner face is exactly what the format
+allows. The constraint is in MeshLab's importer.
+
+MeshLab 2025.07 refuses any PLY that pairs a `texcoord` list with a face of more
+than 3 corners, reporting "Face with more than 3 vertices". Its bundled
+`libio_base.so` carries vcglib's `import_ply.h` error table, including "Face
+with no 6 texture coordinates" — vcglib hard-codes per-wedge `texcoord` to 6
+floats, so its polygonal face path is unavailable once texcoords are present.
 
 Isolated in MeshLab 2025.07 with a matrix varying only arity and `texcoord`:
 triangles load with and without texcoord, a quad loads without texcoord, and
-only the pair fails — in ASCII and binary identically. So the binary writer
-adds no incompatibility of its own.
+only the pair fails — in ASCII and binary identically. The same files parse
+correctly against an independently written PLY reader and round-trip through
+`read_ply`, and the failing ASCII file is byte-identical (md5 `639a03ea…`) to
+what `e9635ab` wrote before this track.
 
-The limitation is in MeshLab's importer. Its bundled `libio_base.so` carries
-vcglib's `import_ply.h` error table, including "Face with no 6 texture
-coordinates": per-wedge `texcoord` is hard-coded to 6 floats — 3 corners — so
-vcglib's polygonal face path is disabled once texcoords are present. Files that
-MeshLab refuses still parse correctly against an independent PLY reader, and
-`read_ply` round-trips them.
-
-Verified not to be a regression: the failing ASCII tier-3 file is byte-identical
-(md5 `639a03ea…`) to the output of `e9635ab`, the commit this track branched
-from. Triangle-only meshes — what the EduceLab pipelines actually write — are
-unaffected.
-
-Deferred to [ply-multichart_20260624](../ply-multichart_20260624/index.md)
-(#19), which already rewrites the `texcoord` write path and is the right place
-to decide between triangulating on write, warning, or documenting.
+Recorded here only so the next person who sees that MeshLab error does not go
+looking for a bug in libcore. Triangle meshes — what the EduceLab pipelines
+write — are unaffected.
 
 ## Out of Scope
 

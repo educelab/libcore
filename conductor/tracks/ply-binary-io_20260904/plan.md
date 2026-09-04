@@ -190,25 +190,12 @@ path is untouched until Task 4.6.
 
       Binary loads wherever ASCII does, and fails only where ASCII fails
       identically — so the binary writer introduces no MeshLab incompatibility.
-- [!] **Pre-existing limitation confirmed, not a regression.** Rows 08/09 pin
-      the trigger as `texcoord` *combined with* a face of more than 3 corners:
-      texcoord alone is fine (03–05), a quad alone is fine (06–07), and the
-      pair fails in ASCII and binary alike. The failing ASCII file is
-      byte-identical (md5 `639a03ea…`) to what `e9635ab` wrote before this
-      track.
-
-      Cause is in MeshLab's importer, not libcore's output: the error table in
-      `libio_base.so` carries vcglib's `import_ply.h` strings, including
-      "Face with no 6 texture coordinates" — per-wedge `texcoord` support is
-      hard-coded to 6 floats, i.e. 3 corners, so vcglib's polygonal path is
-      unavailable whenever texcoords are present. The files parse correctly
-      against an independently written PLY reader and round-trip through
-      `read_ply`.
-
-      Out of scope for this track (it changes neither the endianness fix nor
-      the binary writer). Belongs with
-      [ply-multichart_20260624](../ply-multichart_20260624/index.md) (#19),
-      which already rewrites the `texcoord` write path.
+      Rows 08/09 are a **MeshLab** constraint, not a libcore one. What
+      `write_ply` emits is valid PLY — `texcoord` is a list property and a
+      `2*N` count on an N-corner face is what the format allows. vcglib
+      hard-codes per-wedge `texcoord` to 6 floats, so MeshLab cannot read that
+      one combination. Nothing to fix in libcore; see the interoperability note
+      in [spec.md](./spec.md).
 - [x] Full suite green, Debug and Release
 
 ---
