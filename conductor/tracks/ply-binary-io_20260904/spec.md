@@ -209,6 +209,11 @@ MeshLab cannot open **any** PLY libcore writes that combines a `texcoord` list
 with a face of more than 3 corners — ASCII or binary, and regardless of this
 track. It reports "Face with more than 3 vertices".
 
+Isolated in MeshLab 2025.07 with a matrix varying only arity and `texcoord`:
+triangles load with and without texcoord, a quad loads without texcoord, and
+only the pair fails — in ASCII and binary identically. So the binary writer
+adds no incompatibility of its own.
+
 The limitation is in MeshLab's importer. Its bundled `libio_base.so` carries
 vcglib's `import_ply.h` error table, including "Face with no 6 texture
 coordinates": per-wedge `texcoord` is hard-coded to 6 floats — 3 corners — so

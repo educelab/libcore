@@ -172,23 +172,38 @@ path is untouched until Task 4.6.
 - [x] Existing ASCII tests pass unmodified, and ASCII output is byte-identical
       to the pre-track writer across all three tiers (verified by diffing the
       output of `e9635ab`'s header against the current one)
-- [x] A binary file written by libcore opens correctly in MeshLab — **checked
-      manually**. A binary tier-1 mesh (positions, normals, colors, mixed
-      triangle/quad arity) loads correctly.
-- [!] **Pre-existing limitation found, not a regression.** Any PLY libcore
-      writes with a `texcoord` list *and* a face of more than 3 corners is
-      rejected by MeshLab with "Face with more than 3 vertices" — in **both**
-      ASCII and binary. The ASCII tier-3 file that fails is byte-identical
-      (md5 `639a03ea…`) to what `e9635ab` wrote before this track, so the
-      behavior predates the work here and the binary path is no worse than the
-      ASCII one.
+- [x] A binary file written by libcore opens correctly in MeshLab — **verified
+      manually in MeshLab 2025.07**, against a 9-file matrix varying only face
+      arity and the presence of a `texcoord` list:
+
+      | # | Mesh | Format | texcoord | MeshLab |
+      | - | ---- | ------ | -------- | ------- |
+      | 01 | triangles | ASCII  | no  | loads |
+      | 02 | triangles | Binary | no  | loads |
+      | 03 | triangles | ASCII  | yes | loads |
+      | 04 | triangles | Binary | yes | loads |
+      | 05 | triangles | Binary | yes | loads |
+      | 06 | quad      | ASCII  | no  | loads |
+      | 07 | quad      | Binary | no  | loads |
+      | 08 | quad      | ASCII  | yes | **fails** |
+      | 09 | quad      | Binary | yes | **fails** |
+
+      Binary loads wherever ASCII does, and fails only where ASCII fails
+      identically — so the binary writer introduces no MeshLab incompatibility.
+- [!] **Pre-existing limitation confirmed, not a regression.** Rows 08/09 pin
+      the trigger as `texcoord` *combined with* a face of more than 3 corners:
+      texcoord alone is fine (03–05), a quad alone is fine (06–07), and the
+      pair fails in ASCII and binary alike. The failing ASCII file is
+      byte-identical (md5 `639a03ea…`) to what `e9635ab` wrote before this
+      track.
 
       Cause is in MeshLab's importer, not libcore's output: the error table in
       `libio_base.so` carries vcglib's `import_ply.h` strings, including
       "Face with no 6 texture coordinates" — per-wedge `texcoord` support is
       hard-coded to 6 floats, i.e. 3 corners, so vcglib's polygonal path is
       unavailable whenever texcoords are present. The files parse correctly
-      against an independently written PLY reader.
+      against an independently written PLY reader and round-trip through
+      `read_ply`.
 
       Out of scope for this track (it changes neither the endianness fix nor
       the binary writer). Belongs with
@@ -234,7 +249,7 @@ path is untouched until Task 4.6.
       `write_ply_header` / `write_ply_data` signatures (both gained a trailing
       `PLYFormat format` parameter, and `write_ply_data` now delegates to
       `write_ply_data_binary`)
-- [~] MeshLab open — manual, see the Phase 4 note
+- [x] MeshLab open — verified manually; see the Phase 4 note for the matrix
 
 ## For the PR description
 
