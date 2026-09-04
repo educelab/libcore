@@ -172,11 +172,28 @@ path is untouched until Task 4.6.
 - [x] Existing ASCII tests pass unmodified, and ASCII output is byte-identical
       to the pre-track writer across all three tiers (verified by diffing the
       output of `e9635ab`'s header against the current one)
-- [~] A binary file written by libcore opens correctly in MeshLab — **awaiting
-      manual check**. MeshLab 2025.07 ships no CLI (`meshlabserver` was removed
-      upstream), so this cannot be automated here. Validated instead against an
-      independently written PLY parser (structure, all scalar values, per-wedge
-      texcoords, no trailing bytes) for tiers 1–3.
+- [x] A binary file written by libcore opens correctly in MeshLab — **checked
+      manually**. A binary tier-1 mesh (positions, normals, colors, mixed
+      triangle/quad arity) loads correctly.
+- [!] **Pre-existing limitation found, not a regression.** Any PLY libcore
+      writes with a `texcoord` list *and* a face of more than 3 corners is
+      rejected by MeshLab with "Face with more than 3 vertices" — in **both**
+      ASCII and binary. The ASCII tier-3 file that fails is byte-identical
+      (md5 `639a03ea…`) to what `e9635ab` wrote before this track, so the
+      behavior predates the work here and the binary path is no worse than the
+      ASCII one.
+
+      Cause is in MeshLab's importer, not libcore's output: the error table in
+      `libio_base.so` carries vcglib's `import_ply.h` strings, including
+      "Face with no 6 texture coordinates" — per-wedge `texcoord` support is
+      hard-coded to 6 floats, i.e. 3 corners, so vcglib's polygonal path is
+      unavailable whenever texcoords are present. The files parse correctly
+      against an independently written PLY reader.
+
+      Out of scope for this track (it changes neither the endianness fix nor
+      the binary writer). Belongs with
+      [ply-multichart_20260624](../ply-multichart_20260624/index.md) (#19),
+      which already rewrites the `texcoord` write path.
 - [x] Full suite green, Debug and Release
 
 ---

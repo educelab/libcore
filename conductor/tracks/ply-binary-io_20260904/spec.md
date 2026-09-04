@@ -203,6 +203,28 @@ additive of the two.
 Precedes [mesh-io-options_20260904](../mesh-io-options_20260904/index.md) (#26),
 which was filed out of this track's decision to leave `write_mesh` untouched.
 
+## Known Limitation (found during implementation)
+
+MeshLab cannot open **any** PLY libcore writes that combines a `texcoord` list
+with a face of more than 3 corners — ASCII or binary, and regardless of this
+track. It reports "Face with more than 3 vertices".
+
+The limitation is in MeshLab's importer. Its bundled `libio_base.so` carries
+vcglib's `import_ply.h` error table, including "Face with no 6 texture
+coordinates": per-wedge `texcoord` is hard-coded to 6 floats — 3 corners — so
+vcglib's polygonal face path is disabled once texcoords are present. Files that
+MeshLab refuses still parse correctly against an independent PLY reader, and
+`read_ply` round-trips them.
+
+Verified not to be a regression: the failing ASCII tier-3 file is byte-identical
+(md5 `639a03ea…`) to the output of `e9635ab`, the commit this track branched
+from. Triangle-only meshes — what the EduceLab pipelines actually write — are
+unaffected.
+
+Deferred to [ply-multichart_20260624](../ply-multichart_20260624/index.md)
+(#19), which already rewrites the `texcoord` write path and is the right place
+to decide between triangulating on write, warning, or documenting.
+
 ## Out of Scope
 
 - **A format parameter on `write_mesh`.** A PLY-only value is meaningless for
