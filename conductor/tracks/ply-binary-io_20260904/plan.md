@@ -156,22 +156,28 @@ path is untouched until Task 4.6.
       rather than left to the existing header-grepping tests.
 - [x] **Task 4.5**: Round-trip tests for structural breadth — n-gon faces, UVs,
       colors, normals, empty mesh — where hand-computing bytes stops paying.
-- [~] **Task 4.6**: `write_ply_header` emits the `format` line matching the
+- [x] **Task 4.6**: `write_ply_header` emits the `format` line matching the
       requested format and the host's byte order.
-- [ ] **Task 4.7**: Binary path in `write_ply_data` — precomputed property
+- [x] **Task 4.7**: Binary path in `write_ply_data` — precomputed property
       offsets, one `write` per vertex record, `float32` scalars, `uchar`
       colors, `uchar`-prefixed `vertex_indices` and `texcoord` lists. Mirrors
       the reader's batching rather than writing per property.
-- [ ] **Task 4.8**: Open all three tiers with `std::ios::binary`
+- [x] **Task 4.8**: Open all three tiers with `std::ios::binary`
       unconditionally. Note in the PR that Windows ASCII callers stop getting
       CRLF; `read_ply` already trims `\r`, so nothing regresses on read.
 
 ### Verification
 
-- [ ] Byte-level, `float32`-width, default-ASCII and round-trip tests all pass
-- [ ] Existing ASCII tests pass unmodified
-- [ ] A binary file written by libcore opens correctly in MeshLab
-- [ ] Full suite green, Debug and Release
+- [x] Byte-level, `float32`-width, default-ASCII and round-trip tests all pass
+- [x] Existing ASCII tests pass unmodified, and ASCII output is byte-identical
+      to the pre-track writer across all three tiers (verified by diffing the
+      output of `e9635ab`'s header against the current one)
+- [~] A binary file written by libcore opens correctly in MeshLab — **awaiting
+      manual check**. MeshLab 2025.07 ships no CLI (`meshlabserver` was removed
+      upstream), so this cannot be automated here. Validated instead against an
+      independently written PLY parser (structure, all scalar values, per-wedge
+      texcoords, no trailing bytes) for tiers 1–3.
+- [x] Full suite green, Debug and Release
 
 ---
 

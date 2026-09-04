@@ -1185,12 +1185,19 @@ void write_ply_header(
     bool has_uvs,
     [[maybe_unused]] bool has_normals,
     [[maybe_unused]] bool has_colors,
-    [[maybe_unused]] PLYFormat format)
+    PLYFormat format)
 {
     using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
 
-    file << "ply\n"
-         << "format ascii 1.0\n";
+    file << "ply\n";
+    if (format == PLYFormat::Binary) {
+        // Native byte order, labeled honestly. read_ply handles either
+        // direction, so the file stays portable.
+        file << (host_is_little_endian() ? "format binary_little_endian 1.0\n"
+                                         : "format binary_big_endian 1.0\n");
+    } else {
+        file << "format ascii 1.0\n";
+    }
 
     if (!texture_comment.empty()) {
         file << "comment TextureFile " << texture_comment << '\n';
@@ -1228,6 +1235,129 @@ void write_ply_header(
 }
 
 /**
+ * @brief Write PLY binary vertex and face data to @p file
+ *
+ * Mirrors the reader's record batching: the vertex layout is fixed by the
+ * mesh's traits, so property offsets are precomputed once and each vertex
+ * costs a single @c write rather than one per property. Face records vary in
+ * length and get one @c write each.
+ *
+ * Widths match what @ref write_ply_header declares and never follow @c T:
+ * @c float32 positions and normals, @c uchar colors, @c int32 vertex indices,
+ * @c float32 texcoords, and @c uchar list counts. Byte order is the host's,
+ * which the header labels.
+ *
+ * @p uvmap may be @c nullptr (no texcoord list). Unmapped corners are written
+ * as @c (-1,-1), the same sentinel the ASCII path uses. @p has_normals and
+ * @p has_colors must match the values passed to @ref write_ply_header.
+ *
+ * @warning Assumes @ref validate_ply_face_lists has already run: the @c uchar
+ *          list counts below are narrowing casts that only hold because every
+ *          face is known to be within 255 corners, or 127 when UVs are
+ *          written.
+ */
+template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
+void write_ply_data_binary(
+    std::ostream& file,
+    const Mesh<T, Dims, VTraits>& mesh,
+    const UVMapT* uvmap,
+    [[maybe_unused]] bool has_normals,
+    [[maybe_unused]] bool has_colors)
+{
+    using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
+
+    constexpr std::size_t kF32 = sizeof(float);
+    static_assert(kF32 == 4, "PLY float32 output requires a 4-byte float");
+
+    // Vertex record layout, resolved once outside the loop.
+    const std::size_t normal_off = 3 * kF32;
+    const std::size_t color_off = normal_off + (has_normals ? 3 * kF32 : 0);
+    const std::size_t vert_rec_size = color_off + (has_colors ? 3 : 0);
+
+    // Widest possible record: 3 positions + 3 normals as float32, 3 uchar
+    // colors. Fixed size, so no allocation in the vertex loop.
+    std::array<char, 6 * kF32 + 3> vbuf{};
+
+    const auto put_f32 = [&vbuf](std::size_t off, auto value) {
+        const auto f = static_cast<float>(value);
+        std::memcpy(vbuf.data() + off, &f, kF32);
+    };
+
+    for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
+        const auto& v = mesh.vertex(vi);
+        put_f32(0, v[0]);
+        put_f32(kF32, v[1]);
+        put_f32(2 * kF32, v[2]);
+
+        if constexpr (traits::has_normal<Vertex>::value) {
+            if (has_normals) {
+                // PLY's fixed-property element forces a value for every
+                // vertex; gaps in a partially-normalled mesh fall back to
+                // zero, as in the ASCII path.
+                const auto n = v.normal.value_or(Vec<T, Dims>{});
+                put_f32(normal_off, n[0]);
+                put_f32(normal_off + kF32, n[1]);
+                put_f32(normal_off + 2 * kF32, n[2]);
+            }
+        }
+        if constexpr (traits::has_color<Vertex>::value) {
+            if (has_colors) {
+                // Gaps fall back to black, as in the ASCII path.
+                const auto [r, g, b] = detail::color_to_u8c3(v.color);
+                vbuf[color_off] = static_cast<char>(r);
+                vbuf[color_off + 1] = static_cast<char>(g);
+                vbuf[color_off + 2] = static_cast<char>(b);
+            }
+        }
+
+        file.write(
+            vbuf.data(), static_cast<std::streamsize>(vert_rec_size));
+    }
+
+    // Face records vary with corner count, so the buffer grows to the largest
+    // face seen and is then reused.
+    std::vector<char> fbuf;
+    for (std::size_t fi = 0; fi < mesh.num_faces(); ++fi) {
+        const auto& face = mesh.face(fi);
+        const auto n = face.size();
+
+        std::size_t rec_size = 1 + n * sizeof(int32_t);
+        if (uvmap != nullptr) {
+            rec_size += 1 + 2 * n * kF32;
+        }
+        if (fbuf.size() < rec_size) {
+            fbuf.resize(rec_size);
+        }
+
+        std::size_t off = 0;
+        fbuf[off++] = static_cast<char>(static_cast<uint8_t>(n));
+        for (const auto vi : face) {
+            const auto idx = static_cast<int32_t>(vi);
+            std::memcpy(fbuf.data() + off, &idx, sizeof(int32_t));
+            off += sizeof(int32_t);
+        }
+
+        if (uvmap != nullptr) {
+            fbuf[off++] = static_cast<char>(static_cast<uint8_t>(2 * n));
+            for (std::size_t ci = 0; ci < n; ++ci) {
+                float u{-1.f}, w{-1.f};
+                if (uvmap->has(fi, ci)) {
+                    const auto& uv = uvmap->at(uvmap->get(fi, ci));
+                    u = static_cast<float>(uv[0]);
+                    w = static_cast<float>(uv[1]);
+                }
+                std::memcpy(fbuf.data() + off, &u, kF32);
+                off += kF32;
+                std::memcpy(fbuf.data() + off, &w, kF32);
+                off += kF32;
+            }
+        }
+
+        file.write(fbuf.data(), static_cast<std::streamsize>(rec_size));
+    }
+}
+
+/**
  * @brief Write PLY ASCII vertex and face data to @p file
  *
  * @p uvmap may be @c nullptr (no UV output). When non-null, each face record
@@ -1235,6 +1365,9 @@ void write_ply_header(
  * written as @c -1,-1 (sentinel for "no UV assignment"). @p has_normals and
  * @p has_colors must match the values passed to @ref write_ply_header so the
  * data matches the declared properties.
+ *
+ * @p format selects the encoding; @c PLYFormat::Binary delegates to
+ * @ref write_ply_data_binary and @p buf is then unused.
  */
 template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
 void write_ply_data(
@@ -1244,9 +1377,14 @@ void write_ply_data(
     const UVMapT* uvmap,
     [[maybe_unused]] bool has_normals,
     [[maybe_unused]] bool has_colors,
-    [[maybe_unused]] PLYFormat format)
+    PLYFormat format)
 {
     using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
+
+    if (format == PLYFormat::Binary) {
+        write_ply_data_binary(file, mesh, uvmap, has_normals, has_colors);
+        return;
+    }
 
     for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
         const auto& v = mesh.vertex(vi);
@@ -1329,7 +1467,7 @@ void write_ply(
 
     detail::validate_ply_face_lists(mesh, false);
 
-    std::ofstream file(path);
+    std::ofstream file(path, std::ios::binary);
     if (!file) {
         throw std::runtime_error(
             "write_ply: cannot open file: " + path.string());
@@ -1381,7 +1519,7 @@ void write_ply(
 
     detail::validate_ply_face_lists(mesh, true);
 
-    std::ofstream file(path);
+    std::ofstream file(path, std::ios::binary);
     if (!file) {
         throw std::runtime_error(
             "write_ply: cannot open file: " + path.string());
@@ -1438,7 +1576,7 @@ void write_ply(
 
     detail::validate_ply_face_lists(mesh, true);
 
-    std::ofstream file(path);
+    std::ofstream file(path, std::ios::binary);
     if (!file) {
         throw std::runtime_error(
             "write_ply: cannot open file: " + path.string());
