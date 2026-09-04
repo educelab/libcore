@@ -2,10 +2,12 @@
   "id": "ply-binary-io_20260904",
   "title": "PLY Binary IO",
   "type": "feature",
-  "status": "pending",
+  "status": "in_progress",
   "created": "2026-09-04T00:00:00+0200",
-  "updated": "2026-09-04T00:00:00+0200",
+  "updated": "2026-09-04T21:55:13Z",
   "issue": 25,
+  "current_phase": 1,
+  "current_task": "1.1",
   "phases": {
     "total": 5,
     "completed": 0
@@ -13,5 +15,6 @@
   "tasks": {
     "total": 22,
     "completed": 0
-  }
+  },
+  "commits": []
 }

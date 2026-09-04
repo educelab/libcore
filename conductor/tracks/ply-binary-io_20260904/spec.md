@@ -124,6 +124,22 @@ and `std::byteswap` is C++23, so neither is available; host-order detection and
 a width-dispatched swap have to be written against `__BYTE_ORDER__` with a
 `_WIN32` fallback.
 
+### The helpers live in `detail`, not a public `utils/Endian.hpp`
+
+*(Task 1.1)* `host_is_little_endian()` and `swap_bytes()` go in
+`namespace educelab::detail` in `MeshIO_PLY.hpp`, beside the other PLY-local
+helpers, rather than in a new public `utils/Endian.hpp`.
+
+PLY binary IO is the only caller in the library, and byte order is not a problem
+any other libcore component has. A public header would have to be added to
+`public_hdrs` in `CMakeLists.txt`, installed, Doxygen-documented, and given its
+own `TestEndian.cpp` target — permanent public surface and a support obligation
+bought for one consumer. `detail` costs nothing and can be promoted the moment a
+second caller appears; the reverse move is a breaking change.
+
+This also keeps the track's stated shape: no new files, no new test target,
+tests in the existing `tests/src/TestMeshIO.cpp`.
+
 ## Testing Strategy
 
 Round-trip tests cannot anchor this work. The sized-alias bug fixed in #24

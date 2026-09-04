@@ -3,7 +3,7 @@
 **Track ID:** ply-binary-io_20260904
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-09-04
-**Status:** [ ] Not Started
+**Status:** [~] In Progress
 
 > Task detail is at planning granularity. Per-task test lists get filled in when
 > each phase starts, per the strict tests-first workflow. Design detail lives in
@@ -45,7 +45,7 @@ consumes them.
 
 ### Tasks
 
-- [ ] **Task 1.1**: Decide where the helpers live — `namespace detail` in
+- [x] **Task 1.1**: Decide where the helpers live — `namespace detail` in
       `MeshIO_PLY.hpp` (assumed: PLY-local, adds no public surface) or a new
       public `utils/Endian.hpp`. Record the decision and rationale in
       `spec.md`.
