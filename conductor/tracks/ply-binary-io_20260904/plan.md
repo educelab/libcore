@@ -144,19 +144,19 @@ path is untouched until Task 4.6.
       thread it through the three `write_ply` tiers (defaulting to `ASCII`) into
       `write_ply_header` and `write_ply_data`, which ignore it for now.
       Behavior-neutral; kept distinct from `detail::PLYHeader::Format`.
-- [~] **Task 4.2**: Byte-level writer test — a small positions-only mesh
+- [x] **Task 4.2**: Byte-level writer test — a small positions-only mesh
       written as `Binary`, asserted against a hand-derived byte literal
       (header line, then exact vertex and face bytes). The test encodes the
       format, not libcore's opinion of it.
-- [~] **Task 4.3**: Test that scalars are `float32` regardless of `T` — write a
+- [x] **Task 4.3**: Test that scalars are `float32` regardless of `T` — write a
       `Mesh<double, 3>` and assert 4-byte scalars and a `property float x`
       declaration.
-- [~] **Task 4.4**: Test that `ASCII` remains the default — an unqualified
+- [x] **Task 4.4**: Test that `ASCII` remains the default — an unqualified
       `write_ply` call still produces `format ascii 1.0`, asserted explicitly
       rather than left to the existing header-grepping tests.
-- [~] **Task 4.5**: Round-trip tests for structural breadth — n-gon faces, UVs,
+- [x] **Task 4.5**: Round-trip tests for structural breadth — n-gon faces, UVs,
       colors, normals, empty mesh — where hand-computing bytes stops paying.
-- [ ] **Task 4.6**: `write_ply_header` emits the `format` line matching the
+- [~] **Task 4.6**: `write_ply_header` emits the `format` line matching the
       requested format and the host's byte order.
 - [ ] **Task 4.7**: Binary path in `write_ply_data` — precomputed property
       offsets, one `write` per vertex record, `float32` scalars, `uchar`

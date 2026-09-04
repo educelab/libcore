@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -1884,6 +1885,360 @@ TEST_F(PLYTest, FaceWith128CornersNoUVs_WritesCleanly)
     Mesh3f dst;
     read_ply(path, dst);
     EXPECT_EQ(dst.face(0).size(), 128u);
+}
+
+//------------------------------------------------------------------------------
+// Binary write
+//
+// The byte-level tests below assert the format itself, not libcore's opinion
+// of it: expectations are spelled as hand-derived IEEE-754 / two's-complement
+// literals in big-endian order and converted to host order by hand. A
+// round-trip cannot anchor this work, because a byte-order mistake the reader
+// and writer share round-trips perfectly.
+//------------------------------------------------------------------------------
+
+// Split a written PLY into its header text and its raw data bytes.
+static void split_ply(
+    const fs::path& path,
+    std::string& header,
+    std::vector<unsigned char>& body)
+{
+    std::ifstream f(path, std::ios::binary);
+    ASSERT_TRUE(f.good()) << "cannot open " << path;
+    // Extra parens on the first argument: without them this is a function
+    // declaration, not a vector (most vexing parse).
+    const std::vector<unsigned char> all(
+        (std::istreambuf_iterator<char>(f)),
+        std::istreambuf_iterator<char>());
+
+    static const std::string kEnd = "end_header\n";
+    const std::string text(all.begin(), all.end());
+    const auto pos = text.find(kEnd);
+    ASSERT_NE(pos, std::string::npos) << "no end_header in " << path;
+    header.assign(text, 0, pos + kEnd.size());
+    body.assign(all.begin() + static_cast<long>(pos + kEnd.size()), all.end());
+}
+
+// Append a hand-derived big-endian byte spelling in the host's own order.
+static void push_host(
+    std::vector<unsigned char>& out, std::initializer_list<unsigned char> be)
+{
+    std::vector<unsigned char> b(be);
+    if (probe_host_is_little_endian()) {
+        std::reverse(b.begin(), b.end());
+    }
+    out.insert(out.end(), b.begin(), b.end());
+}
+
+// The format line a binary write must emit on this host.
+static auto expected_binary_format_line() -> std::string
+{
+    return probe_host_is_little_endian()
+               ? "format binary_little_endian 1.0\n"
+               : "format binary_big_endian 1.0\n";
+}
+
+TEST_F(PLYTest, BinaryWrite_ByteLevel)
+{
+    // make_triangle(): v0=(0,0,0) v1=(1,0,0) v2=(0,1,0), face 0 1 2.
+    const auto src  = make_triangle();
+    const auto path = ply("bin_bytes");
+    write_ply(path, src, PLYFormat::Binary);
+
+    std::string header;
+    std::vector<unsigned char> body;
+    split_ply(path, header, body);
+
+    // Property declarations are the same as ASCII; only the format line moves.
+    const std::string want_header =
+        "ply\n" + expected_binary_format_line() +
+        "element vertex 3\n"
+        "property float x\n"
+        "property float y\n"
+        "property float z\n"
+        "element face 1\n"
+        "property list uchar int vertex_indices\n"
+        "end_header\n";
+    EXPECT_EQ(header, want_header);
+
+    // 3 vertices x 3 float32, then a uchar count and 3 int32 indices.
+    std::vector<unsigned char> want;
+    const std::initializer_list<unsigned char> zero{0x00, 0x00, 0x00, 0x00};
+    const std::initializer_list<unsigned char> one{0x3F, 0x80, 0x00, 0x00};
+    push_host(want, zero); push_host(want, zero); push_host(want, zero);
+    push_host(want, one);  push_host(want, zero); push_host(want, zero);
+    push_host(want, zero); push_host(want, one);  push_host(want, zero);
+    want.push_back(0x03);  // uchar list count needs no swap
+    push_host(want, {0x00, 0x00, 0x00, 0x00});
+    push_host(want, {0x00, 0x00, 0x00, 0x01});
+    push_host(want, {0x00, 0x00, 0x00, 0x02});
+
+    ASSERT_EQ(body.size(), want.size());
+    EXPECT_EQ(body, want);
+}
+
+TEST_F(PLYTest, BinaryWrite_ScalarsAreFloat32RegardlessOfT)
+{
+    // The on-disk format must not follow the mesh's template parameter: a
+    // Mesh3d and a Mesh3f have to produce the same bytes from the same call.
+    Mesh3d src;
+    (void)src.insert_vertex(0., 0., 0.);
+    (void)src.insert_vertex(1., 0., 0.);
+    (void)src.insert_vertex(0., 1., 0.);
+    (void)src.insert_face(0u, 1u, 2u);
+
+    const auto path = ply("bin_double");
+    write_ply(path, src, PLYFormat::Binary);
+
+    std::string header;
+    std::vector<unsigned char> body;
+    split_ply(path, header, body);
+
+    EXPECT_NE(header.find("property float x\n"), std::string::npos) << header;
+    EXPECT_EQ(header.find("float64"), std::string::npos) << header;
+    EXPECT_EQ(header.find("property double"), std::string::npos) << header;
+
+    // 3 x 3 x 4 bytes of positions + 1 count byte + 3 x 4 index bytes.
+    EXPECT_EQ(body.size(), 3u * 3u * 4u + 1u + 3u * 4u);
+
+    // Byte-identical to the Mesh3f write of the same geometry.
+    const auto f_path = ply("bin_float");
+    write_ply(f_path, make_triangle(), PLYFormat::Binary);
+    std::string f_header;
+    std::vector<unsigned char> f_body;
+    split_ply(f_path, f_header, f_body);
+    EXPECT_EQ(header, f_header);
+    EXPECT_EQ(body, f_body);
+}
+
+TEST_F(PLYTest, BinaryWrite_NormalsAndColorsAreDeclaredWidths)
+{
+    // Normals are float32 and colors uchar, as the ASCII header declares.
+    // A NCMesh vertex record is therefore 12 + 12 + 3 = 27 bytes.
+    NCMesh src;
+    for (int i = 0; i < 3; ++i) {
+        const auto vi = src.insert_vertex(
+            static_cast<float>(i), 0.f, 0.f);
+        src.vertex(vi).normal = Vec<float, 3>{0.f, 0.f, 1.f};
+        src.vertex(vi).color = Color::U8C3{0x10, 0x20, 0x30};
+    }
+    (void)src.insert_face(0u, 1u, 2u);
+
+    const auto path = ply("bin_nc");
+    write_ply(path, src, PLYFormat::Binary);
+
+    std::string header;
+    std::vector<unsigned char> body;
+    split_ply(path, header, body);
+
+    EXPECT_NE(header.find("property float nx\n"), std::string::npos) << header;
+    EXPECT_NE(header.find("property uchar red\n"), std::string::npos) << header;
+    EXPECT_EQ(body.size(), 3u * 27u + 1u + 3u * 4u);
+
+    // The color bytes sit at the tail of each vertex record, unswapped.
+    EXPECT_EQ(body[24], 0x10u);
+    EXPECT_EQ(body[25], 0x20u);
+    EXPECT_EQ(body[26], 0x30u);
+}
+
+TEST_F(PLYTest, BinaryWrite_TexcoordList)
+{
+    // texcoord is a uchar-counted list of 2*N float32 values, with (-1,-1)
+    // for an unmapped corner.
+    const auto src = make_triangle();
+    UVMap2f uv;
+    (void)uv.insert(0.f, 0.f);
+    (void)uv.insert(1.f, 0.f);
+    uv.map(0, 0, 0);
+    uv.map(0, 1, 1);
+    // corner 2 deliberately left unmapped
+
+    const auto path = ply("bin_uv");
+    write_ply(path, src, uv, PLYFormat::Binary);
+
+    std::string header;
+    std::vector<unsigned char> body;
+    split_ply(path, header, body);
+    EXPECT_NE(
+        header.find("property list uchar float texcoord\n"),
+        std::string::npos)
+        << header;
+
+    std::vector<unsigned char> want;
+    const std::initializer_list<unsigned char> zero{0x00, 0x00, 0x00, 0x00};
+    const std::initializer_list<unsigned char> one{0x3F, 0x80, 0x00, 0x00};
+    const std::initializer_list<unsigned char> neg_one{0xBF, 0x80, 0x00, 0x00};
+    push_host(want, zero); push_host(want, zero); push_host(want, zero);
+    push_host(want, one);  push_host(want, zero); push_host(want, zero);
+    push_host(want, zero); push_host(want, one);  push_host(want, zero);
+    want.push_back(0x03);
+    push_host(want, {0x00, 0x00, 0x00, 0x00});
+    push_host(want, {0x00, 0x00, 0x00, 0x01});
+    push_host(want, {0x00, 0x00, 0x00, 0x02});
+    want.push_back(0x06);  // 2*N, still a uchar count
+    push_host(want, zero);    push_host(want, zero);     // corner 0 (0,0)
+    push_host(want, one);     push_host(want, zero);     // corner 1 (1,0)
+    push_host(want, neg_one); push_host(want, neg_one);  // corner 2 unmapped
+
+    ASSERT_EQ(body.size(), want.size());
+    EXPECT_EQ(body, want);
+}
+
+TEST_F(PLYTest, DefaultFormatIsASCII)
+{
+    // Asserted explicitly rather than left to the header-grepping tests, so
+    // an accidental flip of the default is caught here.
+    const auto src  = make_triangle();
+    const auto path = ply("default_fmt");
+    write_ply(path, src);
+
+    std::ifstream f(path, std::ios::binary);
+    std::string line1, line2;
+    ASSERT_TRUE(std::getline(f, line1));
+    ASSERT_TRUE(std::getline(f, line2));
+    EXPECT_EQ(line1, "ply");
+    EXPECT_EQ(line2, "format ascii 1.0");
+}
+
+TEST_F(PLYTest, ExplicitASCIIMatchesDefault)
+{
+    // PLYFormat::ASCII must be the same code path the default takes.
+    const auto src = make_triangle();
+    const auto a = ply("ascii_default");
+    const auto b = ply("ascii_explicit");
+    write_ply(a, src);
+    write_ply(b, src, PLYFormat::ASCII);
+
+    const auto slurp = [](const fs::path& p) {
+        std::ifstream f(p, std::ios::binary);
+        return std::string(
+            std::istreambuf_iterator<char>(f),
+            std::istreambuf_iterator<char>());
+    };
+    EXPECT_EQ(slurp(a), slurp(b));
+}
+
+//------------------------------------------------------------------------------
+// Binary write round-trips — structural breadth, where hand-computing bytes
+// stops paying.
+//------------------------------------------------------------------------------
+
+TEST_F(PLYTest, BinaryRoundTrip_NGonAndNormalsAndColors)
+{
+    NCMesh src;
+    for (std::size_t i = 0; i < 5; ++i) {
+        const auto vi = src.insert_vertex(
+            static_cast<float>(i), static_cast<float>(2 * i), 0.5f);
+        src.vertex(vi).normal = Vec<float, 3>{0.f, 0.f, 1.f};
+        src.vertex(vi).color =
+            Color::U8C3{static_cast<uint8_t>(10 * i), 0x40, 0x80};
+    }
+    (void)src.insert_face(NCMesh::Face{0, 1, 2, 3, 4});  // pentagon
+
+    const auto path = ply("bin_rt_ngon");
+    write_ply(path, src, PLYFormat::Binary);
+
+    NCMesh dst;
+    read_ply(path, dst);
+    ASSERT_EQ(dst.num_vertices(), 5u);
+    ASSERT_EQ(dst.num_faces(), 1u);
+    EXPECT_EQ(dst.face(0), (NCMesh::Face{0, 1, 2, 3, 4}));
+    EXPECT_NEAR(dst.vertex(4)[0], 4.f, 1e-6f);
+    EXPECT_NEAR(dst.vertex(4)[1], 8.f, 1e-6f);
+    EXPECT_NEAR(dst.vertex(4)[2], 0.5f, 1e-6f);
+    ASSERT_TRUE(dst.vertex(3).normal.has_value());
+    EXPECT_NEAR((*dst.vertex(3).normal)[2], 1.f, 1e-6f);
+    ASSERT_TRUE(dst.vertex(3).color.has_value());
+    EXPECT_EQ(dst.vertex(3).color.value<Color::U8C3>()[0], 30u);
+    EXPECT_EQ(dst.vertex(3).color.value<Color::U8C3>()[2], 0x80u);
+}
+
+TEST_F(PLYTest, BinaryRoundTrip_UVsWithSeam)
+{
+    const auto src = make_triangle();
+    const auto uv  = make_triangle_uvmap(src);
+
+    const auto path = ply("bin_rt_uv");
+    write_ply(path, src, uv, PLYFormat::Binary);
+
+    Mesh3f  dst;
+    UVMap2f dst_uv;
+    read_ply(path, dst, dst_uv);
+    ASSERT_EQ(dst.num_faces(), 1u);
+    for (std::size_t ci = 0; ci < 3; ++ci) {
+        ASSERT_TRUE(dst_uv.has(0, ci)) << "corner " << ci;
+        const auto& want = uv.at(uv.get(0, ci));
+        const auto& got  = dst_uv.at(dst_uv.get(0, ci));
+        EXPECT_NEAR(got[0], want[0], 1e-6f) << "corner " << ci;
+        EXPECT_NEAR(got[1], want[1], 1e-6f) << "corner " << ci;
+    }
+}
+
+TEST_F(PLYTest, BinaryRoundTrip_TexturePath)
+{
+    const auto src = make_triangle();
+    const auto uv  = make_triangle_uvmap(src);
+    const fs::path tex{"texture.png"};
+
+    const auto path = ply("bin_rt_tex");
+    write_ply(path, src, uv, tex, PLYFormat::Binary);
+
+    Mesh3f  dst;
+    UVMap2f dst_uv;
+    std::vector<fs::path> paths;
+    read_ply(path, dst, dst_uv, paths);
+    ASSERT_EQ(paths.size(), 1u);
+    EXPECT_EQ(paths[0], tex);
+    EXPECT_EQ(dst.num_faces(), 1u);
+}
+
+TEST_F(PLYTest, BinaryRoundTrip_EmptyMesh)
+{
+    const Mesh3f src;
+    const auto path = ply("bin_rt_empty");
+    write_ply(path, src, PLYFormat::Binary);
+
+    Mesh3f dst;
+    read_ply(path, dst);
+    EXPECT_EQ(dst.num_vertices(), 0u);
+    EXPECT_EQ(dst.num_faces(), 0u);
+}
+
+TEST_F(PLYTest, BinaryRoundTrip_MaximalFaces)
+{
+    // The Phase 3 coherence check on the binary path: the largest faces the
+    // writer permits must still be readable.
+    {
+        const auto path = ply("bin_rt_255");
+        write_ply(path, make_ngon(255), PLYFormat::Binary);
+        Mesh3f dst;
+        read_ply(path, dst);
+        ASSERT_EQ(dst.num_faces(), 1u);
+        EXPECT_EQ(dst.face(0).size(), 255u);
+        EXPECT_EQ(dst.face(0).back(), 254u);
+    }
+    {
+        const auto path = ply("bin_rt_127_uv");
+        write_ply(path, make_ngon(127), make_ngon_uvmap(127),
+                  PLYFormat::Binary);
+        Mesh3f  dst;
+        UVMap2f dst_uv;
+        read_ply(path, dst, dst_uv);
+        ASSERT_EQ(dst.num_faces(), 1u);
+        EXPECT_EQ(dst.face(0).size(), 127u);
+        ASSERT_TRUE(dst_uv.has(0, 126));
+        EXPECT_NEAR(dst_uv.at(dst_uv.get(0, 126))[0], 126.f / 127.f, 1e-5f);
+    }
+}
+
+TEST_F(PLYTest, BinaryWrite_RejectsOversizeFaces)
+{
+    // The list-count guard is format-independent.
+    const auto path = ply("bin_ngon256");
+    EXPECT_THROW(
+        write_ply(path, make_ngon(256), PLYFormat::Binary),
+        std::runtime_error);
+    EXPECT_FALSE(fs::exists(path));
 }
 
 TEST_F(PLYTest, WriteWithUVMap_PerWedgeTexcoord)
