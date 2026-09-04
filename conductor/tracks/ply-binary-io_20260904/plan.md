@@ -52,16 +52,16 @@ consumes them.
 - [x] **Task 1.2**: Tests for host-order detection and byte swapping across all
       four widths the format uses (1, 2, 4, 8 bytes), including the 1-byte
       no-op and a `double` case.
-- [~] **Task 1.3**: Implement host-endianness detection (`__BYTE_ORDER__` where
+- [x] **Task 1.3**: Implement host-endianness detection (`__BYTE_ORDER__` where
       the compiler defines it, `_WIN32` fallback) and the width-dispatched
       swap. `<cstring>`/`<cstdint>` only — no new dependency, no new include of
       anything platform-specific.
 
 ### Verification
 
-- [ ] Helper tests pass
-- [ ] Build succeeds in Debug and Release
-- [ ] Full existing suite still green (nothing consumes the helpers yet)
+- [x] Helper tests pass
+- [x] Build succeeds in Debug and Release
+- [x] Full existing suite still green (nothing consumes the helpers yet)
 
 ---
 

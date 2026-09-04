@@ -10,6 +10,8 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "educelab/core/types/Color.hpp"
@@ -23,6 +25,75 @@ namespace educelab
 
 namespace detail
 {
+
+// -------------------------------------------------------------------------
+// Byte-order helpers
+// -------------------------------------------------------------------------
+//
+// The library targets cxx_std_17, where neither std::endian (C++20) nor
+// std::byteswap (C++23) exists, so host-order detection and the swap are
+// hand-rolled. They live here rather than in a public utils/ header because
+// binary PLY IO is their only consumer.
+
+/** @brief True when the host stores multi-byte scalars least-significant
+ *         byte first
+ *
+ * Resolved at compile time so callers can hoist the comparison against the
+ * file's declared order out of their read loops.
+ */
+inline constexpr auto host_is_little_endian() -> bool
+{
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
+    defined(__ORDER_BIG_ENDIAN__)
+    static_assert(
+        __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ or
+            __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__,
+        "MeshIO_PLY: mixed-endian hosts are not supported");
+    return __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__;
+#elif defined(_WIN32)
+    // MSVC defines no byte-order macro. Every Windows target (x86, x64, ARM,
+    // ARM64) is little-endian.
+    return true;
+#else
+#error "MeshIO_PLY: cannot determine host byte order"
+#endif
+}
+
+/** @brief Reverse the byte order of a fixed-width scalar in place
+ *
+ * Dispatched on @c sizeof(ScalarT) across the four widths the PLY format
+ * uses. A 1-byte scalar is a no-op, which keeps call sites free of a width
+ * check of their own.
+ *
+ * @tparam ScalarT Trivially copyable scalar of 1, 2, 4, or 8 bytes
+ */
+template <typename ScalarT>
+void swap_bytes(ScalarT& v)
+{
+    static_assert(
+        std::is_trivially_copyable_v<ScalarT>,
+        "swap_bytes requires a trivially copyable type");
+    static_assert(
+        sizeof(ScalarT) == 1 or sizeof(ScalarT) == 2 or
+            sizeof(ScalarT) == 4 or sizeof(ScalarT) == 8,
+        "swap_bytes supports 1-, 2-, 4-, and 8-byte scalars");
+
+    // Aliasing a scalar through unsigned char* is permitted; this reorders the
+    // object representation without forming a value of a narrower type.
+    auto* p = reinterpret_cast<unsigned char*>(&v);
+    if constexpr (sizeof(ScalarT) == 2) {
+        std::swap(p[0], p[1]);
+    } else if constexpr (sizeof(ScalarT) == 4) {
+        std::swap(p[0], p[3]);
+        std::swap(p[1], p[2]);
+    } else if constexpr (sizeof(ScalarT) == 8) {
+        std::swap(p[0], p[7]);
+        std::swap(p[1], p[6]);
+        std::swap(p[2], p[5]);
+        std::swap(p[3], p[4]);
+    }
+    // sizeof(ScalarT) == 1: nothing to reverse
+}
 
 /** @brief Convert a Color to {r, g, b} in [0, 255] uint8 range */
 inline auto color_to_u8c3(const Color& c) -> std::array<uint8_t, 3>
