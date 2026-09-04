@@ -5,8 +5,13 @@
 
 ## Documents
 
-- Specification — not yet written
-- Implementation Plan — not yet written
+- [Specification](./spec.md)
+- [Implementation Plan](./plan.md)
+
+## Progress
+
+- Phases: 0/5 complete
+- Tasks: 0/22 complete
 
 ## Summary
 
