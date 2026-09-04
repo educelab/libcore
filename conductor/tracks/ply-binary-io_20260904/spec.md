@@ -3,7 +3,7 @@
 **Track ID:** ply-binary-io_20260904
 **Type:** Feature
 **Created:** 2026-09-04
-**Status:** Draft
+**Status:** Implemented
 **GitHub issue:** [educelab/libcore#25](https://github.com/educelab/libcore/issues/25)
 
 ## Summary
@@ -40,42 +40,69 @@ header declares.
 
 ### Write
 
-- [ ] A public `educelab::PLYFormat { ASCII, Binary }` exists and is threaded
+- [x] A public `educelab::PLYFormat { ASCII, Binary }` exists and is threaded
       through all three `write_ply` tiers, defaulting to `ASCII`.
-- [ ] `PLYFormat` is kept distinct from `detail::PLYHeader::Format` (three
+      *(Task 4.1; `PLYTest.DefaultFormatIsASCII`,
+      `PLYTest.ExplicitASCIIMatchesDefault`)*
+- [x] `PLYFormat` is kept distinct from `detail::PLYHeader::Format` (three
       values, "what I parsed") so no `detail` type leaks into a public signature.
-- [ ] `Binary` writes native byte order and labels the header to match
+      *(Task 4.1; separate enum declared outside `namespace detail`)*
+- [x] `Binary` writes native byte order and labels the header to match
       (`format binary_little_endian 1.0` on an LE host).
-- [ ] Scalars are always written as `float32` regardless of the mesh's `T`,
+      *(Task 4.6; `PLYTest.BinaryWrite_ByteLevel` asserts the exact line)*
+- [x] Scalars are always written as `float32` regardless of the mesh's `T`,
       matching what the ASCII header already declares and what OpenMVS emits.
       The on-disk format does not depend on a template parameter.
-- [ ] The binary writer mirrors the reader's record batching — precomputed
+      *(Task 4.7; `PLYTest.BinaryWrite_ScalarsAreFloat32RegardlessOfT` asserts
+      a `Mesh3d` write is byte-identical to the `Mesh3f` one)*
+- [x] The binary writer mirrors the reader's record batching — precomputed
       property offsets, one `write` per vertex — not one `write` per property.
-- [ ] All three tiers open with `std::ios::binary` unconditionally.
-- [ ] Existing ASCII output is byte-for-byte unchanged on non-Windows hosts;
+      *(Task 4.7; `detail::write_ply_data_binary`, one `write` per vertex and
+      per face record)*
+- [x] All three tiers open with `std::ios::binary` unconditionally.
+      *(Task 4.8)*
+- [x] Existing ASCII output is byte-for-byte unchanged on non-Windows hosts;
       all existing header-grepping tests pass untouched.
+      *(Verified by diffing all three tiers' output against `e9635ab`'s writer
+      for a mesh with normals, partial colors, partial UVs and mixed face
+      arity — identical. No existing test was modified.)*
 
 ### Read
 
-- [ ] `read_ply` honors the endianness declared in the header, byte-swapping
+- [x] `read_ply` honors the endianness declared in the header, byte-swapping
       when file order differs from host order.
-- [ ] The `binary_big_endian` rejection at `MeshIO_PLY.hpp:638` is removed and
+      *(Task 2.4; `PLYTest.BinaryBigEndian_Read`)*
+- [x] The `binary_big_endian` rejection at `MeshIO_PLY.hpp:638` is removed and
       `PLYTest.BinaryBigEndian_Throws` is replaced by a positive read test.
-- [ ] Swapping enters at the two choke points every binary scalar read passes
+      *(Tasks 2.4 and 2.5. The old test was passing for the wrong reason — its
+      fixture declares a face but writes no face bytes, so it threw on
+      truncation once the rejection was gone.)*
+- [x] Swapping enters at the two choke points every binary scalar read passes
       through: `read_ply_binary_prop` (stream) and `read_ply_prop_from_buf`
       (buffer).
-- [ ] The swap flag is a runtime `bool`, not a template parameter.
-- [ ] The swap applies to the raw fixed-width value **before** the cast to the
+      *(Task 2.3; each has one raw-read lambda so the swap cannot be dropped in
+      a single case of the width dispatch)*
+- [x] The swap flag is a runtime `bool`, not a template parameter.
+      *(Task 2.3; `needs_swap`, deliberately with no default so the compiler
+      names every call site that omits it — it found all fifteen)*
+- [x] The swap applies to the raw fixed-width value **before** the cast to the
       destination type.
+      *(Task 2.3; `PLYTest.BinaryBigEndian_SwapPrecedesCast` for the buffer
+      path and `..._SwapPrecedesCast_StreamPath` for the stream path)*
 
 ### Validation
 
-- [ ] `write_ply` throws when a face exceeds the `uchar` list-count limits: 255
+- [x] `write_ply` throws when a face exceeds the `uchar` list-count limits: 255
       corners for `vertex_indices`, 127 for `texcoord` (which writes `2*N`).
-- [ ] The message names which limit fired and the offending face index.
-- [ ] `@throws` is documented on the tier-2 and tier-3 `write_ply` overloads and
+      *(Task 3.2; `PLYTest.FaceOver255Corners_Throws`,
+      `FaceOver127CornersWithUVs_Throws`, plus `..._Tier3_Throws` and the two
+      non-throwing boundary cases)*
+- [x] The message names which limit fired and the offending face index.
+      *(Task 3.2; asserted on the message text)*
+- [x] `@throws` is documented on the tier-2 and tier-3 `write_ply` overloads and
       the corresponding `write_mesh` dispatchers; tier 1 carries only the 255
       limit.
+      *(Task 5.1)*
 
 ## Design Decisions
 

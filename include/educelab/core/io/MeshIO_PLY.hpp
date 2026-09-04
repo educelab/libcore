@@ -485,7 +485,7 @@ auto read_ply_binary_prop(std::istream& f, PLYType type, bool needs_swap)
  *  pre-computed byte offset within the buffer rather than via individual
  *  istream::read calls.
  *
- *  @p needs_swap follows the same contract as in @ref read_ply_binary_prop:
+ *  @p needs_swap follows the same contract as in @ref read_ply_binary_prop —
  *  true when the file's byte order differs from the host's, applied to the raw
  *  fixed-width value before the cast to @c DestT, and with no default.
  */
@@ -1123,6 +1123,7 @@ void read_ply_impl(
  * over the faces reads only @c size() and is negligible beside the write it
  * guards.
  *
+ * @param mesh    Mesh whose faces are checked
  * @param has_uvs True when a @c texcoord list will be written (tiers 2 and 3)
  * @throws std::runtime_error naming the limit that fired and the face index
  */
@@ -1446,7 +1447,7 @@ void write_ply_data(
 // =============================================================================
 
 /**
- * @brief Write a mesh to an ASCII PLY file
+ * @brief Write a mesh to a PLY file
  *
  * Emits @c x @c y @c z vertex properties. If @c Vertex carries
  * @ref traits::WithNormal @em and at least one vertex has a normal set, also
@@ -1455,7 +1456,18 @@ void write_ply_data(
  * color set, also emits @c red @c green @c blue properties (@c uchar, 0–255;
  * a color-less mesh declares none).
  *
- * @throws std::runtime_error if the file cannot be opened
+ * Scalars are written as @c float32 whatever @c T is, so the on-disk layout
+ * never depends on the mesh's template parameters.
+ *
+ * @param path   Output file path
+ * @param mesh   Mesh to write
+ * @param format Data-section encoding; defaults to @ref PLYFormat::ASCII.
+ *               @ref PLYFormat::Binary is smaller and faster to write and is
+ *               labeled with the host's byte order — see @ref PLYFormat.
+ *
+ * @throws std::runtime_error if the file cannot be opened, if writing fails,
+ *         or if any face has more than 255 corners, which a @c uchar
+ *         @c vertex_indices list count cannot express
  */
 template <typename T, std::size_t Dims, typename VTraits>
 void write_ply(
@@ -1498,7 +1510,7 @@ void write_ply(
 // =============================================================================
 
 /**
- * @brief Write a mesh and UV map to an ASCII PLY file
+ * @brief Write a mesh and UV map to a PLY file
  *
  * Writes per-wedge UV coordinates as a @c texcoord list property on the face
  * element. No vertex duplication is performed. Adds
@@ -1506,7 +1518,17 @@ void write_ply(
  * Corners with no UV assignment are written as @c -1,-1.
  * No @c comment @c TextureFile line is written.
  *
- * @throws std::runtime_error if the file cannot be opened
+ * @param path   Output file path
+ * @param mesh   Mesh to write
+ * @param uvmap  Per-wedge UV coordinates
+ * @param format Data-section encoding; defaults to @ref PLYFormat::ASCII.
+ *               See @ref PLYFormat.
+ *
+ * @throws std::runtime_error if the file cannot be opened, if writing fails,
+ *         or if a face exceeds either @c uchar list-count limit: 255 corners
+ *         for @c vertex_indices, or 127 corners here, since @c texcoord
+ *         writes @c 2*N values per face. The message names which limit fired
+ *         and the offending face index.
  */
 template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
 void write_ply(
@@ -1549,10 +1571,10 @@ void write_ply(
 // =============================================================================
 
 /**
- * @brief Write a mesh, UV map, and texture path to an ASCII PLY file
+ * @brief Write a mesh, UV map, and texture path to a PLY file
  *
  * Identical to the Tier 2 overload but also emits a
- * @c "comment TextureFile <path>" line immediately after @c "format ascii 1.0"
+ * @c "comment TextureFile <path>" line immediately after the @c format line
  * (MeshLab convention).
  *
  * @note PLY write supports only a **single** texture/chart: there is no
@@ -1562,7 +1584,18 @@ void write_ply(
  *       (@c read_ply will still recover multiple @c "comment TextureFile" lines
  *       into its @c texture_paths out-parameter when reading such files.)
  *
- * @throws std::runtime_error if the file cannot be opened
+ * @param path         Output file path
+ * @param mesh         Mesh to write
+ * @param uvmap        Per-wedge UV coordinates
+ * @param texture_path Path emitted in the @c comment @c TextureFile line
+ * @param format       Data-section encoding; defaults to
+ *                     @ref PLYFormat::ASCII. See @ref PLYFormat.
+ *
+ * @throws std::runtime_error if the file cannot be opened, if writing fails,
+ *         or if a face exceeds either @c uchar list-count limit: 255 corners
+ *         for @c vertex_indices, or 127 corners here, since @c texcoord
+ *         writes @c 2*N values per face. The message names which limit fired
+ *         and the offending face index.
  */
 template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
 void write_ply(

@@ -185,20 +185,22 @@ path is untouched until Task 4.6.
 
 ### Tasks
 
-- [ ] **Task 5.1**: `@throws` for the list-count limits on the tier-2 and
+- [x] **Task 5.1**: `@throws` for the list-count limits on the tier-2 and
       tier-3 `write_ply` overloads and the corresponding `write_mesh`
       dispatchers in `MeshIO.hpp`. Tier 1 carries only the 255 limit.
-- [ ] **Task 5.2**: Document `PLYFormat` on the `write_ply` overloads, and note
+- [x] **Task 5.2**: Document `PLYFormat` on the `write_ply` overloads, and note
       that `write_mesh` deliberately gains no format parameter — deferred to
       [#26](https://github.com/educelab/libcore/issues/26) — so the omission
       reads as a decision rather than an oversight.
-- [ ] **Task 5.3**: Doxygen builds cleanly with no new warnings.
+- [x] **Task 5.3**: Doxygen builds cleanly with no new warnings.
 
 ### Verification
 
-- [ ] Doxygen clean
-- [ ] Every acceptance criterion in `spec.md` maps to a passing test or a
-      merged doc change
+- [x] Doxygen clean — 22 warnings, byte-identical to the pre-track baseline at
+      `e9635ab`. Zero new. (The 22 are pre-existing and out of this track's
+      scope; four were introduced by Phases 1–4 and are fixed here.)
+- [x] Every acceptance criterion in `spec.md` maps to a passing test or a
+      merged doc change — all 15 annotated in place in `spec.md`
 
 ---
 
