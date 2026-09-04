@@ -1346,6 +1346,89 @@ TEST_F(PLYTest, BinaryLittleEndian_Read)
     EXPECT_EQ(dst.face(0), (Mesh3f::Face{0, 1, 2}));
 }
 
+TEST_F(PLYTest, SizedTypeAliases_ASCII_Read)
+{
+    // Many third-party writers spell property types with the sized aliases
+    // (float32, uint8, ...) rather than the names in the original PLY spec.
+    // These files are never produced by write_ply, so only a hand-crafted
+    // header exercises the alias path.
+    const auto path = ply("sized_ascii");
+    {
+        std::ofstream f(path);
+        f << "ply\n"
+          << "format ascii 1.0\n"
+          << "element vertex 3\n"
+          << "property float32 x\n"
+          << "property float32 y\n"
+          << "property float32 z\n"
+          << "property float64 nx\n"
+          << "property float64 ny\n"
+          << "property float64 nz\n"
+          << "property uint8 red\n"
+          << "property uint8 green\n"
+          << "property uint8 blue\n"
+          << "element face 1\n"
+          << "property list uint8 uint32 vertex_indices\n"
+          << "end_header\n"
+          << "0 0 0 0 0 1 255 0 0\n"
+          << "1 0 0 0 0 1 0 255 0\n"
+          << "0 1 0 0 0 1 0 0 255\n"
+          << "3 0 1 2\n";
+    }
+
+    NCMesh dst;
+    read_ply(path, dst);
+
+    ASSERT_EQ(dst.num_vertices(), 3u);
+    ASSERT_EQ(dst.num_faces(), 1u);
+    EXPECT_NEAR(dst.vertex(1)[0], 1.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(2)[1], 1.f, 1e-5f);
+    ASSERT_TRUE(dst.vertex(0).normal.has_value());
+    EXPECT_NEAR((*dst.vertex(0).normal)[2], 1.f, 1e-5f);
+    ASSERT_TRUE(dst.vertex(0).color.has_value());
+    EXPECT_EQ(dst.vertex(0).color.value<Color::U8C3>()[0], 255u);
+    EXPECT_EQ(dst.vertex(1).color.value<Color::U8C3>()[1], 255u);
+    EXPECT_EQ(dst.vertex(2).color.value<Color::U8C3>()[2], 255u);
+    EXPECT_EQ(dst.face(0), (NCMesh::Face{0, 1, 2}));
+}
+
+TEST_F(PLYTest, SizedTypeAliases_BinaryLittleEndian_Read)
+{
+    // Header shape emitted by OpenMVS. The alias names must also resolve to
+    // the correct byte widths, or the binary reader desynchronizes.
+    const auto path = ply("sized_binary");
+    {
+        std::ofstream f(path, std::ios::binary);
+        f << "ply\n"
+          << "format binary_little_endian 1.0\n"
+          << "element vertex 3\n"
+          << "property float32 x\n"
+          << "property float32 y\n"
+          << "property float32 z\n"
+          << "element face 1\n"
+          << "property list uint8 uint32 vertex_indices\n"
+          << "end_header\n";
+        const float verts[9] = {
+            0.f, 0.f, 0.f,
+            1.f, 0.f, 0.f,
+            0.f, 1.f, 0.f};
+        f.write(reinterpret_cast<const char*>(verts), sizeof(verts));
+        const uint8_t  cnt = 3;
+        const uint32_t idx[3] = {0, 1, 2};
+        f.write(reinterpret_cast<const char*>(&cnt), 1);
+        f.write(reinterpret_cast<const char*>(idx), sizeof(idx));
+    }
+
+    Mesh3f dst;
+    read_ply(path, dst);
+
+    ASSERT_EQ(dst.num_vertices(), 3u);
+    ASSERT_EQ(dst.num_faces(), 1u);
+    EXPECT_NEAR(dst.vertex(1)[0], 1.f, 1e-5f);
+    EXPECT_NEAR(dst.vertex(2)[1], 1.f, 1e-5f);
+    EXPECT_EQ(dst.face(0), (Mesh3f::Face{0, 1, 2}));
+}
+
 TEST_F(PLYTest, WriteWithUVMap_PerWedgeTexcoord)
 {
     // Two triangles sharing an edge with a UV seam.
