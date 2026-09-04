@@ -540,6 +540,9 @@ auto read_ply_prop_from_buf(const char* buf, PLYType type, bool needs_swap)
 // PLY permits a signed count type, and a negative count converted to an
 // unsigned byte total wraps to a seek that skips nothing, leaving the reader
 // misaligned inside the element it meant to step over.
+//
+// Named at namespace scope so @ref validate_ply_face_lists can assert the
+// writer's own limits stay inside them; the two must not drift apart.
 
 /** @brief Largest @c vertex_indices count @ref read_ply will accept */
 constexpr std::size_t kMaxFaceVertices = 256;
@@ -1091,6 +1094,60 @@ void read_ply_impl(
 }
 
 /**
+ * @brief Reject faces whose PLY list counts would not fit in a @c uchar
+ *
+ * Both list properties @ref write_ply emits declare a @c uchar count:
+ * @c vertex_indices writes @c N and @c texcoord writes @c 2*N. A count above
+ * 255 cannot be expressed, so it is rejected rather than silently truncated
+ * into a file no reader can make sense of. The limits are 255 corners without
+ * UVs and 127 with them.
+ *
+ * Called by every @c write_ply tier *before* the output stream is opened, so a
+ * mesh that cannot be written leaves no truncated file behind. The extra pass
+ * over the faces reads only @c size() and is negligible beside the write it
+ * guards.
+ *
+ * @param has_uvs True when a @c texcoord list will be written (tiers 2 and 3)
+ * @throws std::runtime_error naming the limit that fired and the face index
+ */
+template <typename T, std::size_t Dims, typename VTraits>
+void validate_ply_face_lists(
+    const Mesh<T, Dims, VTraits>& mesh, bool has_uvs)
+{
+    // Widest value a uchar list count can express.
+    constexpr std::size_t kMaxListCount = 255;
+    constexpr std::size_t kMaxUVCorners = kMaxListCount / 2;  // 2*N per face
+
+    // Nothing the writer permits may be refused on read. Checked here rather
+    // than trusted, so raising either limit without revisiting the reader's
+    // caps is a compile error instead of an unreadable file.
+    static_assert(
+        kMaxListCount <= kMaxFaceVertices,
+        "write_ply's vertex_indices limit exceeds read_ply's face vertex cap");
+    static_assert(
+        2 * kMaxUVCorners <= kMaxFaceListLength,
+        "write_ply's texcoord limit exceeds read_ply's face list cap");
+
+    for (std::size_t fi = 0; fi < mesh.num_faces(); ++fi) {
+        const auto n = mesh.face(fi).size();
+        if (n > kMaxListCount) {
+            throw std::runtime_error(
+                "write_ply: face " + to_string(fi) + " has " + to_string(n) +
+                " corners, exceeding the " + to_string(kMaxListCount) +
+                " a uchar vertex_indices list count can express");
+        }
+        if (has_uvs and n > kMaxUVCorners) {
+            throw std::runtime_error(
+                "write_ply: face " + to_string(fi) + " has " + to_string(n) +
+                " corners, whose texcoord list of " + to_string(2 * n) +
+                " values exceeds the " + to_string(kMaxListCount) +
+                " a uchar list count can express (" +
+                to_string(kMaxUVCorners) + " corners max with UVs)");
+        }
+    }
+}
+
+/**
  * @brief Write the PLY ASCII header to @p file
  *
  * Shared by all write_ply tiers. The @p texture_comment parameter may be
@@ -1247,6 +1304,8 @@ void write_ply(
 {
     static_assert(Dims >= 3, "write_ply requires Dims >= 3");
 
+    detail::validate_ply_face_lists(mesh, false);
+
     std::ofstream file(path);
     if (!file) {
         throw std::runtime_error(
@@ -1294,6 +1353,8 @@ void write_ply(
     const UVMapT& uvmap)
 {
     static_assert(Dims >= 3, "write_ply requires Dims >= 3");
+
+    detail::validate_ply_face_lists(mesh, true);
 
     std::ofstream file(path);
     if (!file) {
@@ -1346,6 +1407,8 @@ void write_ply(
     const std::filesystem::path& texture_path)
 {
     static_assert(Dims >= 3, "write_ply requires Dims >= 3");
+
+    detail::validate_ply_face_lists(mesh, true);
 
     std::ofstream file(path);
     if (!file) {

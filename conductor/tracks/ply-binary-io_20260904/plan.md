@@ -116,19 +116,19 @@ of. ASCII has the same latent problem and gets the same guard.
       face throws naming `vertex_indices` and the face index; a 128-corner face
       with a UV map throws naming `texcoord`; 255 corners without UVs and 127
       corners with UVs both write cleanly.
-- [~] **Task 3.2**: Implement the two limits in the write path. The message
+- [x] **Task 3.2**: Implement the two limits in the write path. The message
       names which limit fired and the offending face index.
-- [ ] **Task 3.3**: Confirm coherence with the reader's existing caps
+- [x] **Task 3.3**: Confirm coherence with the reader's existing caps
       (`kMaxFaceVertices` = 256, `kMaxFaceListLength` = 1024 in
       `read_ply_face_binary`) — everything the writer now permits must still be
       readable. Verify, do not assume.
 
 ### Verification
 
-- [ ] Limit tests pass, including both non-throwing boundary cases
-- [ ] A maximal legal face round-trips through both ASCII and (once Phase 4
-      lands) binary
-- [ ] Full suite green, Debug and Release
+- [x] Limit tests pass, including both non-throwing boundary cases
+- [x] A maximal legal face round-trips through ASCII (`FaceWith255Corners_*`,
+      `FaceWith127CornersWithUVs_*`); binary added in Task 4.5
+- [x] Full suite green, Debug and Release
 
 ---
 
