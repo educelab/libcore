@@ -23,6 +23,22 @@
 namespace educelab
 {
 
+/**
+ * @brief Encoding of a PLY file's data section, selected on write
+ *
+ * @c Binary writes the host's native byte order and labels the header to
+ * match, so a file written on a little-endian host declares
+ * @c "format binary_little_endian 1.0". @ref read_ply honors either order, so
+ * the choice does not limit who can read the result.
+ *
+ * Kept distinct from @c detail::PLYHeader::Format, which has a third value and
+ * answers "what did I parse" rather than "what should I emit".
+ */
+enum class PLYFormat {
+    ASCII,  ///< ASCII text
+    Binary  ///< Binary, in the host's native byte order
+};
+
 namespace detail
 {
 
@@ -1156,7 +1172,10 @@ void validate_ply_face_lists(
  * declared on the face element. The @p has_normals flag (from
  * @ref has_any_normal) controls whether @c nx/ny/nz are declared; the
  * @p has_colors flag (from @ref has_any_color) controls whether
- * @c red/green/blue are declared.
+ * @c red/green/blue are declared. @p format selects the @c format line; the
+ * property declarations are identical either way, since binary writes the same
+ * @c float32 scalars, @c uchar colors and @c int32 indices the ASCII header
+ * already declares.
  */
 template <typename T, std::size_t Dims, typename VTraits>
 void write_ply_header(
@@ -1165,7 +1184,8 @@ void write_ply_header(
     const std::string& texture_comment,
     bool has_uvs,
     [[maybe_unused]] bool has_normals,
-    [[maybe_unused]] bool has_colors)
+    [[maybe_unused]] bool has_colors,
+    [[maybe_unused]] PLYFormat format)
 {
     using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
 
@@ -1223,7 +1243,8 @@ void write_ply_data(
     const Mesh<T, Dims, VTraits>& mesh,
     const UVMapT* uvmap,
     [[maybe_unused]] bool has_normals,
-    [[maybe_unused]] bool has_colors)
+    [[maybe_unused]] bool has_colors,
+    [[maybe_unused]] PLYFormat format)
 {
     using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
 
@@ -1300,7 +1321,9 @@ void write_ply_data(
  */
 template <typename T, std::size_t Dims, typename VTraits>
 void write_ply(
-    const std::filesystem::path& path, const Mesh<T, Dims, VTraits>& mesh)
+    const std::filesystem::path& path,
+    const Mesh<T, Dims, VTraits>& mesh,
+    PLYFormat format = PLYFormat::ASCII)
 {
     static_assert(Dims >= 3, "write_ply requires Dims >= 3");
 
@@ -1315,10 +1338,11 @@ void write_ply(
     std::array<char, 128> buf{};
     const bool has_normals = has_any_normal(mesh);
     const bool has_colors = has_any_color(mesh);
-    detail::write_ply_header(file, mesh, "", false, has_normals, has_colors);
+    detail::write_ply_header(
+        file, mesh, "", false, has_normals, has_colors, format);
     detail::write_ply_data(
         file, buf, mesh, static_cast<const UVMap<float, 2>*>(nullptr),
-        has_normals, has_colors);
+        has_normals, has_colors, format);
 
     // Close before checking. The stream may still hold buffered data at this
     // point; the final flush happens when `file` is destroyed, and a failure
@@ -1350,7 +1374,8 @@ template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
 void write_ply(
     const std::filesystem::path& path,
     const Mesh<T, Dims, VTraits>& mesh,
-    const UVMapT& uvmap)
+    const UVMapT& uvmap,
+    PLYFormat format = PLYFormat::ASCII)
 {
     static_assert(Dims >= 3, "write_ply requires Dims >= 3");
 
@@ -1365,8 +1390,10 @@ void write_ply(
     std::array<char, 128> buf{};
     const bool has_normals = has_any_normal(mesh);
     const bool has_colors = has_any_color(mesh);
-    detail::write_ply_header(file, mesh, "", true, has_normals, has_colors);
-    detail::write_ply_data(file, buf, mesh, &uvmap, has_normals, has_colors);
+    detail::write_ply_header(
+        file, mesh, "", true, has_normals, has_colors, format);
+    detail::write_ply_data(
+        file, buf, mesh, &uvmap, has_normals, has_colors, format);
 
     // Close before checking. The stream may still hold buffered data at this
     // point; the final flush happens when `file` is destroyed, and a failure
@@ -1404,7 +1431,8 @@ void write_ply(
     const std::filesystem::path& path,
     const Mesh<T, Dims, VTraits>& mesh,
     const UVMapT& uvmap,
-    const std::filesystem::path& texture_path)
+    const std::filesystem::path& texture_path,
+    PLYFormat format = PLYFormat::ASCII)
 {
     static_assert(Dims >= 3, "write_ply requires Dims >= 3");
 
@@ -1420,8 +1448,10 @@ void write_ply(
     const bool has_normals = has_any_normal(mesh);
     const bool has_colors = has_any_color(mesh);
     detail::write_ply_header(
-        file, mesh, texture_path.string(), true, has_normals, has_colors);
-    detail::write_ply_data(file, buf, mesh, &uvmap, has_normals, has_colors);
+        file, mesh, texture_path.string(), true, has_normals, has_colors,
+        format);
+    detail::write_ply_data(
+        file, buf, mesh, &uvmap, has_normals, has_colors, format);
 
     // Close before checking. The stream may still hold buffered data at this
     // point; the final flush happens when `file` is destroyed, and a failure
