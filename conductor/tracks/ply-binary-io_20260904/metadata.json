@@ -2,19 +2,19 @@
   "id": "ply-binary-io_20260904",
   "title": "PLY Binary IO",
   "type": "feature",
-  "status": "in_progress",
+  "status": "complete",
   "created": "2026-09-04T00:00:00+0200",
-  "updated": "2026-09-04T22:45:00Z",
+  "updated": "2026-09-04T23:20:00Z",
   "issue": 25,
-  "current_phase": 4,
-  "current_task": "4.1",
+  "current_phase": 5,
+  "current_task": "5.3",
   "phases": {
     "total": 5,
-    "completed": 3
+    "completed": 5
   },
   "tasks": {
     "total": 22,
-    "completed": 11
+    "completed": 22
   },
   "commits": [
     "b28d606: docs(conductor): record byte-order helper placement in detail",
@@ -24,6 +24,11 @@
     "c185fc9: fix(MeshIO): honor the byte order declared in the PLY header on read",
     "3483f88: test(MeshIO): drop the big-endian rejection test, document byte-order support",
     "549b2ed: test(MeshIO): face list-count limit tests for the PLY writer",
-    "7583422: feat(MeshIO): reject face list counts a uchar cannot express"
-  ]
+    "7583422: feat(MeshIO): reject face list counts a uchar cannot express",
+    "18e21b8: feat(MeshIO): add public PLYFormat and thread it through write_ply",
+    "ab25dc0: test(MeshIO): binary PLY write tests",
+    "398c7d7: feat(MeshIO): binary PLY write",
+    "bfc4aa2: docs(MeshIO): document PLYFormat, list-count throws, and the write_mesh omission"
+  ],
+  "notes": "Phase 4's manual MeshLab check is outstanding: MeshLab 2025.07 ships no CLI, so it was validated against an independently written PLY parser instead."
 }
