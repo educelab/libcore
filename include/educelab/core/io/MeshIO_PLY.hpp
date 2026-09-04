@@ -1456,8 +1456,17 @@ void write_ply_data(
  * color set, also emits @c red @c green @c blue properties (@c uchar, 0–255;
  * a color-less mesh declares none).
  *
- * Scalars are written as @c float32 whatever @c T is, so the on-disk layout
- * never depends on the mesh's template parameters.
+ * The header declares @c float positions and normals and @c uchar colors
+ * whatever @c T is, so the file's *structure* never depends on the mesh's
+ * template parameters.
+ *
+ * @warning The two formats do not carry the same precision.
+ *          @ref PLYFormat::Binary writes exactly the declared @c float32,
+ *          while the ASCII path writes @c T at full decimal precision — so a
+ *          @c Mesh3d keeps its @c double values through @c ASCII and narrows
+ *          them to @c float through @c Binary. ASCII text wider than the
+ *          declared @c float is long-standing behavior and unchanged here; a
+ *          reader that honors the declaration narrows it anyway.
  *
  * @param path   Output file path
  * @param mesh   Mesh to write
