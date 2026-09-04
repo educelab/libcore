@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <csignal>
 #include <cstdint>
@@ -1549,6 +1550,189 @@ TEST_F(PLYTest, SizedTypeAliases_BinaryLittleEndian_Read)
     EXPECT_NEAR(dst.vertex(1)[0], 1.f, 1e-5f);
     EXPECT_NEAR(dst.vertex(2)[1], 1.f, 1e-5f);
     EXPECT_EQ(dst.face(0), (Mesh3f::Face{0, 1, 2}));
+}
+
+// Append `v` to `f` most-significant byte first.
+//
+// Reverses the host layout by hand rather than calling detail::swap_bytes:
+// the fixture has to encode big-endian independently of the code under test,
+// or a wrong swap would agree with itself and the test would pass.
+template <typename ScalarT>
+static void write_be(std::ostream& f, ScalarT v)
+{
+    std::array<char, sizeof(ScalarT)> bytes{};
+    std::memcpy(bytes.data(), &v, sizeof(ScalarT));
+    if (probe_host_is_little_endian()) {
+        std::reverse(bytes.begin(), bytes.end());
+    }
+    f.write(bytes.data(), sizeof(ScalarT));
+}
+
+TEST_F(PLYTest, BinaryBigEndian_Read)
+{
+    // A big-endian PLY read back on a little-endian host. Every scalar width
+    // the format uses appears: float (4) positions, double (8) normals,
+    // ushort (2) colors, uchar (1) list count, int (4) list values.
+    //
+    // Values are chosen so an unswapped read cannot accidentally pass:
+    // 1.0f is 3F 80 00 00, the normals are non-palindromic bit patterns, the
+    // colors are 0x0102 / 0x0304 / 0x0506, and the face indices 0/1/2 would
+    // become 0 / 16777216 / 33554432 and be rejected as out of range.
+    const auto path = ply("be_read");
+    {
+        std::ofstream f(path, std::ios::binary);
+        f << "ply\n"
+          << "format binary_big_endian 1.0\n"
+          << "element vertex 3\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "property double nx\n"
+          << "property double ny\n"
+          << "property double nz\n"
+          << "property ushort red\n"
+          << "property ushort green\n"
+          << "property ushort blue\n"
+          << "element face 1\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n";
+
+        const float pos[3][3] = {
+            {0.f, 0.f, 0.f},
+            {1.f, 0.f, 0.f},
+            {0.f, 1.f, 0.f}};
+        const double nrm[3][3] = {
+            {0.25, 0.5, 0.75},
+            {-0.5, 0.25, 0.75},
+            {0.75, -0.25, 0.5}};
+        const uint16_t col[3][3] = {
+            {0x0102, 0x0304, 0x0506},
+            {0x0708, 0x090A, 0x0B0C},
+            {0x0D0E, 0x0F10, 0x1112}};
+
+        for (int vi = 0; vi < 3; ++vi) {
+            for (int c = 0; c < 3; ++c) {
+                write_be(f, pos[vi][c]);
+            }
+            for (int c = 0; c < 3; ++c) {
+                write_be(f, nrm[vi][c]);
+            }
+            for (int c = 0; c < 3; ++c) {
+                write_be(f, col[vi][c]);
+            }
+        }
+
+        write_be(f, static_cast<uint8_t>(3));
+        write_be(f, static_cast<int32_t>(0));
+        write_be(f, static_cast<int32_t>(1));
+        write_be(f, static_cast<int32_t>(2));
+    }
+
+    NCMesh dst;
+    read_ply(path, dst);
+
+    ASSERT_EQ(dst.num_vertices(), 3u);
+    ASSERT_EQ(dst.num_faces(), 1u);
+
+    // 4-byte positions
+    EXPECT_NEAR(dst.vertex(1)[0], 1.f, 1e-6f);
+    EXPECT_NEAR(dst.vertex(1)[1], 0.f, 1e-6f);
+    EXPECT_NEAR(dst.vertex(2)[1], 1.f, 1e-6f);
+
+    // 8-byte normals
+    ASSERT_TRUE(dst.vertex(0).normal.has_value());
+    EXPECT_NEAR((*dst.vertex(0).normal)[0],  0.25f, 1e-6f);
+    EXPECT_NEAR((*dst.vertex(0).normal)[1],  0.5f,  1e-6f);
+    EXPECT_NEAR((*dst.vertex(0).normal)[2],  0.75f, 1e-6f);
+    ASSERT_TRUE(dst.vertex(2).normal.has_value());
+    EXPECT_NEAR((*dst.vertex(2).normal)[1], -0.25f, 1e-6f);
+
+    // 2-byte colors — preserved as U16C3, so the swap is visible in the value
+    ASSERT_TRUE(dst.vertex(0).color.has_value());
+    EXPECT_EQ(dst.vertex(0).color.value<Color::U16C3>()[0], 0x0102u);
+    EXPECT_EQ(dst.vertex(0).color.value<Color::U16C3>()[1], 0x0304u);
+    EXPECT_EQ(dst.vertex(0).color.value<Color::U16C3>()[2], 0x0506u);
+    EXPECT_EQ(dst.vertex(2).color.value<Color::U16C3>()[2], 0x1112u);
+
+    // 1-byte count and 4-byte list values
+    EXPECT_EQ(dst.face(0), (NCMesh::Face{0, 1, 2}));
+}
+
+TEST_F(PLYTest, BinaryBigEndian_SwapPrecedesCast)
+{
+    // The trap the spec calls out. A big-endian float 1.0 is the byte sequence
+    // 3F 80 00 00. memcpy'd straight into a native little-endian float that is
+    // 4.6e-41 (a denormal), and no reversal of the widened double recovers
+    // 1.0 — the bytes have to be reordered while the value is still a float.
+    //
+    // The destination mesh is Mesh3d so the widening float -> double is real
+    // and the assertion would fail if the swap were applied after the cast.
+    const auto path = ply("be_precast");
+    {
+        std::ofstream f(path, std::ios::binary);
+        f << "ply\n"
+          << "format binary_big_endian 1.0\n"
+          << "element vertex 1\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "element face 0\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n";
+        // Literal big-endian bytes, not derived from a host float.
+        const std::array<char, 4> be_one{'\x3f', '\x80', '\x00', '\x00'};
+        for (int i = 0; i < 3; ++i) {
+            f.write(be_one.data(), 4);
+        }
+    }
+
+    Mesh3d dst;
+    read_ply(path, dst);
+
+    ASSERT_EQ(dst.num_vertices(), 1u);
+    EXPECT_DOUBLE_EQ(dst.vertex(0)[0], 1.0);
+    EXPECT_DOUBLE_EQ(dst.vertex(0)[1], 1.0);
+    EXPECT_DOUBLE_EQ(dst.vertex(0)[2], 1.0);
+}
+
+TEST_F(PLYTest, BinaryBigEndian_SwapPrecedesCast_StreamPath)
+{
+    // Same guarantee for the other choke point. read_ply_prop_from_buf serves
+    // the batched vertex record; read_ply_binary_prop serves the face record
+    // and the unknown-element skip. A face index list of int32 values reaches
+    // the stream path, so the same file exercises both.
+    const auto path = ply("be_precast_stream");
+    {
+        std::ofstream f(path, std::ios::binary);
+        f << "ply\n"
+          << "format binary_big_endian 1.0\n"
+          << "element vertex 3\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "element face 1\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n";
+        for (int vi = 0; vi < 3; ++vi) {
+            for (int c = 0; c < 3; ++c) {
+                write_be(f, 0.f);
+            }
+        }
+        // Big-endian int32 2, 1, 0 — literal bytes. Unswapped these read as
+        // 33554432, 16777216 and 0, and the reader would reject them.
+        const std::array<char, 13> face{
+            '\x03',
+            '\x00', '\x00', '\x00', '\x02',
+            '\x00', '\x00', '\x00', '\x01',
+            '\x00', '\x00', '\x00', '\x00'};
+        f.write(face.data(), face.size());
+    }
+
+    Mesh3f dst;
+    read_ply(path, dst);
+
+    ASSERT_EQ(dst.num_faces(), 1u);
+    EXPECT_EQ(dst.face(0), (Mesh3f::Face{2, 1, 0}));
 }
 
 TEST_F(PLYTest, WriteWithUVMap_PerWedgeTexcoord)

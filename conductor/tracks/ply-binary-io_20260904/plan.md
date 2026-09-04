@@ -73,15 +73,15 @@ passes through.
 
 ### Tasks
 
-- [ ] **Task 2.1**: Hand-crafted `binary_big_endian` fixture test — bytes
+- [x] **Task 2.1**: Hand-crafted `binary_big_endian` fixture test — bytes
       reversed by the test itself, positions plus an `int32` index list, read
       back on an LE host. Exercises more than the 4-byte width so the dispatch
       is covered, not just the common case.
-- [ ] **Task 2.2**: Test that the swap precedes the cast: a BE `float`
+- [x] **Task 2.2**: Test that the swap precedes the cast: a BE `float`
       `3F 80 00 00` must read as 1.0, not 4.6e-41. This is the failure mode the
       spec calls out as unrecoverable if the order is inverted, so it gets its
       own test rather than riding along inside a fixture assertion.
-- [ ] **Task 2.3**: Add a runtime `bool` swap parameter to
+- [~] **Task 2.3**: Add a runtime `bool` swap parameter to
       `read_ply_binary_prop` and `read_ply_prop_from_buf`, swapping the raw
       fixed-width value **before** `static_cast<DestT>`. Not a template
       parameter — see spec.
