@@ -23,6 +23,7 @@
 #include "educelab/core/io/MeshIO_PLY.hpp"
 #include "educelab/core/types/Mesh.hpp"
 #include "educelab/core/types/UVMap.hpp"
+#include "educelab/core/utils/Math.hpp"
 #include "educelab/core/utils/MeshUtils.hpp"
 
 namespace fs = std::filesystem;
@@ -190,8 +191,8 @@ static auto make_ngon(std::size_t n) -> Mesh3f
     Mesh3f m;
     Mesh3f::Face idx(n);
     for (std::size_t i = 0; i < n; ++i) {
-        const auto a = 2.f * 3.14159265f * static_cast<float>(i) /
-                       static_cast<float>(n);
+        const auto a =
+            2.f * PI<float> * static_cast<float>(i) / static_cast<float>(n);
         (void)m.insert_vertex(std::cos(a), std::sin(a), 0.f);
         idx[i] = i;
     }
@@ -1938,6 +1939,29 @@ static auto expected_binary_format_line() -> std::string
                : "format binary_big_endian 1.0\n";
 }
 
+// Hand-derived IEEE-754 spellings, big-endian, for the values make_triangle()
+// and its UV map use.
+static constexpr std::initializer_list<unsigned char> kZeroF32{
+    0x00, 0x00, 0x00, 0x00};
+static constexpr std::initializer_list<unsigned char> kOneF32{
+    0x3F, 0x80, 0x00, 0x00};
+static constexpr std::initializer_list<unsigned char> kNegOneF32{
+    0xBF, 0x80, 0x00, 0x00};
+
+// The binary body of make_triangle(): v0=(0,0,0) v1=(1,0,0) v2=(0,1,0) as
+// float32, then the uchar-counted vertex_indices list 0 1 2. Shared so a
+// change to make_triangle() is a one-place fixup.
+static void push_triangle_body(std::vector<unsigned char>& want)
+{
+    push_host(want, kZeroF32); push_host(want, kZeroF32); push_host(want, kZeroF32);
+    push_host(want, kOneF32);  push_host(want, kZeroF32); push_host(want, kZeroF32);
+    push_host(want, kZeroF32); push_host(want, kOneF32);  push_host(want, kZeroF32);
+    want.push_back(0x03);  // uchar list count needs no swap
+    push_host(want, {0x00, 0x00, 0x00, 0x00});
+    push_host(want, {0x00, 0x00, 0x00, 0x01});
+    push_host(want, {0x00, 0x00, 0x00, 0x02});
+}
+
 TEST_F(PLYTest, BinaryWrite_ByteLevel)
 {
     // make_triangle(): v0=(0,0,0) v1=(1,0,0) v2=(0,1,0), face 0 1 2.
@@ -1963,15 +1987,7 @@ TEST_F(PLYTest, BinaryWrite_ByteLevel)
 
     // 3 vertices x 3 float32, then a uchar count and 3 int32 indices.
     std::vector<unsigned char> want;
-    const std::initializer_list<unsigned char> zero{0x00, 0x00, 0x00, 0x00};
-    const std::initializer_list<unsigned char> one{0x3F, 0x80, 0x00, 0x00};
-    push_host(want, zero); push_host(want, zero); push_host(want, zero);
-    push_host(want, one);  push_host(want, zero); push_host(want, zero);
-    push_host(want, zero); push_host(want, one);  push_host(want, zero);
-    want.push_back(0x03);  // uchar list count needs no swap
-    push_host(want, {0x00, 0x00, 0x00, 0x00});
-    push_host(want, {0x00, 0x00, 0x00, 0x01});
-    push_host(want, {0x00, 0x00, 0x00, 0x02});
+    push_triangle_body(want);
 
     ASSERT_EQ(body.size(), want.size());
     EXPECT_EQ(body, want);
@@ -2065,20 +2081,11 @@ TEST_F(PLYTest, BinaryWrite_TexcoordList)
         << header;
 
     std::vector<unsigned char> want;
-    const std::initializer_list<unsigned char> zero{0x00, 0x00, 0x00, 0x00};
-    const std::initializer_list<unsigned char> one{0x3F, 0x80, 0x00, 0x00};
-    const std::initializer_list<unsigned char> neg_one{0xBF, 0x80, 0x00, 0x00};
-    push_host(want, zero); push_host(want, zero); push_host(want, zero);
-    push_host(want, one);  push_host(want, zero); push_host(want, zero);
-    push_host(want, zero); push_host(want, one);  push_host(want, zero);
-    want.push_back(0x03);
-    push_host(want, {0x00, 0x00, 0x00, 0x00});
-    push_host(want, {0x00, 0x00, 0x00, 0x01});
-    push_host(want, {0x00, 0x00, 0x00, 0x02});
+    push_triangle_body(want);
     want.push_back(0x06);  // 2*N, still a uchar count
-    push_host(want, zero);    push_host(want, zero);     // corner 0 (0,0)
-    push_host(want, one);     push_host(want, zero);     // corner 1 (1,0)
-    push_host(want, neg_one); push_host(want, neg_one);  // corner 2 unmapped
+    push_host(want, kZeroF32);   push_host(want, kZeroF32);    // corner 0 (0,0)
+    push_host(want, kOneF32);    push_host(want, kZeroF32);    // corner 1 (1,0)
+    push_host(want, kNegOneF32); push_host(want, kNegOneF32);  // corner 2 unmapped
 
     ASSERT_EQ(body.size(), want.size());
     EXPECT_EQ(body, want);

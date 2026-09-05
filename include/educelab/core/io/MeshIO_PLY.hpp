@@ -1131,6 +1131,10 @@ template <typename T, std::size_t Dims, typename VTraits>
 void validate_ply_face_lists(
     const Mesh<T, Dims, VTraits>& mesh, bool has_uvs)
 {
+    // One bound, not two: the texcoord limit is half the vertex_indices one,
+    // so when UVs are written it is always the binding constraint and the
+    // 255 check below it could never fire.
+
     // Widest value a uchar list count can express.
     constexpr std::size_t kMaxListCount = 255;
     constexpr std::size_t kMaxUVCorners = kMaxListCount / 2;  // 2*N per face
@@ -1145,21 +1149,17 @@ void validate_ply_face_lists(
         2 * kMaxUVCorners <= kMaxFaceListLength,
         "write_ply's texcoord limit exceeds read_ply's face list cap");
 
+    const std::size_t max_corners = has_uvs ? kMaxUVCorners : kMaxListCount;
     for (std::size_t fi = 0; fi < mesh.num_faces(); ++fi) {
         const auto n = mesh.face(fi).size();
-        if (n > kMaxListCount) {
+        if (n > max_corners) {
             throw std::runtime_error(
                 "write_ply: face " + to_string(fi) + " has " + to_string(n) +
-                " corners, exceeding the " + to_string(kMaxListCount) +
-                " a uchar vertex_indices list count can express");
-        }
-        if (has_uvs and n > kMaxUVCorners) {
-            throw std::runtime_error(
-                "write_ply: face " + to_string(fi) + " has " + to_string(n) +
-                " corners, whose texcoord list of " + to_string(2 * n) +
-                " values exceeds the " + to_string(kMaxListCount) +
-                " a uchar list count can express (" +
-                to_string(kMaxUVCorners) + " corners max with UVs)");
+                " corners, exceeding the " + to_string(max_corners) +
+                (has_uvs
+                     ? " a uchar texcoord list count allows, since texcoord"
+                       " writes 2 values per corner"
+                     : " a uchar vertex_indices list count can express"));
         }
     }
 }
@@ -1262,8 +1262,8 @@ void write_ply_data_binary(
     std::ostream& file,
     const Mesh<T, Dims, VTraits>& mesh,
     const UVMapT* uvmap,
-    [[maybe_unused]] bool has_normals,
-    [[maybe_unused]] bool has_colors)
+    bool has_normals,
+    bool has_colors)
 {
     using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
 
@@ -1361,31 +1361,31 @@ void write_ply_data_binary(
 /**
  * @brief Write PLY ASCII vertex and face data to @p file
  *
+ * Text is written at @c T's full precision, which is wider than the
+ * @c property @c float the header declares; @ref write_ply_data_binary writes
+ * exactly the declared @c float32. See the @c write_ply overloads.
+ *
  * @p uvmap may be @c nullptr (no UV output). When non-null, each face record
  * is followed by a @c texcoord list of 2*N floats. Unmapped corners are
  * written as @c -1,-1 (sentinel for "no UV assignment"). @p has_normals and
  * @p has_colors must match the values passed to @ref write_ply_header so the
  * data matches the declared properties.
  *
- * @p format selects the encoding; @c PLYFormat::Binary delegates to
- * @ref write_ply_data_binary and @p buf is then unused.
+ * Sibling of @ref write_ply_data_binary; @ref write_ply_impl picks between
+ * them.
  */
 template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
-void write_ply_data(
+void write_ply_data_ascii(
     std::ostream& file,
-    std::array<char, 128>& buf,
     const Mesh<T, Dims, VTraits>& mesh,
     const UVMapT* uvmap,
     [[maybe_unused]] bool has_normals,
-    [[maybe_unused]] bool has_colors,
-    PLYFormat format)
+    [[maybe_unused]] bool has_colors)
 {
     using Vertex = typename Mesh<T, Dims, VTraits>::Vertex;
 
-    if (format == PLYFormat::Binary) {
-        write_ply_data_binary(file, mesh, uvmap, has_normals, has_colors);
-        return;
-    }
+    // Scratch for to_string_view; used only by this path.
+    std::array<char, 128> buf{};
 
     for (std::size_t vi = 0; vi < mesh.num_vertices(); ++vi) {
         const auto& v = mesh.vertex(vi);
@@ -1440,6 +1440,67 @@ void write_ply_data(
     }
 }
 
+/**
+ * @brief Internal PLY writer shared by all public @ref write_ply overloads
+ *
+ * Mirrors @ref read_ply_impl on the read side: the three public tiers differ
+ * only in what they pass here. Keeping the sequence in one place is what makes
+ * the two cross-function invariants hold by construction rather than by each
+ * tier remembering them — @ref validate_ply_face_lists runs before
+ * @ref write_ply_data_binary's narrowing list-count casts, and the
+ * @c has_normals / @c has_colors given to the header are the same values the
+ * data writer sees.
+ *
+ * @p uvmap may be @c nullptr (no UVs); @p texture_comment may be empty (no
+ * @c comment @c TextureFile line).
+ *
+ * @throws std::runtime_error if the file cannot be opened, if writing fails,
+ *         or if a face exceeds the @c uchar list-count limits
+ */
+template <typename T, std::size_t Dims, typename VTraits, typename UVMapT>
+void write_ply_impl(
+    const std::filesystem::path& path,
+    const Mesh<T, Dims, VTraits>& mesh,
+    const UVMapT* uvmap,
+    const std::string& texture_comment,
+    PLYFormat format)
+{
+    // Single source of truth: a texcoord list is written exactly when there is
+    // a UV map, so the validator, the header and the data writer cannot
+    // disagree about it.
+    const bool has_uvs = uvmap != nullptr;
+
+    // Before the stream is opened, so a mesh that cannot be written leaves no
+    // truncated file behind.
+    validate_ply_face_lists(mesh, has_uvs);
+
+    std::ofstream file(path, std::ios::binary);
+    if (!file) {
+        throw std::runtime_error(
+            "write_ply: cannot open file: " + path.string());
+    }
+
+    const bool has_normals = has_any_normal(mesh);
+    const bool has_colors = has_any_color(mesh);
+
+    write_ply_header(
+        file, mesh, texture_comment, has_uvs, has_normals, has_colors, format);
+    if (format == PLYFormat::Binary) {
+        write_ply_data_binary(file, mesh, uvmap, has_normals, has_colors);
+    } else {
+        write_ply_data_ascii(file, mesh, uvmap, has_normals, has_colors);
+    }
+
+    // Close before checking. The stream may still hold buffered data here; the
+    // final flush happens when `file` is destroyed and its failure would be
+    // swallowed, so write_ply would return normally on an incomplete file.
+    file.close();
+    if (!file) {
+        throw std::runtime_error(
+            "write_ply: I/O error while writing file: " + path.string());
+    }
+}
+
 }  // namespace detail
 
 // =============================================================================
@@ -1486,32 +1547,8 @@ void write_ply(
 {
     static_assert(Dims >= 3, "write_ply requires Dims >= 3");
 
-    detail::validate_ply_face_lists(mesh, false);
-
-    std::ofstream file(path, std::ios::binary);
-    if (!file) {
-        throw std::runtime_error(
-            "write_ply: cannot open file: " + path.string());
-    }
-
-    std::array<char, 128> buf{};
-    const bool has_normals = has_any_normal(mesh);
-    const bool has_colors = has_any_color(mesh);
-    detail::write_ply_header(
-        file, mesh, "", false, has_normals, has_colors, format);
-    detail::write_ply_data(
-        file, buf, mesh, static_cast<const UVMap<float, 2>*>(nullptr),
-        has_normals, has_colors, format);
-
-    // Close before checking. The stream may still hold buffered data at this
-    // point; the final flush happens when `file` is destroyed, and a failure
-    // there would be swallowed, so write_ply would return normally on an
-    // incomplete file. close() performs that flush and records its failure.
-    file.close();
-    if (!file) {
-        throw std::runtime_error(
-            "write_ply: I/O error while writing file: " + path.string());
-    }
+    detail::write_ply_impl(
+        path, mesh, static_cast<const UVMap<float, 2>*>(nullptr), "", format);
 }
 
 // =============================================================================
@@ -1548,31 +1585,7 @@ void write_ply(
 {
     static_assert(Dims >= 3, "write_ply requires Dims >= 3");
 
-    detail::validate_ply_face_lists(mesh, true);
-
-    std::ofstream file(path, std::ios::binary);
-    if (!file) {
-        throw std::runtime_error(
-            "write_ply: cannot open file: " + path.string());
-    }
-
-    std::array<char, 128> buf{};
-    const bool has_normals = has_any_normal(mesh);
-    const bool has_colors = has_any_color(mesh);
-    detail::write_ply_header(
-        file, mesh, "", true, has_normals, has_colors, format);
-    detail::write_ply_data(
-        file, buf, mesh, &uvmap, has_normals, has_colors, format);
-
-    // Close before checking. The stream may still hold buffered data at this
-    // point; the final flush happens when `file` is destroyed, and a failure
-    // there would be swallowed, so write_ply would return normally on an
-    // incomplete file. close() performs that flush and records its failure.
-    file.close();
-    if (!file) {
-        throw std::runtime_error(
-            "write_ply: I/O error while writing file: " + path.string());
-    }
+    detail::write_ply_impl(path, mesh, &uvmap, "", format);
 }
 
 // =============================================================================
@@ -1616,32 +1629,8 @@ void write_ply(
 {
     static_assert(Dims >= 3, "write_ply requires Dims >= 3");
 
-    detail::validate_ply_face_lists(mesh, true);
-
-    std::ofstream file(path, std::ios::binary);
-    if (!file) {
-        throw std::runtime_error(
-            "write_ply: cannot open file: " + path.string());
-    }
-
-    std::array<char, 128> buf{};
-    const bool has_normals = has_any_normal(mesh);
-    const bool has_colors = has_any_color(mesh);
-    detail::write_ply_header(
-        file, mesh, texture_path.string(), true, has_normals, has_colors,
-        format);
-    detail::write_ply_data(
-        file, buf, mesh, &uvmap, has_normals, has_colors, format);
-
-    // Close before checking. The stream may still hold buffered data at this
-    // point; the final flush happens when `file` is destroyed, and a failure
-    // there would be swallowed, so write_ply would return normally on an
-    // incomplete file. close() performs that flush and records its failure.
-    file.close();
-    if (!file) {
-        throw std::runtime_error(
-            "write_ply: I/O error while writing file: " + path.string());
-    }
+    detail::write_ply_impl(
+        path, mesh, &uvmap, texture_path.string(), format);
 }
 
 // =============================================================================
