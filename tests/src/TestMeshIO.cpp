@@ -1,9 +1,15 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <csignal>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+
+#if defined(__unix__) || defined(__APPLE__)
+#include <sys/resource.h>
+#endif
 
 #include "educelab/core/io/MeshIO.hpp"
 #include "educelab/core/io/MeshIO_OBJ.hpp"
@@ -1998,6 +2004,233 @@ TEST_F(PLYTest, MalformedPropertyLine_Throws)
 
 // PLY: face record with texcoord list count beyond the per-face safety cap
 // should throw rather than attempting to allocate an unbounded buffer.
+//------------------------------------------------------------------------------
+// Reader robustness: a malformed or unusual file must produce an error, never
+// a silently wrong mesh. These are the worst failure mode for a reader — the
+// caller gets geometry back and has no way to know it is garbage.
+//------------------------------------------------------------------------------
+
+TEST_F(PLYTest, UnknownElementSignedListCount_Throws)
+{
+    // PLY permits a signed list-count type. A count byte of 0xFF read as
+    // `char` is -1, which as an unsigned byte-count is astronomically large;
+    // multiplied by the element width it wraps back around to a small negative
+    // number, and a seek of that size skips nothing at all. The reader then
+    // parses this element's payload as vertex data.
+    //
+    // There are enough bytes left for that to succeed, so without a bound the
+    // read returns two vertices of junk and reports no error.
+    const auto path = ply("unknown_signed_count");
+    {
+        std::ofstream f(path, std::ios::binary);
+        f << "ply\n"
+          << "format binary_little_endian 1.0\n"
+          << "element blob 1\n"
+          << "property list char double junk\n"
+          << "element vertex 2\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "element face 0\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n";
+        const uint8_t count = 0xFF;  // -1 as char
+        f.write(reinterpret_cast<const char*>(&count), 1);
+        const double junk[3] = {-9.5, -8.5, -7.5};
+        f.write(reinterpret_cast<const char*>(junk), sizeof(junk));
+        const float verts[6] = {1.f, 2.f, 3.f, 4.f, 5.f, 6.f};
+        f.write(reinterpret_cast<const char*>(verts), sizeof(verts));
+    }
+
+    Mesh3f dst;
+    EXPECT_THROW(read_ply(path, dst), std::runtime_error);
+}
+
+TEST_F(PLYTest, UnknownElementOversizeListCount_Throws)
+{
+    // The same guard from the other side: a count that is genuinely huge
+    // rather than negative. This already failed before the bound existed, but
+    // only by running off the end of the file, so it is pinned here to make
+    // sure it now fails on the count itself.
+    const auto path = ply("unknown_huge_count");
+    {
+        std::ofstream f(path, std::ios::binary);
+        f << "ply\n"
+          << "format binary_little_endian 1.0\n"
+          << "element blob 1\n"
+          << "property list uint double junk\n"
+          << "element vertex 1\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "element face 0\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n";
+        const uint32_t count = 0xFFFFFFFFu;
+        f.write(reinterpret_cast<const char*>(&count), 4);
+        const float verts[3] = {1.f, 2.f, 3.f};
+        f.write(reinterpret_cast<const char*>(verts), sizeof(verts));
+    }
+
+    Mesh3f dst;
+    EXPECT_THROW(read_ply(path, dst), std::runtime_error);
+}
+
+TEST_F(PLYTest, UnknownElementValidListCount_SkipsCorrectly)
+{
+    // The bound must not break the case it guards. A well-formed unknown
+    // element is skipped and the vertices that follow read correctly.
+    const auto path = ply("unknown_valid_count");
+    {
+        std::ofstream f(path, std::ios::binary);
+        f << "ply\n"
+          << "format binary_little_endian 1.0\n"
+          << "element blob 1\n"
+          << "property list char double junk\n"
+          << "element vertex 2\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "element face 0\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n";
+        const uint8_t count = 3;
+        f.write(reinterpret_cast<const char*>(&count), 1);
+        const double junk[3] = {-9.5, -8.5, -7.5};
+        f.write(reinterpret_cast<const char*>(junk), sizeof(junk));
+        const float verts[6] = {1.f, 2.f, 3.f, 4.f, 5.f, 6.f};
+        f.write(reinterpret_cast<const char*>(verts), sizeof(verts));
+    }
+
+    Mesh3f dst;
+    read_ply(path, dst);
+    ASSERT_EQ(dst.num_vertices(), 2u);
+    EXPECT_NEAR(dst.vertex(0)[0], 1.f, 1e-6f);
+    EXPECT_NEAR(dst.vertex(0)[1], 2.f, 1e-6f);
+    EXPECT_NEAR(dst.vertex(0)[2], 3.f, 1e-6f);
+    EXPECT_NEAR(dst.vertex(1)[0], 4.f, 1e-6f);
+    EXPECT_NEAR(dst.vertex(1)[1], 5.f, 1e-6f);
+    EXPECT_NEAR(dst.vertex(1)[2], 6.f, 1e-6f);
+}
+
+TEST_F(PLYTest, VertexElementWithListProperty_Throws)
+{
+    // The binary vertex reader sizes each record by summing its properties'
+    // element widths, which is only correct when every property is a single
+    // scalar. A list property occupies a count plus N values, so the record
+    // size comes out short, every read is misaligned, and vertices after the
+    // first are garbage — with no error.
+    //
+    // Neither the binary nor the ASCII vertex path interprets a list property,
+    // so the file is refused rather than half-read.
+    const auto path = ply("vertex_list_prop");
+    {
+        std::ofstream f(path, std::ios::binary);
+        f << "ply\n"
+          << "format binary_little_endian 1.0\n"
+          << "element vertex 2\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "property list uchar int extra\n"
+          << "element face 0\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n";
+        for (int vi = 0; vi < 2; ++vi) {
+            const float v[3] = {
+                static_cast<float>(3 * vi + 1),
+                static_cast<float>(3 * vi + 2),
+                static_cast<float>(3 * vi + 3)};
+            f.write(reinterpret_cast<const char*>(v), sizeof(v));
+            const uint8_t n = 1;
+            const int32_t val = 7;
+            f.write(reinterpret_cast<const char*>(&n), 1);
+            f.write(reinterpret_cast<const char*>(&val), 4);
+        }
+    }
+
+    Mesh3f dst;
+    EXPECT_THROW(read_ply(path, dst), std::runtime_error);
+}
+
+TEST_F(PLYTest, VertexElementWithListProperty_ASCII_Throws)
+{
+    // Same declaration, ASCII. The ASCII vertex loop indexes tokens by
+    // property position, which a list property also breaks, so it is refused
+    // for the same reason.
+    const auto path = ply("vertex_list_prop_ascii");
+    {
+        std::ofstream f(path);
+        f << "ply\n"
+          << "format ascii 1.0\n"
+          << "element vertex 2\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "property list uchar int extra\n"
+          << "element face 0\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n"
+          << "1 2 3 1 7\n"
+          << "4 5 6 1 7\n";
+    }
+
+    Mesh3f dst;
+    EXPECT_THROW(read_ply(path, dst), std::runtime_error);
+}
+
+// A write failure that happens only in the final flush.
+//
+// write_ply checks the stream while the tail of the data may still be
+// buffered; the flush happens when the ofstream is destroyed, and a failure
+// there is swallowed, so write_ply returns normally on an incomplete file.
+//
+// Isolating that needs the failure to occur at close and nowhere earlier. With
+// RLIMIT_FSIZE at 0 every write to the file fails, and with a mesh smaller than
+// the stream buffer no write is attempted until close — so the stream is still
+// good when write_ply's check runs, and only the flush fails.
+//
+// POSIX-only: there is no portable way to provoke this.
+#if defined(__unix__) || defined(__APPLE__)
+TEST_F(PLYTest, WriteFailureInFinalFlush_Throws)
+{
+    // Exceeding RLIMIT_FSIZE raises SIGXFSZ, which by default kills the
+    // process; ignore it so the write reports EFBIG instead.
+    struct Guard {
+        rlimit saved{};
+        void (*prev_sigxfsz)(int){nullptr};
+        bool active{false};
+        Guard()
+        {
+            if (::getrlimit(RLIMIT_FSIZE, &saved) != 0) {
+                return;
+            }
+            prev_sigxfsz = std::signal(SIGXFSZ, SIG_IGN);
+            rlimit zero{0, saved.rlim_max};
+            active = ::setrlimit(RLIMIT_FSIZE, &zero) == 0;
+        }
+        ~Guard()
+        {
+            if (active) {
+                (void)::setrlimit(RLIMIT_FSIZE, &saved);
+            }
+            if (prev_sigxfsz != nullptr) {
+                (void)std::signal(SIGXFSZ, prev_sigxfsz);
+            }
+        }
+    } guard;
+    if (!guard.active) {
+        GTEST_SKIP() << "cannot lower RLIMIT_FSIZE in this environment";
+    }
+
+    // A triangle is a few hundred bytes — comfortably inside the stream
+    // buffer, so nothing reaches the filesystem before close.
+    const auto src  = make_triangle();
+    const auto path = ply("flush_fails");
+    EXPECT_THROW(write_ply(path, src), std::runtime_error);
+}
+#endif
+
 TEST_F(PLYTest, ExcessiveTexcoordCount_Throws)
 {
     const auto path = ply("excessive_texcoord");

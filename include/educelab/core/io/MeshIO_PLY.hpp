@@ -437,6 +437,19 @@ auto read_ply_prop_from_buf(const char* buf, PLYType type) -> DestT
 // Face record parsing helpers
 // -------------------------------------------------------------------------
 
+// Bounds on a list property's element count. Legitimate values are small.
+// Unknown list properties are skipped rather than interpreted, but the count
+// still governs how many bytes are advanced, so it needs a bound there too:
+// PLY permits a signed count type, and a negative count converted to an
+// unsigned byte total wraps to a seek that skips nothing, leaving the reader
+// misaligned inside the element it meant to step over.
+
+/** @brief Largest @c vertex_indices count @ref read_ply will accept */
+constexpr std::size_t kMaxFaceVertices = 256;
+
+/** @brief Largest count @ref read_ply will accept for any other list */
+constexpr std::size_t kMaxFaceListLength = 1024;
+
 /** @brief Parse one binary face record from @p file.
  *
  *  Populates @p face with vertex indices and, when @p load_texcoords is
@@ -452,13 +465,6 @@ inline void read_ply_face_binary(
     std::vector<std::size_t>& face,
     std::vector<float>& texcoords)
 {
-    // Cap any list property inside a face record. Legitimate values are small:
-    // vertex_indices is capped at 256 corners, texcoord is 2 floats per corner
-    // (<= 512). Unknown list properties are skipped but the count still governs
-    // how many bytes we read — without a cap, a hostile file can ask us to
-    // advance an unbounded number of bytes.
-    constexpr std::size_t kMaxFaceVertices = 256;
-    constexpr std::size_t kMaxFaceListLength = 1024;
     face.clear();
     texcoords.clear();
     for (const auto& prop : elem.props) {
@@ -538,8 +544,6 @@ inline void read_ply_face_ascii(
     std::vector<std::size_t>& face,
     std::vector<float>& texcoords)
 {
-    constexpr std::size_t kMaxFaceVertices = 256;
-    constexpr std::size_t kMaxFaceListLength = 1024;
     face.clear();
     texcoords.clear();
     std::size_t ti = 0;
@@ -716,6 +720,14 @@ void read_ply_impl(
         }
         const auto count =
             read_ply_binary_prop<std::size_t>(file, prop.list_count_type);
+        // Bound before multiplying. A negative count from a signed count type
+        // arrives here as a huge unsigned value, and the byte total would wrap
+        // to a negative seek that skips nothing at all.
+        if (count > kMaxFaceListLength) {
+            throw std::runtime_error(
+                "read_ply: list property count " + to_string(count) +
+                " exceeds maximum of " + to_string(kMaxFaceListLength));
+        }
         file.ignore(
             static_cast<std::streamsize>(count * ply_type_bytes(prop.type)));
     };
@@ -738,6 +750,20 @@ void read_ply_impl(
     std::vector<std::string_view> tokens;
     for (const auto& elem : hdr.elements) {
         if (elem.name == "vertex") {
+            // Neither vertex path can interpret a list property: the binary
+            // reader sizes each record by summing its properties' scalar
+            // widths, and the ASCII reader indexes tokens by property
+            // position. A list occupies a count plus N values, so both would
+            // read the first vertex correctly and every later one from the
+            // wrong offset. Refuse the file rather than return garbage.
+            for (const auto& p : elem.props) {
+                if (p.is_list) {
+                    throw std::runtime_error(
+                        "read_ply: list property '" + p.name +
+                        "' on the vertex element is not supported");
+                }
+            }
+
             // Pre-compute binary vertex record layout so the inner loop makes
             // one file.read() per vertex (O(vertices)) instead of one read
             // per property per vertex (O(properties × vertices)).
@@ -1129,6 +1155,11 @@ void write_ply(
         file, buf, mesh, static_cast<const UVMap<float, 2>*>(nullptr),
         has_normals, has_colors);
 
+    // Close before checking. The stream may still hold buffered data at this
+    // point; the final flush happens when `file` is destroyed, and a failure
+    // there would be swallowed, so write_ply would return normally on an
+    // incomplete file. close() performs that flush and records its failure.
+    file.close();
     if (!file) {
         throw std::runtime_error(
             "write_ply: I/O error while writing file: " + path.string());
@@ -1170,6 +1201,11 @@ void write_ply(
     detail::write_ply_header(file, mesh, "", true, has_normals, has_colors);
     detail::write_ply_data(file, buf, mesh, &uvmap, has_normals, has_colors);
 
+    // Close before checking. The stream may still hold buffered data at this
+    // point; the final flush happens when `file` is destroyed, and a failure
+    // there would be swallowed, so write_ply would return normally on an
+    // incomplete file. close() performs that flush and records its failure.
+    file.close();
     if (!file) {
         throw std::runtime_error(
             "write_ply: I/O error while writing file: " + path.string());
@@ -1218,6 +1254,11 @@ void write_ply(
         file, mesh, texture_path.string(), true, has_normals, has_colors);
     detail::write_ply_data(file, buf, mesh, &uvmap, has_normals, has_colors);
 
+    // Close before checking. The stream may still hold buffered data at this
+    // point; the final flush happens when `file` is destroyed, and a failure
+    // there would be swallowed, so write_ply would return normally on an
+    // incomplete file. close() performs that flush and records its failure.
+    file.close();
     if (!file) {
         throw std::runtime_error(
             "write_ply: I/O error while writing file: " + path.string());
