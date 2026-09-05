@@ -4,7 +4,7 @@
   "type": "feature",
   "status": "complete",
   "created": "2026-09-04T00:00:00+0200",
-  "updated": "2026-09-04T23:20:00Z",
+  "updated": "2026-09-05T00:00:00Z",
   "issue": 25,
   "current_phase": 5,
   "current_task": "5.3",
@@ -30,5 +30,5 @@
     "398c7d7: feat(MeshIO): binary PLY write",
     "bfc4aa2: docs(MeshIO): document PLYFormat, list-count throws, and the write_mesh omission"
   ],
-  "notes": "Phase 4's manual MeshLab check is outstanding: MeshLab 2025.07 ships no CLI, so it was validated against an independently written PLY parser instead."
+  "notes": "Phase 4's MeshLab check was completed manually: a binary mesh loads correctly. It also surfaced that MeshLab cannot open any PLY pairing a texcoord list with a face of more than 3 corners, in ASCII or binary alike - a vcglib importer constraint, not a libcore one. Reader/writer robustness bugs found by code review of #28 are fixed separately in #29."
 }
