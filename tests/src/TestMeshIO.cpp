@@ -1,11 +1,18 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <csignal>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/resource.h>
@@ -16,6 +23,7 @@
 #include "educelab/core/io/MeshIO_PLY.hpp"
 #include "educelab/core/types/Mesh.hpp"
 #include "educelab/core/types/UVMap.hpp"
+#include "educelab/core/utils/Math.hpp"
 #include "educelab/core/utils/MeshUtils.hpp"
 
 namespace fs = std::filesystem;
@@ -173,6 +181,34 @@ static auto make_triangle_uvmap(const Mesh3f& /*m*/) -> UVMap2f
     uv.map(0, 0, 0);
     uv.map(0, 1, 1);
     uv.map(0, 2, 2);
+    return uv;
+}
+
+// Single n-gon face with `n` corners on a unit circle. Used to walk the uchar
+// list-count boundaries the PLY writer has to enforce.
+static auto make_ngon(std::size_t n) -> Mesh3f
+{
+    Mesh3f m;
+    Mesh3f::Face idx(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto a =
+            2.f * PI<float> * static_cast<float>(i) / static_cast<float>(n);
+        (void)m.insert_vertex(std::cos(a), std::sin(a), 0.f);
+        idx[i] = i;
+    }
+    (void)m.insert_face(idx);
+    return m;
+}
+
+// Per-wedge UVs for the single face of make_ngon(n) — every corner mapped.
+static auto make_ngon_uvmap(std::size_t n) -> UVMap2f
+{
+    UVMap2f uv;
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto t = static_cast<float>(i) / static_cast<float>(n);
+        const auto pool = uv.insert(t, 1.f - t);
+        uv.map(0, i, pool);
+    }
     return uv;
 }
 
@@ -1116,6 +1152,121 @@ TEST(ExpandAtSeams, EmptyMesh_ReturnsEmptyExpanded)
 }
 
 //------------------------------------------------------------------------------
+// Byte-order helpers (detail::host_is_little_endian, detail::swap_bytes)
+//
+// The byte-order foundation the binary PLY reader and writer both sit on.
+// Tested directly rather than only through a PLY file, because a swap that is
+// wrong in a way the writer shares would round-trip perfectly.
+//------------------------------------------------------------------------------
+
+// Independent probe of the host's byte order. Deliberately does not reuse the
+// compile-time macros detail::host_is_little_endian() consults, so the two can
+// disagree and the test can notice.
+static auto probe_host_is_little_endian() -> bool
+{
+    const uint32_t v = 0x01020304U;
+    std::array<unsigned char, 4> bytes{};
+    std::memcpy(bytes.data(), &v, 4);
+    return bytes[0] == 0x04;
+}
+
+TEST(PLYByteOrder, HostOrderMatchesRuntimeProbe)
+{
+    EXPECT_EQ(detail::host_is_little_endian(), probe_host_is_little_endian());
+}
+
+TEST(PLYByteOrder, HostOrderIsCompileTimeConstant)
+{
+    // Used to derive a loop-invariant swap flag, so it must be usable in a
+    // constant expression rather than resolved per property read.
+    constexpr bool kLittle = detail::host_is_little_endian();
+    EXPECT_EQ(kLittle, probe_host_is_little_endian());
+}
+
+TEST(PLYByteOrder, SwapBytes_OneByteIsNoOp)
+{
+    uint8_t v{0xAB};
+    detail::swap_bytes(v);
+    EXPECT_EQ(v, 0xABu);
+
+    int8_t sv{-2};  // 0xFE
+    detail::swap_bytes(sv);
+    EXPECT_EQ(sv, -2);
+}
+
+TEST(PLYByteOrder, SwapBytes_TwoBytes)
+{
+    uint16_t v{0x1234};
+    detail::swap_bytes(v);
+    EXPECT_EQ(v, 0x3412u);
+
+    int16_t sv{0x0102};
+    detail::swap_bytes(sv);
+    EXPECT_EQ(sv, static_cast<int16_t>(0x0201));
+}
+
+TEST(PLYByteOrder, SwapBytes_FourBytes)
+{
+    uint32_t v{0x12345678U};
+    detail::swap_bytes(v);
+    EXPECT_EQ(v, 0x78563412U);
+
+    int32_t sv{0x01020304};
+    detail::swap_bytes(sv);
+    EXPECT_EQ(sv, 0x04030201);
+}
+
+TEST(PLYByteOrder, SwapBytes_EightBytes)
+{
+    uint64_t v{0x0102030405060708ULL};
+    detail::swap_bytes(v);
+    EXPECT_EQ(v, 0x0807060504030201ULL);
+}
+
+TEST(PLYByteOrder, SwapBytes_Float)
+{
+    // 1.0f is 3F 80 00 00 big-endian; reversed it is 00 00 80 3F.
+    float f{1.f};
+    detail::swap_bytes(f);
+    uint32_t bits{};
+    std::memcpy(&bits, &f, 4);
+    // The assertion holds on either host: reversing the bytes and then
+    // reading them back as an integer of the same width is symmetric.
+    EXPECT_EQ(bits, 0x0000803FU);
+}
+
+TEST(PLYByteOrder, SwapBytes_Double)
+{
+    // 1.0 is 3F F0 00 00 00 00 00 00 big-endian; reversed, 00 ... 00 F0 3F.
+    double d{1.};
+    detail::swap_bytes(d);
+    uint64_t bits{};
+    std::memcpy(&bits, &d, 8);
+    EXPECT_EQ(bits, 0x000000000000F03FULL);
+}
+
+TEST(PLYByteOrder, SwapBytes_IsItsOwnInverse)
+{
+    // Two swaps must restore the original for every width the format uses.
+    uint16_t u16{0xBEEF};
+    detail::swap_bytes(u16);
+    detail::swap_bytes(u16);
+    EXPECT_EQ(u16, 0xBEEFu);
+
+    const float f_orig{-1234.5678f};
+    float f{f_orig};
+    detail::swap_bytes(f);
+    detail::swap_bytes(f);
+    EXPECT_EQ(f, f_orig);
+
+    const double d_orig{3.14159265358979};
+    double d{d_orig};
+    detail::swap_bytes(d);
+    detail::swap_bytes(d);
+    EXPECT_EQ(d, d_orig);
+}
+
+//------------------------------------------------------------------------------
 // PLY Round-Trip Test Fixture
 //------------------------------------------------------------------------------
 
@@ -1435,6 +1586,668 @@ TEST_F(PLYTest, SizedTypeAliases_BinaryLittleEndian_Read)
     EXPECT_EQ(dst.face(0), (Mesh3f::Face{0, 1, 2}));
 }
 
+// Append `v` to `f` most-significant byte first.
+//
+// Reverses the host layout by hand rather than calling detail::swap_bytes:
+// the fixture has to encode big-endian independently of the code under test,
+// or a wrong swap would agree with itself and the test would pass.
+template <typename ScalarT>
+static void write_be(std::ostream& f, ScalarT v)
+{
+    std::array<char, sizeof(ScalarT)> bytes{};
+    std::memcpy(bytes.data(), &v, sizeof(ScalarT));
+    if (probe_host_is_little_endian()) {
+        std::reverse(bytes.begin(), bytes.end());
+    }
+    f.write(bytes.data(), sizeof(ScalarT));
+}
+
+TEST_F(PLYTest, BinaryBigEndian_Read)
+{
+    // A big-endian PLY read back on a little-endian host. Every scalar width
+    // the format uses appears: float (4) positions, double (8) normals,
+    // ushort (2) colors, uchar (1) list count, int (4) list values.
+    //
+    // Values are chosen so an unswapped read cannot accidentally pass:
+    // 1.0f is 3F 80 00 00, the normals are non-palindromic bit patterns, the
+    // colors are 0x0102 / 0x0304 / 0x0506, and the face indices 0/1/2 would
+    // become 0 / 16777216 / 33554432 and be rejected as out of range.
+    const auto path = ply("be_read");
+    {
+        std::ofstream f(path, std::ios::binary);
+        f << "ply\n"
+          << "format binary_big_endian 1.0\n"
+          << "element vertex 3\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "property double nx\n"
+          << "property double ny\n"
+          << "property double nz\n"
+          << "property ushort red\n"
+          << "property ushort green\n"
+          << "property ushort blue\n"
+          << "element face 1\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n";
+
+        const float pos[3][3] = {
+            {0.f, 0.f, 0.f},
+            {1.f, 0.f, 0.f},
+            {0.f, 1.f, 0.f}};
+        const double nrm[3][3] = {
+            {0.25, 0.5, 0.75},
+            {-0.5, 0.25, 0.75},
+            {0.75, -0.25, 0.5}};
+        const uint16_t col[3][3] = {
+            {0x0102, 0x0304, 0x0506},
+            {0x0708, 0x090A, 0x0B0C},
+            {0x0D0E, 0x0F10, 0x1112}};
+
+        for (int vi = 0; vi < 3; ++vi) {
+            for (int c = 0; c < 3; ++c) {
+                write_be(f, pos[vi][c]);
+            }
+            for (int c = 0; c < 3; ++c) {
+                write_be(f, nrm[vi][c]);
+            }
+            for (int c = 0; c < 3; ++c) {
+                write_be(f, col[vi][c]);
+            }
+        }
+
+        write_be(f, static_cast<uint8_t>(3));
+        write_be(f, static_cast<int32_t>(0));
+        write_be(f, static_cast<int32_t>(1));
+        write_be(f, static_cast<int32_t>(2));
+    }
+
+    NCMesh dst;
+    read_ply(path, dst);
+
+    ASSERT_EQ(dst.num_vertices(), 3u);
+    ASSERT_EQ(dst.num_faces(), 1u);
+
+    // 4-byte positions
+    EXPECT_NEAR(dst.vertex(1)[0], 1.f, 1e-6f);
+    EXPECT_NEAR(dst.vertex(1)[1], 0.f, 1e-6f);
+    EXPECT_NEAR(dst.vertex(2)[1], 1.f, 1e-6f);
+
+    // 8-byte normals
+    ASSERT_TRUE(dst.vertex(0).normal.has_value());
+    EXPECT_NEAR((*dst.vertex(0).normal)[0],  0.25f, 1e-6f);
+    EXPECT_NEAR((*dst.vertex(0).normal)[1],  0.5f,  1e-6f);
+    EXPECT_NEAR((*dst.vertex(0).normal)[2],  0.75f, 1e-6f);
+    ASSERT_TRUE(dst.vertex(2).normal.has_value());
+    EXPECT_NEAR((*dst.vertex(2).normal)[1], -0.25f, 1e-6f);
+
+    // 2-byte colors — preserved as U16C3, so the swap is visible in the value
+    ASSERT_TRUE(dst.vertex(0).color.has_value());
+    EXPECT_EQ(dst.vertex(0).color.value<Color::U16C3>()[0], 0x0102u);
+    EXPECT_EQ(dst.vertex(0).color.value<Color::U16C3>()[1], 0x0304u);
+    EXPECT_EQ(dst.vertex(0).color.value<Color::U16C3>()[2], 0x0506u);
+    EXPECT_EQ(dst.vertex(2).color.value<Color::U16C3>()[2], 0x1112u);
+
+    // 1-byte count and 4-byte list values
+    EXPECT_EQ(dst.face(0), (NCMesh::Face{0, 1, 2}));
+}
+
+TEST_F(PLYTest, BinaryBigEndian_SwapPrecedesCast)
+{
+    // The trap the spec calls out. A big-endian float 1.0 is the byte sequence
+    // 3F 80 00 00. memcpy'd straight into a native little-endian float that is
+    // 4.6e-41 (a denormal), and no reversal of the widened double recovers
+    // 1.0 — the bytes have to be reordered while the value is still a float.
+    //
+    // The destination mesh is Mesh3d so the widening float -> double is real
+    // and the assertion would fail if the swap were applied after the cast.
+    const auto path = ply("be_precast");
+    {
+        std::ofstream f(path, std::ios::binary);
+        f << "ply\n"
+          << "format binary_big_endian 1.0\n"
+          << "element vertex 1\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "element face 0\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n";
+        // Literal big-endian bytes, not derived from a host float.
+        const std::array<char, 4> be_one{'\x3f', '\x80', '\x00', '\x00'};
+        for (int i = 0; i < 3; ++i) {
+            f.write(be_one.data(), 4);
+        }
+    }
+
+    Mesh3d dst;
+    read_ply(path, dst);
+
+    ASSERT_EQ(dst.num_vertices(), 1u);
+    EXPECT_DOUBLE_EQ(dst.vertex(0)[0], 1.0);
+    EXPECT_DOUBLE_EQ(dst.vertex(0)[1], 1.0);
+    EXPECT_DOUBLE_EQ(dst.vertex(0)[2], 1.0);
+}
+
+TEST_F(PLYTest, BinaryBigEndian_SwapPrecedesCast_StreamPath)
+{
+    // Same guarantee for the other choke point. read_ply_prop_from_buf serves
+    // the batched vertex record; read_ply_binary_prop serves the face record
+    // and the unknown-element skip. A face index list of int32 values reaches
+    // the stream path, so the same file exercises both.
+    const auto path = ply("be_precast_stream");
+    {
+        std::ofstream f(path, std::ios::binary);
+        f << "ply\n"
+          << "format binary_big_endian 1.0\n"
+          << "element vertex 3\n"
+          << "property float x\n"
+          << "property float y\n"
+          << "property float z\n"
+          << "element face 1\n"
+          << "property list uchar int vertex_indices\n"
+          << "end_header\n";
+        for (int vi = 0; vi < 3; ++vi) {
+            for (int c = 0; c < 3; ++c) {
+                write_be(f, 0.f);
+            }
+        }
+        // Big-endian int32 2, 1, 0 — literal bytes. Unswapped these read as
+        // 33554432, 16777216 and 0, and the reader would reject them.
+        const std::array<char, 13> face{
+            '\x03',
+            '\x00', '\x00', '\x00', '\x02',
+            '\x00', '\x00', '\x00', '\x01',
+            '\x00', '\x00', '\x00', '\x00'};
+        f.write(face.data(), face.size());
+    }
+
+    Mesh3f dst;
+    read_ply(path, dst);
+
+    ASSERT_EQ(dst.num_faces(), 1u);
+    EXPECT_EQ(dst.face(0), (Mesh3f::Face{2, 1, 0}));
+}
+
+//------------------------------------------------------------------------------
+// Face list-count limits
+//
+// write_ply declares both of its list properties with a `uchar` count:
+// vertex_indices writes N, texcoord writes 2*N. A count above 255 would
+// truncate silently and produce a file no reader can make sense of, so the
+// writer rejects it. The limits are therefore 255 corners without UVs and 127
+// with them.
+//------------------------------------------------------------------------------
+
+TEST_F(PLYTest, FaceOver255Corners_Throws)
+{
+    const auto src  = make_ngon(256);
+    const auto path = ply("ngon256");
+
+    try {
+        write_ply(path, src);
+        FAIL() << "expected write_ply to reject a 256-corner face";
+    } catch (const std::runtime_error& e) {
+        const std::string msg = e.what();
+        EXPECT_NE(msg.find("vertex_indices"), std::string::npos) << msg;
+        EXPECT_NE(msg.find("face 0"), std::string::npos) << msg;
+        EXPECT_NE(msg.find("256"), std::string::npos) << msg;
+    }
+
+    // Validated before the stream is opened, so a mesh that cannot be written
+    // leaves no truncated file behind.
+    EXPECT_FALSE(fs::exists(path));
+}
+
+TEST_F(PLYTest, FaceWith255Corners_WritesAndReadsBack)
+{
+    // The largest face the uchar count can express. Also the Task 3.3
+    // coherence check: the reader's own cap is kMaxFaceVertices = 256, so
+    // everything the writer now permits stays readable.
+    const auto src  = make_ngon(255);
+    const auto path = ply("ngon255");
+    ASSERT_NO_THROW(write_ply(path, src));
+
+    Mesh3f dst;
+    read_ply(path, dst);
+    ASSERT_EQ(dst.num_vertices(), 255u);
+    ASSERT_EQ(dst.num_faces(), 1u);
+    EXPECT_EQ(dst.face(0).size(), 255u);
+    EXPECT_EQ(dst.face(0).back(), 254u);
+}
+
+TEST_F(PLYTest, FaceOver127CornersWithUVs_Throws)
+{
+    // 128 corners is legal for vertex_indices but its texcoord list would be
+    // 256 values, one past the uchar count.
+    const auto src  = make_ngon(128);
+    const auto uv   = make_ngon_uvmap(128);
+    const auto path = ply("ngon128_uv");
+
+    try {
+        write_ply(path, src, uv);
+        FAIL() << "expected write_ply to reject a 128-corner face with UVs";
+    } catch (const std::runtime_error& e) {
+        const std::string msg = e.what();
+        EXPECT_NE(msg.find("texcoord"), std::string::npos) << msg;
+        EXPECT_NE(msg.find("face 0"), std::string::npos) << msg;
+    }
+
+    EXPECT_FALSE(fs::exists(path));
+}
+
+TEST_F(PLYTest, FaceOver127CornersWithUVs_Tier3_Throws)
+{
+    // Tier 3 takes the same guard. Asserted separately because a missed call
+    // site there would fail silently rather than at compile time.
+    const auto src  = make_ngon(128);
+    const auto uv   = make_ngon_uvmap(128);
+    const auto path = ply("ngon128_uv_tex");
+
+    try {
+        write_ply(path, src, uv, fs::path("tex.png"));
+        FAIL() << "expected write_ply tier 3 to reject the same face";
+    } catch (const std::runtime_error& e) {
+        const std::string msg = e.what();
+        EXPECT_NE(msg.find("texcoord"), std::string::npos) << msg;
+    }
+
+    EXPECT_FALSE(fs::exists(path));
+}
+
+TEST_F(PLYTest, FaceWith127CornersWithUVs_WritesAndReadsBack)
+{
+    // The largest face that can carry UVs: 127 corners, 254 texcoord values.
+    // The reader's texcoord cap is kMaxFaceListLength = 1024, well clear.
+    const auto src  = make_ngon(127);
+    const auto uv   = make_ngon_uvmap(127);
+    const auto path = ply("ngon127_uv");
+    ASSERT_NO_THROW(write_ply(path, src, uv));
+
+    Mesh3f   dst;
+    UVMap2f  dst_uv;
+    read_ply(path, dst, dst_uv);
+    ASSERT_EQ(dst.num_faces(), 1u);
+    EXPECT_EQ(dst.face(0).size(), 127u);
+    ASSERT_TRUE(dst_uv.has(0, 0));
+    ASSERT_TRUE(dst_uv.has(0, 126));
+    EXPECT_NEAR(dst_uv.at(dst_uv.get(0, 0))[0], 0.f, 1e-5f);
+    EXPECT_NEAR(dst_uv.at(dst_uv.get(0, 126))[0], 126.f / 127.f, 1e-5f);
+}
+
+TEST_F(PLYTest, FaceWith128CornersNoUVs_WritesCleanly)
+{
+    // 128 corners only trips the texcoord limit, so tier 1 must still accept
+    // it — the two limits are independent.
+    const auto src  = make_ngon(128);
+    const auto path = ply("ngon128");
+    ASSERT_NO_THROW(write_ply(path, src));
+
+    Mesh3f dst;
+    read_ply(path, dst);
+    EXPECT_EQ(dst.face(0).size(), 128u);
+}
+
+//------------------------------------------------------------------------------
+// Binary write
+//
+// The byte-level tests below assert the format itself, not libcore's opinion
+// of it: expectations are spelled as hand-derived IEEE-754 / two's-complement
+// literals in big-endian order and converted to host order by hand. A
+// round-trip cannot anchor this work, because a byte-order mistake the reader
+// and writer share round-trips perfectly.
+//------------------------------------------------------------------------------
+
+// Split a written PLY into its header text and its raw data bytes.
+static void split_ply(
+    const fs::path& path,
+    std::string& header,
+    std::vector<unsigned char>& body)
+{
+    std::ifstream f(path, std::ios::binary);
+    ASSERT_TRUE(f.good()) << "cannot open " << path;
+    // Extra parens on the first argument: without them this is a function
+    // declaration, not a vector (most vexing parse).
+    const std::vector<unsigned char> all(
+        (std::istreambuf_iterator<char>(f)),
+        std::istreambuf_iterator<char>());
+
+    static const std::string kEnd = "end_header\n";
+    const std::string text(all.begin(), all.end());
+    const auto pos = text.find(kEnd);
+    ASSERT_NE(pos, std::string::npos) << "no end_header in " << path;
+    header.assign(text, 0, pos + kEnd.size());
+    body.assign(all.begin() + static_cast<long>(pos + kEnd.size()), all.end());
+}
+
+// Append a hand-derived big-endian byte spelling in the host's own order.
+static void push_host(
+    std::vector<unsigned char>& out, std::initializer_list<unsigned char> be)
+{
+    std::vector<unsigned char> b(be);
+    if (probe_host_is_little_endian()) {
+        std::reverse(b.begin(), b.end());
+    }
+    out.insert(out.end(), b.begin(), b.end());
+}
+
+// The format line a binary write must emit on this host.
+static auto expected_binary_format_line() -> std::string
+{
+    return probe_host_is_little_endian()
+               ? "format binary_little_endian 1.0\n"
+               : "format binary_big_endian 1.0\n";
+}
+
+// Hand-derived IEEE-754 spellings, big-endian, for the values make_triangle()
+// and its UV map use.
+static constexpr std::initializer_list<unsigned char> kZeroF32{
+    0x00, 0x00, 0x00, 0x00};
+static constexpr std::initializer_list<unsigned char> kOneF32{
+    0x3F, 0x80, 0x00, 0x00};
+static constexpr std::initializer_list<unsigned char> kNegOneF32{
+    0xBF, 0x80, 0x00, 0x00};
+
+// The binary body of make_triangle(): v0=(0,0,0) v1=(1,0,0) v2=(0,1,0) as
+// float32, then the uchar-counted vertex_indices list 0 1 2. Shared so a
+// change to make_triangle() is a one-place fixup.
+static void push_triangle_body(std::vector<unsigned char>& want)
+{
+    push_host(want, kZeroF32); push_host(want, kZeroF32); push_host(want, kZeroF32);
+    push_host(want, kOneF32);  push_host(want, kZeroF32); push_host(want, kZeroF32);
+    push_host(want, kZeroF32); push_host(want, kOneF32);  push_host(want, kZeroF32);
+    want.push_back(0x03);  // uchar list count needs no swap
+    push_host(want, {0x00, 0x00, 0x00, 0x00});
+    push_host(want, {0x00, 0x00, 0x00, 0x01});
+    push_host(want, {0x00, 0x00, 0x00, 0x02});
+}
+
+TEST_F(PLYTest, BinaryWrite_ByteLevel)
+{
+    // make_triangle(): v0=(0,0,0) v1=(1,0,0) v2=(0,1,0), face 0 1 2.
+    const auto src  = make_triangle();
+    const auto path = ply("bin_bytes");
+    write_ply(path, src, PLYFormat::Binary);
+
+    std::string header;
+    std::vector<unsigned char> body;
+    split_ply(path, header, body);
+
+    // Property declarations are the same as ASCII; only the format line moves.
+    const std::string want_header =
+        "ply\n" + expected_binary_format_line() +
+        "element vertex 3\n"
+        "property float x\n"
+        "property float y\n"
+        "property float z\n"
+        "element face 1\n"
+        "property list uchar int vertex_indices\n"
+        "end_header\n";
+    EXPECT_EQ(header, want_header);
+
+    // 3 vertices x 3 float32, then a uchar count and 3 int32 indices.
+    std::vector<unsigned char> want;
+    push_triangle_body(want);
+
+    ASSERT_EQ(body.size(), want.size());
+    EXPECT_EQ(body, want);
+}
+
+TEST_F(PLYTest, BinaryWrite_ScalarsAreFloat32RegardlessOfT)
+{
+    // The on-disk format must not follow the mesh's template parameter: a
+    // Mesh3d and a Mesh3f have to produce the same bytes from the same call.
+    Mesh3d src;
+    (void)src.insert_vertex(0., 0., 0.);
+    (void)src.insert_vertex(1., 0., 0.);
+    (void)src.insert_vertex(0., 1., 0.);
+    (void)src.insert_face(0u, 1u, 2u);
+
+    const auto path = ply("bin_double");
+    write_ply(path, src, PLYFormat::Binary);
+
+    std::string header;
+    std::vector<unsigned char> body;
+    split_ply(path, header, body);
+
+    EXPECT_NE(header.find("property float x\n"), std::string::npos) << header;
+    EXPECT_EQ(header.find("float64"), std::string::npos) << header;
+    EXPECT_EQ(header.find("property double"), std::string::npos) << header;
+
+    // 3 x 3 x 4 bytes of positions + 1 count byte + 3 x 4 index bytes.
+    EXPECT_EQ(body.size(), 3u * 3u * 4u + 1u + 3u * 4u);
+
+    // Byte-identical to the Mesh3f write of the same geometry.
+    const auto f_path = ply("bin_float");
+    write_ply(f_path, make_triangle(), PLYFormat::Binary);
+    std::string f_header;
+    std::vector<unsigned char> f_body;
+    split_ply(f_path, f_header, f_body);
+    EXPECT_EQ(header, f_header);
+    EXPECT_EQ(body, f_body);
+}
+
+TEST_F(PLYTest, BinaryWrite_NormalsAndColorsAreDeclaredWidths)
+{
+    // Normals are float32 and colors uchar, as the ASCII header declares.
+    // A NCMesh vertex record is therefore 12 + 12 + 3 = 27 bytes.
+    NCMesh src;
+    for (int i = 0; i < 3; ++i) {
+        const auto vi = src.insert_vertex(
+            static_cast<float>(i), 0.f, 0.f);
+        src.vertex(vi).normal = Vec<float, 3>{0.f, 0.f, 1.f};
+        src.vertex(vi).color = Color::U8C3{0x10, 0x20, 0x30};
+    }
+    (void)src.insert_face(0u, 1u, 2u);
+
+    const auto path = ply("bin_nc");
+    write_ply(path, src, PLYFormat::Binary);
+
+    std::string header;
+    std::vector<unsigned char> body;
+    split_ply(path, header, body);
+
+    EXPECT_NE(header.find("property float nx\n"), std::string::npos) << header;
+    EXPECT_NE(header.find("property uchar red\n"), std::string::npos) << header;
+    EXPECT_EQ(body.size(), 3u * 27u + 1u + 3u * 4u);
+
+    // The color bytes sit at the tail of each vertex record, unswapped.
+    EXPECT_EQ(body[24], 0x10u);
+    EXPECT_EQ(body[25], 0x20u);
+    EXPECT_EQ(body[26], 0x30u);
+}
+
+TEST_F(PLYTest, BinaryWrite_TexcoordList)
+{
+    // texcoord is a uchar-counted list of 2*N float32 values, with (-1,-1)
+    // for an unmapped corner.
+    const auto src = make_triangle();
+    UVMap2f uv;
+    (void)uv.insert(0.f, 0.f);
+    (void)uv.insert(1.f, 0.f);
+    uv.map(0, 0, 0);
+    uv.map(0, 1, 1);
+    // corner 2 deliberately left unmapped
+
+    const auto path = ply("bin_uv");
+    write_ply(path, src, uv, PLYFormat::Binary);
+
+    std::string header;
+    std::vector<unsigned char> body;
+    split_ply(path, header, body);
+    EXPECT_NE(
+        header.find("property list uchar float texcoord\n"),
+        std::string::npos)
+        << header;
+
+    std::vector<unsigned char> want;
+    push_triangle_body(want);
+    want.push_back(0x06);  // 2*N, still a uchar count
+    push_host(want, kZeroF32);   push_host(want, kZeroF32);    // corner 0 (0,0)
+    push_host(want, kOneF32);    push_host(want, kZeroF32);    // corner 1 (1,0)
+    push_host(want, kNegOneF32); push_host(want, kNegOneF32);  // corner 2 unmapped
+
+    ASSERT_EQ(body.size(), want.size());
+    EXPECT_EQ(body, want);
+}
+
+TEST_F(PLYTest, DefaultFormatIsASCII)
+{
+    // Asserted explicitly rather than left to the header-grepping tests, so
+    // an accidental flip of the default is caught here.
+    const auto src  = make_triangle();
+    const auto path = ply("default_fmt");
+    write_ply(path, src);
+
+    std::ifstream f(path, std::ios::binary);
+    std::string line1, line2;
+    ASSERT_TRUE(std::getline(f, line1));
+    ASSERT_TRUE(std::getline(f, line2));
+    EXPECT_EQ(line1, "ply");
+    EXPECT_EQ(line2, "format ascii 1.0");
+}
+
+TEST_F(PLYTest, ExplicitASCIIMatchesDefault)
+{
+    // PLYFormat::ASCII must be the same code path the default takes.
+    const auto src = make_triangle();
+    const auto a = ply("ascii_default");
+    const auto b = ply("ascii_explicit");
+    write_ply(a, src);
+    write_ply(b, src, PLYFormat::ASCII);
+
+    const auto slurp = [](const fs::path& p) {
+        std::ifstream f(p, std::ios::binary);
+        return std::string(
+            std::istreambuf_iterator<char>(f),
+            std::istreambuf_iterator<char>());
+    };
+    EXPECT_EQ(slurp(a), slurp(b));
+}
+
+//------------------------------------------------------------------------------
+// Binary write round-trips — structural breadth, where hand-computing bytes
+// stops paying.
+//------------------------------------------------------------------------------
+
+TEST_F(PLYTest, BinaryRoundTrip_NGonAndNormalsAndColors)
+{
+    NCMesh src;
+    for (std::size_t i = 0; i < 5; ++i) {
+        const auto vi = src.insert_vertex(
+            static_cast<float>(i), static_cast<float>(2 * i), 0.5f);
+        src.vertex(vi).normal = Vec<float, 3>{0.f, 0.f, 1.f};
+        src.vertex(vi).color =
+            Color::U8C3{static_cast<uint8_t>(10 * i), 0x40, 0x80};
+    }
+    (void)src.insert_face(NCMesh::Face{0, 1, 2, 3, 4});  // pentagon
+
+    const auto path = ply("bin_rt_ngon");
+    write_ply(path, src, PLYFormat::Binary);
+
+    NCMesh dst;
+    read_ply(path, dst);
+    ASSERT_EQ(dst.num_vertices(), 5u);
+    ASSERT_EQ(dst.num_faces(), 1u);
+    EXPECT_EQ(dst.face(0), (NCMesh::Face{0, 1, 2, 3, 4}));
+    EXPECT_NEAR(dst.vertex(4)[0], 4.f, 1e-6f);
+    EXPECT_NEAR(dst.vertex(4)[1], 8.f, 1e-6f);
+    EXPECT_NEAR(dst.vertex(4)[2], 0.5f, 1e-6f);
+    ASSERT_TRUE(dst.vertex(3).normal.has_value());
+    EXPECT_NEAR((*dst.vertex(3).normal)[2], 1.f, 1e-6f);
+    ASSERT_TRUE(dst.vertex(3).color.has_value());
+    EXPECT_EQ(dst.vertex(3).color.value<Color::U8C3>()[0], 30u);
+    EXPECT_EQ(dst.vertex(3).color.value<Color::U8C3>()[2], 0x80u);
+}
+
+TEST_F(PLYTest, BinaryRoundTrip_UVsWithSeam)
+{
+    const auto src = make_triangle();
+    const auto uv  = make_triangle_uvmap(src);
+
+    const auto path = ply("bin_rt_uv");
+    write_ply(path, src, uv, PLYFormat::Binary);
+
+    Mesh3f  dst;
+    UVMap2f dst_uv;
+    read_ply(path, dst, dst_uv);
+    ASSERT_EQ(dst.num_faces(), 1u);
+    for (std::size_t ci = 0; ci < 3; ++ci) {
+        ASSERT_TRUE(dst_uv.has(0, ci)) << "corner " << ci;
+        const auto& want = uv.at(uv.get(0, ci));
+        const auto& got  = dst_uv.at(dst_uv.get(0, ci));
+        EXPECT_NEAR(got[0], want[0], 1e-6f) << "corner " << ci;
+        EXPECT_NEAR(got[1], want[1], 1e-6f) << "corner " << ci;
+    }
+}
+
+TEST_F(PLYTest, BinaryRoundTrip_TexturePath)
+{
+    const auto src = make_triangle();
+    const auto uv  = make_triangle_uvmap(src);
+    const fs::path tex{"texture.png"};
+
+    const auto path = ply("bin_rt_tex");
+    write_ply(path, src, uv, tex, PLYFormat::Binary);
+
+    Mesh3f  dst;
+    UVMap2f dst_uv;
+    std::vector<fs::path> paths;
+    read_ply(path, dst, dst_uv, paths);
+    ASSERT_EQ(paths.size(), 1u);
+    EXPECT_EQ(paths[0], tex);
+    EXPECT_EQ(dst.num_faces(), 1u);
+}
+
+TEST_F(PLYTest, BinaryRoundTrip_EmptyMesh)
+{
+    const Mesh3f src;
+    const auto path = ply("bin_rt_empty");
+    write_ply(path, src, PLYFormat::Binary);
+
+    Mesh3f dst;
+    read_ply(path, dst);
+    EXPECT_EQ(dst.num_vertices(), 0u);
+    EXPECT_EQ(dst.num_faces(), 0u);
+}
+
+TEST_F(PLYTest, BinaryRoundTrip_MaximalFaces)
+{
+    // The Phase 3 coherence check on the binary path: the largest faces the
+    // writer permits must still be readable.
+    {
+        const auto path = ply("bin_rt_255");
+        write_ply(path, make_ngon(255), PLYFormat::Binary);
+        Mesh3f dst;
+        read_ply(path, dst);
+        ASSERT_EQ(dst.num_faces(), 1u);
+        EXPECT_EQ(dst.face(0).size(), 255u);
+        EXPECT_EQ(dst.face(0).back(), 254u);
+    }
+    {
+        const auto path = ply("bin_rt_127_uv");
+        write_ply(path, make_ngon(127), make_ngon_uvmap(127),
+                  PLYFormat::Binary);
+        Mesh3f  dst;
+        UVMap2f dst_uv;
+        read_ply(path, dst, dst_uv);
+        ASSERT_EQ(dst.num_faces(), 1u);
+        EXPECT_EQ(dst.face(0).size(), 127u);
+        ASSERT_TRUE(dst_uv.has(0, 126));
+        EXPECT_NEAR(dst_uv.at(dst_uv.get(0, 126))[0], 126.f / 127.f, 1e-5f);
+    }
+}
+
+TEST_F(PLYTest, BinaryWrite_RejectsOversizeFaces)
+{
+    // The list-count guard is format-independent.
+    const auto path = ply("bin_ngon256");
+    EXPECT_THROW(
+        write_ply(path, make_ngon(256), PLYFormat::Binary),
+        std::runtime_error);
+    EXPECT_FALSE(fs::exists(path));
+}
+
 TEST_F(PLYTest, WriteWithUVMap_PerWedgeTexcoord)
 {
     // Two triangles sharing an edge with a UV seam.
@@ -1681,28 +2494,6 @@ TEST_F(PLYTest, MalformedHeader_Throws)
     {
         std::ofstream f(path);
         f << "not_a_ply_file\nelement vertex 3\n";
-    }
-    Mesh3f dst;
-    EXPECT_THROW(read_ply(path, dst), std::runtime_error);
-}
-
-TEST_F(PLYTest, BinaryBigEndian_Throws)
-{
-    const auto path = ply("big_endian");
-    {
-        std::ofstream f(path, std::ios::binary);
-        f << "ply\n"
-          << "format binary_big_endian 1.0\n"
-          << "element vertex 3\n"
-          << "property float x\n"
-          << "property float y\n"
-          << "property float z\n"
-          << "element face 1\n"
-          << "property list uchar int vertex_indices\n"
-          << "end_header\n";
-        // Some placeholder data (will never be read)
-        const float verts[9] = {};
-        f.write(reinterpret_cast<const char*>(verts), sizeof(verts));
     }
     Mesh3f dst;
     EXPECT_THROW(read_ply(path, dst), std::runtime_error);

@@ -2,16 +2,33 @@
   "id": "ply-binary-io_20260904",
   "title": "PLY Binary IO",
   "type": "feature",
-  "status": "pending",
+  "status": "complete",
   "created": "2026-09-04T00:00:00+0200",
-  "updated": "2026-09-04T00:00:00+0200",
+  "updated": "2026-09-05T00:00:00Z",
   "issue": 25,
+  "current_phase": 5,
+  "current_task": "5.3",
   "phases": {
-    "total": 0,
-    "completed": 0
+    "total": 5,
+    "completed": 5
   },
   "tasks": {
-    "total": 0,
-    "completed": 0
-  }
+    "total": 22,
+    "completed": 22
+  },
+  "commits": [
+    "b28d606: docs(conductor): record byte-order helper placement in detail",
+    "802863c: test(MeshIO): byte-order helper tests for host detection and swapping",
+    "5861ee1: feat(MeshIO): hand-rolled byte-order detection and width-dispatched swap",
+    "f8940e4: test(MeshIO): big-endian PLY read fixtures",
+    "c185fc9: fix(MeshIO): honor the byte order declared in the PLY header on read",
+    "3483f88: test(MeshIO): drop the big-endian rejection test, document byte-order support",
+    "549b2ed: test(MeshIO): face list-count limit tests for the PLY writer",
+    "7583422: feat(MeshIO): reject face list counts a uchar cannot express",
+    "18e21b8: feat(MeshIO): add public PLYFormat and thread it through write_ply",
+    "ab25dc0: test(MeshIO): binary PLY write tests",
+    "398c7d7: feat(MeshIO): binary PLY write",
+    "bfc4aa2: docs(MeshIO): document PLYFormat, list-count throws, and the write_mesh omission"
+  ],
+  "notes": "Phase 4's MeshLab check was completed manually: a binary mesh loads correctly. It also surfaced that MeshLab cannot open any PLY pairing a texcoord list with a face of more than 3 corners, in ASCII or binary alike - a vcglib importer constraint, not a libcore one. Reader/writer robustness bugs found by code review of #28 are fixed separately in #29."
 }

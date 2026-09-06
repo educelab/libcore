@@ -40,8 +40,19 @@ void read_mesh(
 /**
  * @brief Write a mesh to a file, dispatching by extension
  *
- * Supported extensions: `.obj`, `.ply` (case-insensitive).  Throws
- * `std::runtime_error` for any other extension.
+ * Supported extensions: `.obj`, `.ply` (case-insensitive).
+ *
+ * @note `write_mesh` takes no PLY format parameter. A PLY-only value would be
+ *       meaningless for half of its inputs, and there is no good answer for
+ *       `write_mesh("out.obj", mesh, PLYFormat::Binary)`. Call @ref write_ply
+ *       directly to write binary PLY. Giving `write_mesh` a general
+ *       format-options mechanism is deferred to
+ *       [educelab/libcore#26](https://github.com/educelab/libcore/issues/26);
+ *       the omission is a decision, not an oversight.
+ *
+ * @throws std::runtime_error for an unsupported extension, if the file cannot
+ *         be opened, or, for `.ply`, if any face has more than 255 corners,
+ *         which a `uchar` `vertex_indices` list count cannot express
  */
 template <typename T, std::size_t Dims, typename VT>
 void write_mesh(
@@ -78,6 +89,14 @@ void read_mesh(
 
 /**
  * @brief Write a mesh and UV map to a file, dispatching by extension
+ *
+ * @note No PLY format parameter — see the two-argument @ref write_mesh
+ *       overload.
+ *
+ * @throws std::runtime_error for an unsupported extension, if the file cannot
+ *         be opened, or, for `.ply`, if a face exceeds either `uchar`
+ *         list-count limit: 255 corners for `vertex_indices`, or 127 corners
+ *         here, since `texcoord` writes `2*N` values per face
  */
 template <typename T, std::size_t Dims, typename VT, typename UVMapT>
 void write_mesh(
@@ -123,6 +142,14 @@ void read_mesh(
  *
  * OBJ: emits a `.mtl` with one `map_Kd` entry.\n
  * PLY: emits a `comment TextureFile` line in the header.
+ *
+ * @note No PLY format parameter — see the two-argument @ref write_mesh
+ *       overload.
+ *
+ * @throws std::runtime_error for an unsupported extension, if the file cannot
+ *         be opened, or, for `.ply`, if a face exceeds either `uchar`
+ *         list-count limit: 255 corners for `vertex_indices`, or 127 corners
+ *         here, since `texcoord` writes `2*N` values per face
  */
 template <typename T, std::size_t Dims, typename VT, typename UVMapT>
 void write_mesh(
